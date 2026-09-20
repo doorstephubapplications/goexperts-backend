@@ -20,6 +20,7 @@ import {
   listPublicProjects,
 } from "../../services/public/projects.service.js";
 import { getSettingsSection } from "../../services/settings/settings.service.js";
+import { getHowItWorksPage } from "../../controllers/public/how-it-works.controller.js";
 import { sendDeleteAccountOtp, verifyDeleteAccountOtp } from "../../controllers/auth/auth.controller.js";
 import {
   getCountries,
@@ -31,12 +32,14 @@ import {
   getFounderTypes,
   getBusinessTypes,
   getInvestorTypes,
+  getTicketSizes,
   getWorkModes,
   getHiringGoals,
   getInvestorStages,
   getPlatformGoals,
   getCompanySizes,
   getExperienceLevels,
+  getDesignations,
 } from "../../modules/mobile/public/public.controller.js";
 
 const router = Router();
@@ -45,6 +48,10 @@ router.get("/countries", getCountries);
 router.get("/states", getStates);
 router.get("/skills", getSkills);
 router.get("/industries", getIndustries);
+
+// How It Works Dynamic Page
+router.get("/how-it-works", getHowItWorksPage);
+
 router.get("/budget-ranges", getBudgetRanges);
 router.get("/hiring-budgets", getBudgetRanges);
 router.get("/hiring-budget-ranges", getBudgetRanges);
@@ -56,6 +63,7 @@ router.get("/founder-types", getFounderTypes);
 router.get("/business-types", getBusinessTypes);
 router.get("/investor-types", getInvestorTypes);
 router.get("/investor_types", getInvestorTypes);
+router.get("/ticket-sizes", getTicketSizes);
 router.get("/work-modes", getWorkModes);
 router.get("/hiring-goals", getHiringGoals);
 router.get("/hiring_goals", getHiringGoals);
@@ -66,11 +74,12 @@ router.get("/platform-goals", getPlatformGoals);
 router.get("/company-sizes", getCompanySizes);
 router.get("/company_sizes", getCompanySizes);
 router.get("/experience-levels", getExperienceLevels);
+router.get("/designations", getDesignations);
 router.get("/accredited-statuses", async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const options = await (prisma as any).masterOption.findMany({
       where: { type: 'accredited_status', status: 'active' },
-      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true },
     }).catch(() => []);
     res.json({ success: true, data: options, rows: options });
@@ -80,7 +89,7 @@ router.get("/accredited_statuses", async (_req: Request, res: Response, next: Ne
   try {
     const options = await (prisma as any).masterOption.findMany({
       where: { type: 'accredited_status', status: 'active' },
-      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true },
     }).catch(() => []);
     res.json({ success: true, data: options, rows: options });
@@ -289,7 +298,7 @@ router.get("/technologies", async (_req: Request, res: Response, next: NextFunct
   try {
     const technologies = await (prisma as any).masterOption.findMany({
       where: { type: "technology", status: "active" },
-      orderBy: { sortOrder: "asc" },
+      orderBy: { label: "asc" },
       select: { id: true, label: true, value: true },
     });
     res.json({ success: true, count: technologies.length, data: technologies });
@@ -761,9 +770,30 @@ router.post("/contact", submitContactEnquiry);
 
 router.get("/careers-page", getPublicCareersPage);
 router.get("/careers", getPublicCareersPage);
+import { documentUpload, handleUploadError } from "../../middleware/upload.js";
+
 router.get("/jobs", listPublicJobs);
 router.get("/jobs/:slug", getPublicJobBySlug);
 router.post("/jobs/:jobId/apply", submitCareerApplication);
+router.post(
+  "/jobs/upload-resume",
+  documentUpload.single("file"),
+  handleUploadError,
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
+    const relativePath = req.file.path.split("uploads")[1]?.replace(/\\/g, "/") || "";
+    res.json({
+      success: true,
+      data: {
+        url: `/uploads${relativePath}`,
+        name: req.file.originalname,
+        size: req.file.size,
+      },
+    });
+  }
+);
 
 const getPublicHelpCenter = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -966,14 +996,33 @@ router.post("/delete-requests/:id/permanent-delete", async (req: Request, res: R
   try {
     const { id } = req.params;
 
-    // Clean up dependent child profiles to satisfy foreign key constraints
+    // Clean up dependent child profiles and relations to satisfy foreign key constraints
     await prisma.clientProfile.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.founderProfile.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.freelancerProfile.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.investorProfile.deleteMany({ where: { userId: id } }).catch(() => { });
+    
+    await prisma.authIdentity.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.resumeShare.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.userResumeConfig.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.deviceToken.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.notificationLog.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.notificationPreference.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.notification.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.wallet.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.subscription.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.payment.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.invoice.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.clientTeamMember.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.clientTeamMember.deleteMany({ where: { clientId: id } }).catch(() => { });
+    await prisma.conversationState.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.messageReaction.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.report.deleteMany({ where: { reportedUserId: id } }).catch(() => { });
+    await prisma.contract.deleteMany({ where: { clientId: id } }).catch(() => { });
+    await prisma.contract.deleteMany({ where: { freelancerId: id } }).catch(() => { });
+    await prisma.project.deleteMany({ where: { client: id } }).catch(() => { });
+    await prisma.referral.deleteMany({ where: { referrerId: id } }).catch(() => { });
+    await prisma.referral.deleteMany({ where: { refereeId: id } }).catch(() => { });
 
     // Permanently remove the user from database
     const user = await prisma.user.delete({
@@ -981,7 +1030,19 @@ router.post("/delete-requests/:id/permanent-delete", async (req: Request, res: R
     });
 
     res.json({ success: true, message: `Account for ${user.email} has been PERMANENTLY deleted from the database.`, user });
-  } catch (err) {
+  } catch (err: any) {
+    // If we still hit a foreign key constraint, force delete at DB level
+    if (err.code === 'P2003' || /Foreign key constraint/i.test(err.message)) {
+       try {
+         await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=0;`);
+         await prisma.$executeRawUnsafe(`DELETE FROM users WHERE id = '${req.params.id}';`);
+         await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=1;`);
+         return res.json({ success: true, message: `Account has been PERMANENTLY deleted from the database (Forced).` });
+       } catch(e) {
+         await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=1;`).catch(()=>{});
+         return next(e);
+       }
+    }
     next(err);
   }
 });
@@ -989,18 +1050,52 @@ router.post("/delete-requests/:id/permanent-delete", async (req: Request, res: R
 router.delete("/delete-requests/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    
+    // Clean up dependent child profiles and relations to satisfy foreign key constraints
     await prisma.clientProfile.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.founderProfile.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.freelancerProfile.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.investorProfile.deleteMany({ where: { userId: id } }).catch(() => { });
+    
+    await prisma.authIdentity.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.resumeShare.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.userResumeConfig.deleteMany({ where: { userId: id } }).catch(() => { });
     await prisma.deviceToken.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.notificationLog.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.notificationPreference.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.notification.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.wallet.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.subscription.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.payment.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.invoice.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.clientTeamMember.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.clientTeamMember.deleteMany({ where: { clientId: id } }).catch(() => { });
+    await prisma.conversationState.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.messageReaction.deleteMany({ where: { userId: id } }).catch(() => { });
+    await prisma.report.deleteMany({ where: { reportedUserId: id } }).catch(() => { });
+    await prisma.contract.deleteMany({ where: { clientId: id } }).catch(() => { });
+    await prisma.contract.deleteMany({ where: { freelancerId: id } }).catch(() => { });
+    await prisma.project.deleteMany({ where: { client: id } }).catch(() => { });
+    await prisma.referral.deleteMany({ where: { referrerId: id } }).catch(() => { });
+    await prisma.referral.deleteMany({ where: { refereeId: id } }).catch(() => { });
 
     const user = await prisma.user.delete({
       where: { id },
     });
 
     res.json({ success: true, message: `Account for ${user.email} has been PERMANENTLY deleted from the database.`, user });
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'P2003' || /Foreign key constraint/i.test(err.message)) {
+       try {
+         await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=0;`);
+         await prisma.$executeRawUnsafe(`DELETE FROM users WHERE id = '${req.params.id}';`);
+         await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=1;`);
+         return res.json({ success: true, message: `Account has been PERMANENTLY deleted from the database (Forced).` });
+       } catch(e) {
+         await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=1;`).catch(()=>{});
+         return next(e);
+       }
+    }
     next(err);
   }
 });
@@ -1339,6 +1434,17 @@ function deduplicateMasterOptions(items: Array<{ id: string; label: string; valu
   return result;
 }
 
+function sortNumericalOptions(items: Array<{ id: string; label: string; value: string }>) {
+  return items.sort((a, b) => {
+    const extractMin = (val: string) => {
+      if (!val) return 0;
+      const match = val.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    return extractMin(a.label || a.value) - extractMin(b.label || b.value);
+  });
+}
+
 async function fetchMasterOptions(type: string | string[]): Promise<Array<{ id: string; label: string; value: string }>> {
   try {
     const types = Array.isArray(type) ? type : [type];
@@ -1347,12 +1453,21 @@ async function fetchMasterOptions(type: string | string[]): Promise<Array<{ id: 
       orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
       select: { id: true, label: true, value: true }
     });
-    return deduplicateMasterOptions(rows || []);
+    
+    let resultRows = deduplicateMasterOptions(rows || []);
+    if (types.includes("team_size") || types.includes("company_size")) {
+      resultRows = sortNumericalOptions(resultRows);
+    }
+    return resultRows;
   } catch {
     const types = Array.isArray(type) ? type : [type];
     const typeStr = types.map(t => `'${t}'`).join(',');
     const rawRows = await prisma.$queryRawUnsafe<any[]>(`SELECT id, label, value FROM master_options WHERE type IN (${typeStr}) AND status = 'active' ORDER BY sort_order ASC, label ASC`).catch(() => []);
-    return deduplicateMasterOptions(rawRows || []);
+    let resultRows = deduplicateMasterOptions(rawRows || []);
+    if (types.includes("team_size") || types.includes("company_size")) {
+      resultRows = sortNumericalOptions(resultRows);
+    }
+    return resultRows;
   }
 }
 

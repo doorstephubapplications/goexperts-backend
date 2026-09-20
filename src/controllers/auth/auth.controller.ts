@@ -8,6 +8,8 @@ import { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { SmsChannelAdapter } from "../../modules/notifications/notification.service.js";
 import { renderEmailTemplate } from "../../services/settings/settings.service.js";
 import { sendEmail, shell } from "../../services/mobile/email.service.js";
+import { NotificationEngine } from "../../services/mobile/notification.engine.js";
+import { encryptPassword, decryptPassword } from "../../utils/crypto.util.js";
 
 import { sanitizeUserRecord } from "../../routes/index.js";
 import { calculateOnboardingProgress } from "../../config/onboarding.js";
@@ -86,6 +88,17 @@ async function verifyPassword(password: string, storedHash: string) {
       return false;
     }
   }
+  
+  // AES-256-GCM passwords contain colons (iv:authTag:encryptedText)
+  if (storedHash.includes(":")) {
+    try {
+      const decrypted = decryptPassword(storedHash);
+      return password === decrypted;
+    } catch (err) {
+      return false;
+    }
+  }
+
   // Legacy plain-text passwords (migrate on successful login if needed)
   return password === storedHash;
 }
@@ -365,16 +378,34 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     const isMatch = await verifyPassword(password, user.password);
     if (!isMatch) {
-      prisma.loginAttempt
+      await prisma.loginAttempt
         .create({ data: { email, ipAddress, userAgent, success: false, failReason: "Wrong password" } })
         .catch(() => {});
+        
+      try {
+        const recentFails = await prisma.loginAttempt.count({
+          where: { email, success: false, createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) } }
+        });
+        if (recentFails >= 5) {
+          const { emitToAdmins } = await import("../../services/notifications/notification-events.service.js");
+          await emitToAdmins({
+            type: "SECURITY_ALERT",
+            title: "Multiple Failed Logins",
+            message: `${recentFails} failed login attempts for ${email} from IP ${ipAddress}.`,
+            contextType: "security",
+            contextId: user.id,
+            priority: "urgent"
+          });
+        }
+      } catch (e) {}
+
       return res.status(400).json({ success: false, message: "Invalid email or password" });
     }
 
-    // Upgrade legacy plain-text passwords to bcrypt after a successful login
-    if (user.password && !user.password.startsWith("$2")) {
-      const hashed = await bcrypt.hash(password, 10);
-      await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
+    // Upgrade legacy plain-text or bcrypt passwords to AES-256-GCM after a successful login
+    if (user.password && !user.password.includes(":")) {
+      const encrypted = encryptPassword(password);
+      await prisma.user.update({ where: { id: user.id }, data: { password: encrypted } });
     }
 
     let subscriptionGate: any = { status: 'none', planId: null, planName: null, planExpired: false, upgradeRequired: true };
@@ -386,8 +417,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     }
 
     const userStatus = String(user.status).toLowerCase();
-    const isExpiredPlanInactive = userStatus === "inactive" && subscriptionGate.status === "expired";
-    if (["suspended", "inactive", "pending"].includes(userStatus) && !isExpiredPlanInactive) {
+    if (["suspended", "inactive"].includes(userStatus)) {
       const reason = userStatus === "suspended" ? "Account suspended" : `Account ${userStatus}`;
       const msg = userStatus === "suspended"
         ? "Your account is suspended. Please contact support."
@@ -580,7 +610,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     }
     // If user exists but can be reused, we'll restore them below in the transaction.
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = encryptPassword(password);
     const phone = req.body?.phone ? String(req.body.phone) : null;
     const countryRaw = req.body?.countryId || req.body?.country;
     const country = countryRaw ? String(countryRaw) : null;
@@ -599,17 +629,17 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const bio = req.body?.bio ? String(req.body.bio) : null;
 
     const { email: _email, password: _password, fullName: _fullName, role: _role, phone: _phone, country: _country, state: _state, city: _city, bio: _bio, latitude: _lat, longitude: _lng, countryId: _countryId, stateId: _stateId, cityId: _cityId, ...restData } = req.body || {};
-    const registrationData = Object.keys(restData).length > 0 ? restData : undefined;
+    const registrationData = Object.keys(restData).length > 0 ? JSON.stringify(restData) : undefined;
 
     const trialEndsAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
 
     // Generate unique referral code for the new user
     let baseCode = (fullName.split(' ')[0] || "USER").toUpperCase().replace(/[^A-Z]/g, '');
     if (baseCode.length < 3) baseCode = "GEX" + baseCode;
-    const randStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const randStr = Math.floor(1000 + Math.random() * 9000).toString();
     const referralCode = `GOEXPERTS-${baseCode}${randStr}`;
 
-    const ref = req.body?.ref || req.query?.ref;
+    const ref = req.body?.ref || req.body?.referralCode || req.query?.ref;
     let referrer = null;
     let referralClick = null;
     if (ref) {
@@ -632,7 +662,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
               password: hashed,
               fullName,
               role,
-              status: "pending",
+              status: "active",
               trialEndsAt,
               phone,
               country,
@@ -644,8 +674,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
               registrationData,
               // IMPORTANT: Clear soft-delete so the account is restored/visible
               deletedAt: null,
-              isVerified: false,
-              verified: false,
+              isVerified: true,
+              verified: true,
             },
           })
         : await tx.user.create({
@@ -654,7 +684,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
               password: hashed,
               fullName,
               role,
-              status: "pending",
+              status: "active",
               trialEndsAt,
               phone,
               country,
@@ -665,6 +695,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
               bio,
               registrationData,
               referralCode,
+              isVerified: true,
+              verified: true,
             },
           });
 
@@ -690,6 +722,15 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             metadata: JSON.stringify({ role: created.role })
           }
         });
+
+          // Notify the referral code owner
+          NotificationEngine.queueNotification({
+            userId: referrer.id,
+            type: "referral_used",
+            title: "Referral Code Used!",
+            message: `${created.fullName} has registered using your referral code.`,
+            channel: "all",
+          }).catch(err => console.error("[Referral Notification Error]:", err));
       }
 
       if (role === "freelancer") {
@@ -787,16 +828,28 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
           }
         }
 
+        const companySizeVal = req.body?.companySize || req.body?.currentTeam || req.body?.teamSize || null;
+        const projectHireBudgetVal = req.body?.projectHireBudget || req.body?.projectHireBudgetRange || req.body?.budget || null;
+        const hiringGoalVal = req.body?.hiringGoal || req.body?.primaryGoal || null;
+
         await tx.clientProfile.upsert({
           where: { userId: created.id },
           create: {
             userId: created.id,
             company: req.body?.company ? String(req.body.company) : null,
             industry: industryName,
+            companySize: companySizeVal ? String(companySizeVal) : null,
+            currentTeam: companySizeVal ? String(companySizeVal) : null,
+            projectHireBudget: projectHireBudgetVal ? String(projectHireBudgetVal) : null,
+            hiringGoal: hiringGoalVal ? String(hiringGoalVal) : null,
           },
           update: {
             company: req.body?.company ? String(req.body.company) : null,
             industry: industryName,
+            companySize: companySizeVal ? String(companySizeVal) : null,
+            currentTeam: companySizeVal ? String(companySizeVal) : null,
+            projectHireBudget: projectHireBudgetVal ? String(projectHireBudgetVal) : null,
+            hiringGoal: hiringGoalVal ? String(hiringGoalVal) : null,
           },
         });
       }
@@ -823,6 +876,24 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       }
 
       if (role === "founder") {
+        let teamSizeRaw = req.body?.teamSize || req.body?.companySize;
+        let teamSizeVal = 1;
+        if (teamSizeRaw !== undefined && teamSizeRaw !== null) {
+          if (typeof teamSizeRaw === 'number') teamSizeVal = teamSizeRaw;
+          else if (typeof teamSizeRaw === 'string') {
+             const m = teamSizeRaw.match(/\d+/);
+             if (m) teamSizeVal = parseInt(m[0], 10);
+          }
+        }
+        
+        const targetRaiseRaw = req.body?.targetRaise;
+        const targetRaiseVal = targetRaiseRaw != null ? (parseFloat(String(targetRaiseRaw).replace(/[^\d.]/g, '')) || 0) : null;
+        const raisedRaw = req.body?.raised || req.body?.fundingRaised;
+        const raisedVal = raisedRaw != null ? (parseFloat(String(raisedRaw).replace(/[^\d.]/g, '')) || 0) : 0;
+        const primaryGoalVal = req.body?.primaryGoal || req.body?.hiringGoal || null;
+        const founderRoleVal = req.body?.founderRole || null;
+        const founderBioVal = req.body?.founderBio || req.body?.bio || null;
+
         await tx.founderProfile.upsert({
           where: { userId: created.id },
           create: {
@@ -830,11 +901,23 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             startupName: req.body?.startupName || req.body?.company || null,
             industry: req.body?.industry || req.body?.category || null,
             stage: req.body?.stage || null,
+            teamSize: teamSizeVal,
+            targetRaise: targetRaiseVal,
+            raised: raisedVal,
+            primaryGoal: primaryGoalVal ? String(primaryGoalVal) : null,
+            founderRole: founderRoleVal ? String(founderRoleVal) : null,
+            founderBio: founderBioVal ? String(founderBioVal) : null,
           },
           update: {
             startupName: req.body?.startupName || req.body?.company || null,
             industry: req.body?.industry || req.body?.category || null,
             stage: req.body?.stage || null,
+            teamSize: teamSizeVal,
+            targetRaise: targetRaiseVal,
+            raised: raisedVal,
+            primaryGoal: primaryGoalVal ? String(primaryGoalVal) : null,
+            founderRole: founderRoleVal ? String(founderRoleVal) : null,
+            founderBio: founderBioVal ? String(founderBioVal) : null,
           },
         });
       }
@@ -842,7 +925,21 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       return created;
     });
 
-    // Welcome email is NOT sent here — it is sent after all onboarding steps are completed
+    try {
+      const { emitToAdmins } = await import("../../services/notifications/notification-events.service.js");
+      await emitToAdmins({
+        type: "NEW_USER",
+        title: "New User Registered",
+        message: `${user.fullName} (${user.email}) registered as a ${user.role}.`,
+        contextType: "user",
+        contextId: user.id,
+        priority: "normal",
+      });
+    } catch (e) {
+      console.error("Failed to emit to admins for new user", e);
+    }
+
+    // Welcome email is NOT sent here â€” it is sent after all onboarding steps are completed
     const tokenPayload = { id: user.id, email: user.email, role: user.role, type: "portal" as const };
     const accessToken = signAccessToken(tokenPayload);
     const refreshToken = signRefreshToken(tokenPayload);
@@ -903,7 +1000,7 @@ export const registerAdmin = async (req: Request, res: Response, next: NextFunct
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = encryptPassword(password);
 
     const existing = await prisma.adminUser.findFirst({ where: { email } });
     if (existing) {
@@ -1187,10 +1284,15 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
         }
       }
 
+      const rawPassword = user.password?.includes(':') 
+        ? decryptPassword(user.password) 
+        : (sanitized.registrationData?.password ?? null);
+
       return res.json({
         success: true,
         user: {
           ...sanitized,
+          originalPassword: rawPassword,
           role: effectiveRole,
           status: effectiveStatus,
           subscriptionStatus: subscriptionGate.status,
@@ -1328,6 +1430,9 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           success: true,
           user: {
             ...sanitizedFallback,
+              originalPassword: user.password?.includes(':') 
+                ? decryptPassword(user.password) 
+                : (sanitizedFallback.registrationData?.password ?? null),
               role: effectiveRole,
               status: effectiveStatus,
               subscriptionStatus: subscriptionGate.status,
@@ -1646,21 +1751,11 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       ? { id: admin.id, email: admin.email, type: "admin" as const }
       : { id: portalUser!.id, email: portalUser!.email, type: "portal" as const };
 
-    const resetToken = jwt.sign(
-      { id: subject.id, email: subject.email, type: subject.type, purpose: "password_reset" },
-      env.JWT_SECRET,
-      { expiresIn: "1h" },
-    );
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const key = `pwreset_${subject.email}`;
+    otpStore.set(key, { otp, expiresAt: Date.now() + 10 * 60 * 1000 });
 
-    const settingKey = `password_reset:${subject.type}:${subject.id}`;
-    await prisma.setting.upsert({
-      where: { key: settingKey },
-      update: { value: resetToken, category: "security" },
-      create: { key: settingKey, value: resetToken, category: "security" },
-    });
-
-    const resetUrl = `${env.FRONTEND_URL.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(resetToken)}`;
-    console.log(`[password-reset] ${subject.email} → ${resetUrl}`);
+    console.log(`[password-reset] ${subject.email} â†’ OTP: ${otp}`);
 
     // Attempt email through the active SMTP channel and report delivery failures.
     try {
@@ -1689,13 +1784,36 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
           auth: { user: smtpUser, pass: smtpPass },
         });
 
+        const htmlBody = `
+          <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Security</p>
+          <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Password Reset Request 🔑 </h1>
+          <p style="margin:0 0 24px;color:#64748b;font-size:15px;">We received a request to reset your GoExperts password. Use the code below to securely verify your identity.</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+            <tr>
+              <td align="center" style="background:#0f172a;border-radius:12px;padding:28px 24px;">
+                <p style="margin:0 0 10px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">Reset Code</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                  <tr>
+                    ${otp.split('').map(digit => `
+                    <td style="padding:0 4px;">
+                      <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
+                    </td>`).join('')}
+                  </tr>
+                </table>
+                <p style="margin:14px 0 0;color:#475569;font-size:12px;"> Expires in <strong style="color:#f59e0b;">10 minutes</strong></p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+        `;
+
         console.log(`[password-reset] Sending mail...`);
         const info = await transporter.sendMail({
           from: smtpFrom,
           to: subject.email,
-          subject: "Go Experts — Password Reset",
-          text: `Reset your password using this link (valid 1 hour):\n\n${resetUrl}\n`,
-          html: `<p>Reset your password using this link (valid 1 hour):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+          subject: "Go Experts  Password Reset",
+          text: `Reset your password using this code (valid 10 minutes):\n\n${otp}\n`,
+          html: htmlBody,
         });
         console.log(`[password-reset] Email sent successfully: ${info.messageId}`);
       } else {
@@ -1711,10 +1829,63 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       message: okMessage,
     };
     if (env.NODE_ENV !== "production") {
-      payload.resetToken = resetToken;
-      payload.resetUrl = resetUrl;
+      payload.otp = otp;
     }
     return res.json(payload);
+  } catch (err: any) {
+    next(err);
+  }
+};
+
+export const verifyPasswordResetOtp = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!email || !otp) {
+      return res.status(400).json(errorResponse("Email and OTP are required", "VALIDATION_ERROR"));
+    }
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+
+    const key = `pwreset_${cleanEmail}`;
+    const stored = otpStore.get(key);
+    if (!stored || stored.expiresAt <= Date.now()) {
+      return res.status(400).json(errorResponse("The verification code has expired.", "INVALID_OTP"));
+    }
+    if (stored.otp !== cleanOtp) {
+      return res.status(400).json(errorResponse("The verification code is incorrect.", "INVALID_OTP"));
+    }
+    
+    otpStore.delete(key);
+
+    const admin = await prisma.adminUser.findFirst({
+      where: { OR: [{ email: cleanEmail }, { email: String(req.body?.email || "").trim() }] },
+    });
+    const portalUser = !admin
+      ? await prisma.user.findFirst({ where: { email: cleanEmail, deletedAt: null } })
+      : null;
+
+    if (!admin && !portalUser) {
+      return res.status(404).json({ success: false, message: "Account not found" });
+    }
+
+    const subject = admin
+      ? { id: admin.id, email: admin.email, type: "admin" as const }
+      : { id: portalUser!.id, email: portalUser!.email, type: "portal" as const };
+
+    const resetToken = jwt.sign(
+      { id: subject.id, email: subject.email, type: subject.type, purpose: "password_reset" },
+      env.JWT_SECRET,
+      { expiresIn: "1h" },
+    );
+
+    const settingKey = `password_reset:${subject.type}:${subject.id}`;
+    await prisma.setting.upsert({
+      where: { key: settingKey },
+      update: { value: resetToken, category: "security" },
+      create: { key: settingKey, value: resetToken, category: "security" },
+    });
+
+    return res.json(successResponse("OTP verified successfully", { token: resetToken }));
   } catch (err: any) {
     next(err);
   }
@@ -1749,7 +1920,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       return res.status(400).json({ success: false, message: "Reset token already used or invalid" });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = encryptPassword(password);
 
     if (accountType === "admin") {
       const admin = await prisma.adminUser.findUnique({ where: { id: decoded.id } });
@@ -1788,7 +1959,7 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response, n
       return res.status(400).json({ success: false, message: "New password must be at least 8 characters" });
     }
 
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const hashed = encryptPassword(newPassword);
 
     if (req.user.type === "portal") {
       const user = await prisma.user.findFirst({ where: { id: req.user.id, deletedAt: null } });
@@ -1828,6 +1999,38 @@ export const sendOtp = async (req: Request, res: Response, next: NextFunction) =
 
     if (!email && !mobile) {
       return res.status(400).json({ success: false, message: "Email or mobile number is required" });
+    }
+
+    const isSignup = req.body?.isSignup === true || req.body?.isSignup === "true";
+    if (isSignup && email) {
+      const existingUser = await prisma.user.findFirst({
+        where: { email },
+        select: { id: true, isVerified: true, verified: true, role: true, onboardingStatus: true },
+      });
+      if (existingUser) {
+        // Check if onboarding is fully completed using the real schema field
+        const onboardingDone = existingUser.onboardingStatus === "COMPLETED" ||
+          (existingUser.isVerified === true && existingUser.verified === true && existingUser.role && existingUser.role !== "");
+        if (onboardingDone) {
+          // Fully registered user — block and show toast
+          return res.status(409).json({ success: false, message: "This email is already registered. Please log in instead." });
+        } else {
+          // Partially registered — allow them to resume onboarding
+          const jwt = await import("jsonwebtoken");
+          const resumeToken = jwt.default.sign(
+            { id: existingUser.id, email, role: existingUser.role, type: "user" },
+            process.env.JWT_SECRET as string,
+            { expiresIn: "2h" }
+          );
+          return res.status(200).json({
+            success: true,
+            onboardingIncomplete: true,
+            message: "This email is already registered but your registration is not complete. Resuming your previous session...",
+            accessToken: resumeToken,
+            user: { id: existingUser.id, email, role: existingUser.role },
+          });
+        }
+      }
     }
 
     const crypto = await import("crypto");
@@ -1880,7 +2083,7 @@ export const sendOtp = async (req: Request, res: Response, next: NextFunction) =
               `Verify your GoExperts account email to get started.`,
               `
               <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Email Verification</p>
-              <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email Address 📧</h1>
+              <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email Address ðŸ“§</h1>
               <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Thank you for registering with <strong>GoExperts</strong>. Please click the button below to verify your email address and retrieve your OTP verification code:</p>
 
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:28px auto;">
@@ -1894,7 +2097,7 @@ export const sendOtp = async (req: Request, res: Response, next: NextFunction) =
 
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#fff7ed;border-left:4px solid #f97316;border-radius:0 8px 8px 0;padding:1px;margin:0 0 24px;">
                 <tr><td style="padding:14px 18px;">
-                  <p style="margin:0 0 4px;color:#92400e;font-size:13px;font-weight:700;">⏰ Security Notice</p>
+                  <p style="margin:0 0 4px;color:#92400e;font-size:13px;font-weight:700;">â° Security Notice</p>
                   <p style="margin:0;color:#78350f;font-size:13px;line-height:1.6;">This verification link and OTP code will expire in <strong>15 minutes</strong>. Do not share it with anyone.</p>
                 </td></tr>
               </table>
@@ -2032,7 +2235,7 @@ export const sendDeleteAccountOtp = async (req: Request, res: Response, next: Ne
     // Dispatch real email via SMTP transporter
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; background-color: #ffffff;">
-        <h2 style="color: ${brandColor}; margin-top: 0;">Go Experts — Delete Account Request</h2>
+        <h2 style="color: ${brandColor}; margin-top: 0;">Go Experts  Delete Account Request</h2>
         <p style="color: #3f3f46; font-size: 15px;">You have requested to delete your account registered on Go Experts (<strong>${email}</strong>).</p>
         <p style="color: #3f3f46; font-size: 15px;">Your 6-digit OTP verification code is:</p>
         <div style="background-color: #fff1f2; border: 1px solid #fecdd3; padding: 16px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: ${brandColor}; border-radius: 10px; margin: 20px 0;">
@@ -2040,7 +2243,7 @@ export const sendDeleteAccountOtp = async (req: Request, res: Response, next: Ne
         </div>
         <p style="color: #71717a; font-size: 13px;">This verification code is valid for 10 minutes. If you did not request account deletion, please ignore this email or contact support immediately.</p>
         <hr style="border: none; border-top: 1px solid #f4f4f5; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #a1a1aa; margin: 0;">Go Experts Support Team · servicedesk@goexperts.in</p>
+        <p style="font-size: 12px; color: #a1a1aa; margin: 0;">Go Experts Support Team Â· servicedesk@goexperts.in</p>
       </div>
     `;
 
@@ -2109,7 +2312,7 @@ export const getOtpInfo = async (req: Request, res: Response, next: NextFunction
 
     let email = emailParam;
 
-    // Resolve token → email
+    // Resolve token â†’ email
     if (token) {
       const tokenRecord = tokenStore.get(token);
       if (!tokenRecord || tokenRecord.expiresAt < Date.now()) {
@@ -2191,7 +2394,7 @@ export const sendVerificationLink = async (req: Request, res: Response, next: Ne
           `Verify your GoExperts account email to get started.`,
           `
           <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Email Verification</p>
-          <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email Address 📧</h1>
+          <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email Address ðŸ“§</h1>
           <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Thank you for registering with <strong>GoExperts</strong>. Please click the button below to verify your email address and retrieve your OTP code (Expires in 15 minutes):</p>
 
           <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:28px auto;">
@@ -2205,7 +2408,7 @@ export const sendVerificationLink = async (req: Request, res: Response, next: Ne
 
           <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#fff7ed;border-left:4px solid #f97316;border-radius:0 8px 8px 0;padding:1px;margin:0 0 24px;">
             <tr><td style="padding:14px 18px;">
-              <p style="margin:0 0 4px;color:#92400e;font-size:13px;font-weight:700;">⏰ Security Notice</p>
+              <p style="margin:0 0 4px;color:#92400e;font-size:13px;font-weight:700;">â° Security Notice</p>
               <p style="margin:0;color:#78350f;font-size:13px;line-height:1.6;">This verification link and OTP code will expire in <strong>15 minutes</strong>. Do not share it with anyone.</p>
             </td></tr>
           </table>
@@ -2275,15 +2478,19 @@ export const selectSocialRole = async (req: AuthenticatedRequest, res: Response,
     registrationData.selectedRole = role;
     registrationData.onboardingStatus = registrationData.onboardingStatus || "draft";
 
+    const progress = calculateOnboardingProgress(role, 1, false);
+
     const updatedUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.update({
         where: { id: existing.id },
         data: {
           role,
-          registrationData: JSON.stringify(registrationData),
-          onboardingStatus: existing.onboardingStatus === "NOT_STARTED" ? "DRAFT" : existing.onboardingStatus,
-          currentStep: existing.currentStep || "2",
-          completionPercentage: existing.completionPercentage || 20,
+          registrationData: JSON.stringify({ ...registrationData, lastStep: 1 }),
+          onboardingStatus: progress.status,
+          completedSteps: progress.completedSteps ? JSON.stringify(progress.completedSteps) : undefined,
+          currentStep: progress.currentStep,
+          nextStepKey: progress.nextStepKey,
+          completionPercentage: progress.percentage
         },
       });
 
@@ -2652,8 +2859,15 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
     // Send welcome email ONLY when all steps are completed and it hasn't been sent before
     if (isCompleted) {
       const freshUser = await prisma.user.findUnique({ where: { id: userId } });
-      const regData: any = freshUser?.registrationData || {};
-      const alreadySentWelcome = (typeof regData === 'object' ? regData : {}).welcomeEmailSent === true;
+      
+      let parsedRegData: any = {};
+      if (typeof freshUser?.registrationData === 'string' && freshUser.registrationData) {
+        try { parsedRegData = JSON.parse(freshUser.registrationData); } catch (e) {}
+      } else if (typeof freshUser?.registrationData === 'object' && freshUser.registrationData !== null) {
+        parsedRegData = freshUser.registrationData;
+      }
+
+      const alreadySentWelcome = parsedRegData.welcomeEmailSent === true;
 
       if (!alreadySentWelcome) {
         try {
@@ -2673,7 +2887,7 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
             role: (freshUser!.role || "user").toUpperCase(),
             trial_days: "90",
             trial_ends_at: trialDateStr,
-            selected_plan: "90-Day Free Trial",
+            selected_plan: "Free plan after KYC approval",
             app_url: process.env.CLIENT_URL || "https://goexperts.in",
           });
 
@@ -2681,18 +2895,18 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
             {
               to: freshUser!.email,
               subject: welcomeRendered.subject,
-              body: `Hello ${freshUser!.fullName},\n\nWelcome to Go Experts! Your 90-Day Free Trial is active until ${trialDateStr}.\n\nBest regards,\nGo Experts Team`,
+              body: `Hello ${freshUser!.fullName},\n\nWelcome to Go Experts! Complete your KYC verification to activate your free plan.\n\nBest regards,\nGo Experts Team`,
               html: welcomeRendered.html,
             },
             parsedConfig
           );
 
           // Mark welcome email as sent to prevent duplicates
-          const latestRegData = typeof freshUser?.registrationData === 'object' ? freshUser?.registrationData : {};
+          parsedRegData.welcomeEmailSent = true;
           await prisma.user.update({
             where: { id: userId },
             data: {
-              registrationData: JSON.stringify({ ...(latestRegData as object), welcomeEmailSent: true }),
+              registrationData: JSON.stringify(parsedRegData),
             },
           });
 

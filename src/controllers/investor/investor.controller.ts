@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
+import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
 import {
@@ -158,6 +159,13 @@ export const getInvestorProfile = async (req: AuthenticatedRequest, res: Respons
 
     const location = extra?.location || [user.city, user.country].filter(Boolean).join(", ");
 
+    let completionPct = 0;
+    try {
+      const { resolveProfileCompletion } = await import("../../services/mobile/profile-completion.service.js");
+      const realCompletion = await resolveProfileCompletion(user.id);
+      completionPct = realCompletion.profileCompletion;
+    } catch (e) {}
+
     res.json({
       success: true,
       data: {
@@ -182,8 +190,11 @@ export const getInvestorProfile = async (req: AuthenticatedRequest, res: Respons
         preferredStage,
         deals: user.investorProfile?.deals ?? 0,
         status: user.status,
+        profileStatus: user.status || "active",
         verified: Boolean(user.isVerified || user.verified),
+        kycVerified: Boolean(user.isVerified || user.verified),
         role: user.role,
+        completionPct,
       },
     });
   } catch (err) {
@@ -221,7 +232,7 @@ export const updateInvestorProfile = async (req: AuthenticatedRequest, res: Resp
       where: { id: userId },
       data: {
         fullName,
-        phone: body.phone != null ? String(body.phone).trim() || null : existing.phone,
+        phone: body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone,
         bio: body.bio != null ? String(body.bio) : existing.bio,
         avatarUrl: body.avatarUrl != null ? String(body.avatarUrl).trim() || null : existing.avatarUrl,
         city,
@@ -468,6 +479,18 @@ export const createInvestorInvestment = async (req: AuthenticatedRequest, res: R
         console.error("Failed to trigger investment notification and message actions:", notifErr);
       }
     }
+
+    try {
+      const { emitToAdmins } = await import("../../services/notifications/notification-events.service.js");
+      await emitToAdmins({
+        type: "FUNDING_REQUEST",
+        title: "New Funding Request",
+        message: `${user.fullName} submitted a funding offer of ₹${offer} for ${equity}% equity in "${startup}".`,
+        contextType: "investment",
+        contextId: investment.id,
+        priority: "normal",
+      });
+    } catch (e) { console.error("Admin emit error", e); }
 
     res.status(201).json({ success: true, message: "Investment offer created", data: investment });
   } catch (err) {

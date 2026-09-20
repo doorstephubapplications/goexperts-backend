@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
+import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
 import {
@@ -141,6 +142,13 @@ export const getFounderProfile = async (req: AuthenticatedRequest, res: Response
 
     const details = await getJsonSetting(userId, "founder-profile-details", {});
 
+    let completionPct = 0;
+    try {
+      const { resolveProfileCompletion } = await import("../../services/mobile/profile-completion.service.js");
+      const realCompletion = await resolveProfileCompletion(user.id);
+      completionPct = realCompletion.profileCompletion;
+    } catch (e) {}
+
     res.json({
       success: true,
       data: {
@@ -158,8 +166,11 @@ export const getFounderProfile = async (req: AuthenticatedRequest, res: Response
         raised: Number(user.founderProfile?.raised ?? 0),
         teamSize: user.founderProfile?.teamSize ?? 1,
         status: user.status,
+        profileStatus: user.status || "active",
         verified: Boolean(user.isVerified || user.verified),
+        kycVerified: Boolean(user.isVerified || user.verified),
         role: user.role,
+        completionPct,
         ...details,
       },
     });
@@ -183,7 +194,7 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
       where: { id: userId },
       data: {
         fullName,
-        phone: body.phone != null ? String(body.phone).trim() || null : existing.phone,
+        phone: body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone,
         bio: body.bio != null ? String(body.bio) : existing.bio,
         avatarUrl: body.avatarUrl != null ? String(body.avatarUrl).trim() || null : existing.avatarUrl,
         city: body.city != null ? String(body.city).trim() || null : existing.city,
@@ -288,6 +299,18 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
           status: data.status || "active",
         }
       });
+
+      try {
+        const { emitToAdmins } = await import("../../services/notifications/notification-events.service.js");
+        await emitToAdmins({
+          type: "STARTUP_APPROVAL_REQUIRED",
+          title: "Startup Awaiting Approval",
+          message: `${user.fullName} submitted a new startup: "${startupName}". Review required.`,
+          contextType: "startup",
+          contextId: updated.id,
+          priority: "normal",
+        });
+      } catch (e) { console.error("Admin emit error", e); }
     }
 
     if (data.startup) {

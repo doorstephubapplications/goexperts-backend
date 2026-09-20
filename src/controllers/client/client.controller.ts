@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
+import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import {
@@ -279,6 +280,13 @@ export const getClientProfile = async (req: AuthenticatedRequest, res: Response,
       }).catch(() => 0);
     }
 
+    let completionPct = 0;
+    try {
+      const { resolveProfileCompletion } = await import("../../services/mobile/profile-completion.service.js");
+      const realCompletion = await resolveProfileCompletion(user.id);
+      completionPct = realCompletion.profileCompletion;
+    } catch (e) {}
+
     res.json({
       success: true,
       data: {
@@ -301,8 +309,11 @@ export const getClientProfile = async (req: AuthenticatedRequest, res: Response,
         totalSpend: Number(user.clientProfile?.totalSpend ?? 0),
         projectsPosted,
         status: user.status || "active",
+        profileStatus: user.status || "active",
         verified: Boolean(user.isVerified || user.verified),
+        kycVerified: Boolean(user.isVerified || user.verified),
         role: user.role,
+        completionPct,
       },
     });
   } catch (err) {
@@ -326,7 +337,7 @@ export const updateClientProfile = async (req: AuthenticatedRequest, res: Respon
       where: { id: userId },
       data: {
         fullName,
-        phone: body.phone != null ? String(body.phone).trim() || null : existing.phone,
+        phone: body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone,
         bio: body.bio != null ? String(body.bio) : existing.bio,
         avatarUrl: body.avatarUrl != null ? String(body.avatarUrl).trim() || null : existing.avatarUrl,
         city: body.city != null ? String(body.city).trim() || null : existing.city,

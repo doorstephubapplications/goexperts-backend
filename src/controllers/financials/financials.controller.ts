@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
+import { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { prisma } from "../../config/database.js";
-import { randomUUID } from "crypto";
+import crypto, { randomUUID } from "crypto";
+import path from "path";
+import { generateInvoicePdf } from "../../services/invoice/invoice.service.js";
+import { adminHasPermission } from "../../common/helpers/permission-checker.js";
 import { NotificationService } from "../../modules/notifications/notification.service.js";
 import { reactivateAccountAfterPlanUpgrade } from "../../services/mobile/subscription.service.js";
 
@@ -638,23 +642,8 @@ export async function processRefund(req: Request, res: Response) {
     const refundAmount = amount || paymentLookup.amount;
     let gatewayRefundId: string | null = null;
 
-    // Best-effort gateway refund call (does not block DB refund)
-    try {
-      if (paymentLookup.gateway === "stripe" && process.env.STRIPE_SECRET_KEY && paymentLookup.transactionId && !String(paymentLookup.transactionId).startsWith("mock_")) {
-        const Stripe = (await import("stripe")).default;
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-        const rf = await stripe.refunds.create({
-          payment_intent: paymentLookup.transactionId,
-          amount: Math.round(Number(refundAmount) * 100),
-        });
-        gatewayRefundId = rf.id;
-      } else {
-        gatewayRefundId = `local_re_${Date.now()}`;
-      }
-    } catch (gwErr: any) {
-      gatewayRefundId = `gateway_error_${Date.now()}`;
-      console.warn("processRefund gateway call failed:", gwErr?.message);
-    }
+    // Refunds are credited directly to the user's wallet, regardless of whether they paid via Stripe, Razorpay, or Wallet.
+    gatewayRefundId = `wallet_re_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 
     const result = await prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({ where: { id: paymentId } });
@@ -697,6 +686,18 @@ export async function processRefund(req: Request, res: Response) {
 
       return { refund, gatewayRefundId, walletBalance: updated.balance };
     });
+
+    try {
+      const { emitToAdmins } = await import("../../services/notifications/notification-events.service.js");
+      await emitToAdmins({
+        type: "REFUND_REQUESTED",
+        title: "Refund Processed",
+        message: `Refund of ₹${result.walletBalance} credited for payment ${paymentId.slice(0, 8)}.`,
+        contextType: "payment",
+        contextId: paymentId,
+        priority: "high",
+      });
+    } catch (e) { console.error("Admin emit error", e); }
 
     res.json({ success: true, data: result });
   } catch (e: any) {
@@ -968,11 +969,11 @@ export async function listInvoices(req: Request, res: Response) {
     if (userId) where.userId = userId;
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
-    const [invoices, total] = await Promise.all([
+    const [invoicesRaw, total] = await Promise.all([
       prisma.invoice.findMany({
         where, skip, take: parseInt(limit as string),
         include: {
-          user: { select: { id: true, fullName: true, email: true } },
+          user: { select: { id: true, fullName: true, email: true, role: true, freelancerProfile: true, clientProfile: true } },
           subscription: { include: { plan: true } },
           items: true,
         },
@@ -980,6 +981,20 @@ export async function listInvoices(req: Request, res: Response) {
       }),
       prisma.invoice.count({ where }),
     ]);
+
+    // Attach industry info resolved from user profiles for admin listing
+    const invoices = invoicesRaw.map((inv: any) => {
+      const user = inv.user || {};
+      let industry: string | null = null;
+      if (user.clientProfile && user.clientProfile.industry) industry = user.clientProfile.industry;
+      else if (user.freelancerProfile && user.freelancerProfile.industry) industry = user.freelancerProfile.industry;
+      else industry = null;
+
+      return {
+        ...inv,
+        industry,
+      };
+    });
 
     res.json({
       success: true, data: invoices,
@@ -1005,6 +1020,63 @@ export async function getInvoice(req: Request, res: Response) {
     res.json({ success: true, data: invoice });
   } catch (e: any) {
     res.status(500).json({ success: false, message: e.message });
+  }
+}
+
+export async function downloadInvoice(req: AuthenticatedRequest, res: Response) {
+  try {
+    // Only admin users with invoice permissions can call admin download route
+    if (req.user?.type !== "admin") return res.status(403).json({ success: false, message: "Forbidden" });
+    const allowed = await adminHasPermission(req.user?.id, "invoices");
+    if (!allowed) return res.status(403).json({ success: false, message: "Insufficient permissions" });
+    const { id } = req.params;
+    const { publicPath } = await generateInvoicePdf(id) as any;
+    const host = req.get("host") || process.env.HOST || "localhost";
+    const proto = req.protocol || (process.env.NODE_ENV === "production" ? "https" : "http");
+    return res.json({ success: true, data: { url: `${proto}://${host}${publicPath}` } });
+  } catch (e: any) {
+    console.error("Failed to generate invoice PDF:", e);
+    res.status(500).json({ success: false, message: e.message || "Error generating invoice PDF" });
+  }
+}
+
+export async function resendInvoice(req: AuthenticatedRequest, res: Response) {
+  try {
+    // Only admin users with invoice permissions can resend
+    if (req.user?.type !== "admin") return res.status(403).json({ success: false, message: "Forbidden" });
+    const allowed = await adminHasPermission(req.user?.id, "invoices", ["manage", "resend"]);
+    if (!allowed) return res.status(403).json({ success: false, message: "Insufficient permissions" });
+
+    const { id } = req.params;
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { user: true, items: true, subscription: { include: { plan: true } } },
+    });
+    if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });
+
+    // Ensure PDF exists (generate if missing)
+    const { filePath, publicPath } = await generateInvoicePdf(id) as any;
+
+    // Send email with attachment
+    const { sendEmailWithAttachment, shell } = await import("../../services/mobile/email.service.js");
+    const to = invoice.user?.email || "";
+    if (!to) return res.status(400).json({ success: false, message: "No recipient email for invoice" });
+
+    const subject = `Your Go Experts Invoice #${invoice.invoiceNumber || invoice.id}`;
+    const body = `<p>Hi ${invoice.user?.fullName || 'Customer'},</p><p>Please find attached your invoice <strong>#${invoice.invoiceNumber}</strong>.</p><p>Thank you,<br/>Go Experts</p>`;
+
+    const attachRes = await sendEmailWithAttachment(to, subject, shell('Your invoice is attached', body), [ { filename: path.basename(filePath), path: filePath } ]);
+
+    // Mark as emailed
+    try { await prisma.invoice.update({ where: { id }, data: { emailSent: true } }); } catch { }
+
+    const host = req.get("host") || process.env.HOST || "localhost";
+    const proto = req.protocol || (process.env.NODE_ENV === "production" ? "https" : "http");
+
+    res.json({ success: true, message: "Invoice resent", data: { url: `${proto}://${host}${publicPath}`, emailResult: attachRes } });
+  } catch (e: any) {
+    console.error("Failed to resend invoice:", e);
+    res.status(500).json({ success: false, message: e.message || "Error resending invoice" });
   }
 }
 

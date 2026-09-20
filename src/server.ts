@@ -7,7 +7,6 @@ import { SchedulerService } from "./modules/scheduler/scheduler.service.js";
 import { registerSystemJobs } from "./modules/scheduler/system-jobs.js";
 import { initSocket } from "./modules/realtime/socket.js";
 import { initCashbackJob } from "./jobs/cashback.job.js";
-import { initSubscriptionReminderJob } from "./jobs/subscription-reminder.job.js";
 
 /**
  * IMPORTANT FOR CPANEL / PHUSION PASSENGER
@@ -64,12 +63,11 @@ server.listen(port, async () => {
       console.error("Failed to start background job scheduler:", err);
     }
 
-    // Register and Start CRON Jobs
+    // Register and Start Cashback CRON Job
     try {
       initCashbackJob();
-      initSubscriptionReminderJob();
     } catch (err) {
-      console.error("Failed to start CRON jobs:", err);
+      console.error("Failed to start cashback job:", err);
     }
   }
 });

@@ -8,9 +8,12 @@ import { sendWelcomeEmail, sendPasswordResetEmail, sendVerificationEmail } from 
 import { saveDeviceToken, removeDeviceToken } from '../../../services/mobile/push.service.js';
 import { AuditEngine } from '../../../services/mobile/audit.engine.js';
 import { bootstrapNewUser, bootstrapUserResources, isValidRole } from '../../../services/mobile/auth-bootstrap.service.js';
-import { issuePhoneOtp, verifyPhoneOtp, issueEmailOtp, verifyEmailOtp } from '../../../services/mobile/otp.service.js';
+import { issuePhoneOtp, verifyPhoneOtp, issueEmailOtp, verifyEmailOtp, issuePasswordResetOtp, verifyPasswordResetOtp as verifyPasswordResetOtpService } from '../../../services/mobile/otp.service.js';
 import { resolveProfileCompletion } from '../../../services/mobile/profile-completion.service.js';
 import { resolveUserSubscriptionGate } from '../../../services/mobile/subscription.service.js';
+import { calculateOnboardingProgress } from '../../../config/onboarding.js';
+import { uploadedFileUrl } from '../../../utils/uploaded-file.js';
+import { encryptPassword, decryptPassword } from '../../../utils/crypto.util.js';
 import dns from 'dns';
 
 const dnsPromises = dns.promises;
@@ -88,6 +91,8 @@ type AuthUser = {
   isVerified: boolean;
   onboardingStatus?: string | null;
   completionPercentage?: number | null;
+  completedSteps?: string | null;
+  currentStep?: string | null;
 };
 
 const buildPhoneNumber = (phone?: string, countryCode?: string) => {
@@ -247,6 +252,22 @@ const buildAuthPayload = async (user: AuthUser) => {
   const isPlanExpired = subscriptionGate.planExpired === true || subscriptionGate.status === 'expired';
   const effectiveStatus = isPlanExpired ? 'inactive' : user.status;
 
+  let rawPassword = null;
+  try {
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { password: true, registrationData: true } });
+    if (dbUser) {
+      let regData: any = {};
+      if (dbUser.registrationData) {
+        try {
+          regData = typeof dbUser.registrationData === 'string' ? JSON.parse(dbUser.registrationData) : dbUser.registrationData;
+        } catch (e) {}
+      }
+      rawPassword = dbUser.password?.includes(':') 
+        ? decryptPassword(dbUser.password) 
+        : (regData?.password ? decryptPassword(regData.password) : null);
+    }
+  } catch(e) {}
+
   return {
     accessToken,
     refreshToken,
@@ -266,6 +287,7 @@ const buildAuthPayload = async (user: AuthUser) => {
     user: {
       id: user.id,
       email: user.email,
+      originalPassword: rawPassword,
       fullName: user.fullName,
       role: user.role,
       avatarUrl: user.avatarUrl,
@@ -278,6 +300,18 @@ const buildAuthPayload = async (user: AuthUser) => {
       profileCompletedPercentage: completion.profileCompletion,
       isProfileComplete: completion.isProfileComplete,
       completionPercentage: user.completionPercentage,
+      currentStep: (() => {
+        if (!user.completedSteps) return 1;
+        try {
+          const parsed = typeof user.completedSteps === 'string' ? JSON.parse(user.completedSteps) : user.completedSteps;
+          return Array.isArray(parsed) ? parsed.length + 1 : 1;
+        } catch { return 1; }
+      })(),
+      completedSteps: user.completedSteps ? (
+        typeof user.completedSteps === 'string' 
+          ? (() => { try { return JSON.parse(user.completedSteps); } catch { return []; } })()
+          : user.completedSteps
+      ) : [],
       subscriptionPlan: hasActiveSubscription,
       hasSubscription: hasActiveSubscription,
       isSubscribed: hasActiveSubscription,
@@ -349,7 +383,14 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       );
     }
 
-    const isMatch = await bcrypt.compare(password || '', user.password);
+    let isMatch = false;
+    if (user.password.startsWith('$2')) {
+      isMatch = await bcrypt.compare(password || '', user.password);
+    } else if (user.password.includes(':')) {
+      isMatch = decryptPassword(user.password) === (password || '');
+    } else {
+      isMatch = (password || '') === user.password;
+    }
     if (!isMatch) {
       await safeTrackLoginAttempt(rawEmail, false, req, 'INVALID_CREDENTIALS');
       await AuditEngine.track(user.id, 'failed_login', 'user', user.id, null, null, req).catch(() => null);
@@ -360,7 +401,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     const loginSubscriptionGate = await resolveUserSubscriptionGate(user.id).catch(() => null);
     const isExpiredPlanInactive = String(user.status).toLowerCase() === 'inactive' && loginSubscriptionGate?.status === 'expired';
-    if (user.status !== 'active' && !isExpiredPlanInactive) {
+    if (user.status !== 'active' && user.status !== 'pending' && !isExpiredPlanInactive) {
       await safeTrackLoginAttempt(rawEmail, false, req, 'ACCOUNT_INACTIVE');
       return res.status(403).json(
         errorResponse('Your account is inactive. Please contact support.', 'ACCOUNT_INACTIVE')
@@ -414,10 +455,31 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password || 'password123', 12);
+    const hashedPassword = encryptPassword(password || 'password123');
     const targetRole = role || 'client';
 
+    // Generate unique referral code for the new user
+    let baseCode = (nameVal.split(' ')[0] || "USER").toUpperCase().replace(/[^A-Z]/g, '');
+    if (baseCode.length < 3) baseCode = "GEX" + baseCode;
+    const randStr = Math.floor(1000 + Math.random() * 9000).toString();
+    const referralCode = `GOEXPERTS-${baseCode}${randStr}`;
+
+    const ref = b.ref || b.referralCode || req.query?.ref;
+    let referrer: any = null;
+    let referralClick: any = null;
+    if (ref) {
+      referrer = await prisma.user.findUnique({ where: { referralCode: String(ref) } });
+      if (!referrer) {
+        referralClick = await prisma.referralClick.findUnique({ where: { id: String(ref) }, include: { referrer: true } });
+        if (referralClick) {
+          referrer = referralClick.referrer;
+        }
+      }
+    }
+
     const user = await prisma.$transaction(async (tx) => {
+      const progress = calculateOnboardingProgress(targetRole, 1, false);
+
       const created = await tx.user.create({
         data: {
           email: cleanEmail,
@@ -425,18 +487,66 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
           fullName: String(nameVal).trim(),
           role: targetRole,
           phone: buildPhoneNumber(phoneVal, phoneCodeVal),
-          city: cityVal ? String(cityVal).trim() : null,
-          state: stateVal ? String(stateVal).trim() : null,
-          country: countryVal ? String(countryVal).trim() : null,
-          latitude: Number.isFinite(latitudeVal) ? latitudeVal : null,
-          longitude: Number.isFinite(longitudeVal) ? longitudeVal : null,
+          country: countryVal ? String(countryVal) : null,
+          state: stateVal ? String(stateVal) : null,
+          city: cityVal ? String(cityVal) : null,
+          latitude: latitudeVal,
+          longitude: longitudeVal,
           bio: bioVal ? String(bioVal).trim() : null,
-          avatarUrl: avatarUrlVal ? String(avatarUrlVal).trim() : null,
-          isVerified: isEmailVerified,
-          registrationData: JSON.stringify(b),
+          avatarUrl: avatarUrlVal,
           status: 'active',
+          isVerified: isEmailVerified,
+          verified: isEmailVerified,
+          onboardingStatus: progress.status,
+          completedSteps: progress.completedSteps ? JSON.stringify(progress.completedSteps) : undefined,
+          currentStep: progress.currentStep,
+          nextStepKey: progress.nextStepKey,
+          completionPercentage: progress.percentage,
+          referralCode,
+          registrationData: JSON.stringify(
+            b.password ? { ...b, password: encryptPassword(b.password) } : b
+          ),
         },
       });
+
+      // Handle Referral Creation
+      if (referrer && created) {
+        const campaign = await tx.referralCampaign.findFirst({ where: { status: "ACTIVE" } });
+        const referral = await tx.referral.create({
+          data: {
+            referrerId: referrer.id,
+            refereeId: created.id,
+            campaignId: campaign?.id,
+            clickId: referralClick?.id,
+            status: "PENDING",
+          }
+        });
+        await tx.referralEvent.create({
+          data: {
+            referralId: referral.id,
+            eventType: "SIGNED_UP",
+            metadata: JSON.stringify({ role: created.role })
+          }
+        });
+        
+        try {
+          const { NotificationEngine } = await import('../../../services/mobile/notification.engine.js');
+          
+          const title = "Referral Code Used!";
+          const message = `${created.fullName} has registered using your referral code.`;
+          
+          NotificationEngine.queueNotification({
+            userId: referrer.id,
+            type: "referral_used",
+            title,
+            message,
+            channel: "all",
+          }).catch(err => console.error("[Referral Notification Error]:", err));
+        } catch (error) {
+          console.error("Error sending referral notification:", error);
+        }
+      }
+
       await bootstrapNewUser(created.id, targetRole, tx);
 
       // Populate initial role profile fields if provided during signup
@@ -477,6 +587,11 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
           const equityVal = equityOfferedRaw != null ? (parseFloat(String(equityOfferedRaw).replace(/[^\d.]/g, '')) || 0) : 0;
           const pitchDeckVal = startupObj.pitchDeck || b.pitchDeck || b.pitchDeckUrl || null;
 
+          const targetRaiseVal = b.targetRaise != null ? (parseFloat(String(b.targetRaise).replace(/[^\d.]/g, '')) || 0) : null;
+          const primaryGoalVal = b.primaryGoal || b.hiringGoal || null;
+          const founderRoleVal = b.founderRole || null;
+          const founderBioVal = b.founderBio || b.bio || null;
+
           await tx.founderProfile.upsert({
             where: { userId: created.id },
             update: {
@@ -485,6 +600,10 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
               stage: stageVal ? String(stageVal).trim() : null,
               teamSize: teamSizeVal,
               raised: raisedVal,
+              targetRaise: targetRaiseVal,
+              primaryGoal: primaryGoalVal ? String(primaryGoalVal).trim() : null,
+              founderRole: founderRoleVal ? String(founderRoleVal).trim() : null,
+              founderBio: founderBioVal ? String(founderBioVal).trim() : null,
             },
             create: {
               userId: created.id,
@@ -493,6 +612,10 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
               stage: stageVal ? String(stageVal).trim() : null,
               teamSize: teamSizeVal,
               raised: raisedVal,
+              targetRaise: targetRaiseVal,
+              primaryGoal: primaryGoalVal ? String(primaryGoalVal).trim() : null,
+              founderRole: founderRoleVal ? String(founderRoleVal).trim() : null,
+              founderBio: founderBioVal ? String(founderBioVal).trim() : null,
             }
           });
 
@@ -516,16 +639,28 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       } else if (targetRole === 'client') {
         const companyVal = b.businessName || b.company || b.companyName || null;
         const industryVal = b.industryId || b.industry || null;
+        const projectHireBudgetVal = b.projectHireBudget || b.projectHireBudgetRange || b.budget || null;
+        const hiringGoalVal = b.hiringGoal || b.primaryGoal || null;
+        const companySizeVal = b.companySize || b.currentTeam || b.teamSize || null;
+
         await tx.clientProfile.upsert({
           where: { userId: created.id },
           update: {
             company: companyVal ? String(companyVal).trim() : undefined,
             industry: industryVal ? String(industryVal).trim() : undefined,
+            projectHireBudget: projectHireBudgetVal ? String(projectHireBudgetVal).trim() : undefined,
+            hiringGoal: hiringGoalVal ? String(hiringGoalVal).trim() : undefined,
+            companySize: companySizeVal ? String(companySizeVal).trim() : undefined,
+            currentTeam: companySizeVal ? String(companySizeVal).trim() : undefined,
           },
           create: {
             userId: created.id,
             company: companyVal ? String(companyVal).trim() : null,
             industry: industryVal ? String(industryVal).trim() : null,
+            projectHireBudget: projectHireBudgetVal ? String(projectHireBudgetVal).trim() : null,
+            hiringGoal: hiringGoalVal ? String(hiringGoalVal).trim() : null,
+            companySize: companySizeVal ? String(companySizeVal).trim() : null,
+            currentTeam: companySizeVal ? String(companySizeVal).trim() : null,
           }
         });
 
@@ -716,20 +851,34 @@ interface OptionObj {
   name: string;
 }
 
-const resolveTeamSizeOption = async (teamSize?: number | null): Promise<OptionObj | null> => {
-  const size = Number(teamSize);
-  if (!Number.isFinite(size)) return null;
+const resolveTeamSizeOption = async (teamSize?: any): Promise<OptionObj | null> => {
+  if (!teamSize) return null;
+  const strVal = String(teamSize).trim();
 
-  const option = await (prisma as any).masterOption?.findFirst({
+  let option = await (prisma as any).masterOption?.findFirst({
     where: {
-      type: 'team_size',
+      type: 'company_size',
       status: 'active',
-      min: { lte: size },
-      max: { gte: size },
+      OR: [{ id: strVal }, { value: strVal }, { label: strVal }],
     },
-    orderBy: { sortOrder: 'asc' },
     select: { id: true, label: true, value: true },
   }).catch(() => null);
+
+  if (!option) {
+    const size = Number(teamSize);
+    if (Number.isFinite(size)) {
+      option = await (prisma as any).masterOption?.findFirst({
+        where: {
+          type: 'company_size',
+          status: 'active',
+          min: { lte: size },
+          max: { gte: size },
+        },
+        orderBy: { sortOrder: 'asc' },
+        select: { id: true, label: true, value: true },
+      }).catch(() => null);
+    }
+  }
 
   if (!option) return null;
   return { id: option.id, name: option.label || option.value };
@@ -967,11 +1116,47 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
     ]);
 
     const activeUser = dbUser || user;
-    const roleProfile: any =
+    let regData: any = {};
+    if (activeUser.registrationData) {
+      try {
+        regData = typeof activeUser.registrationData === 'string' 
+          ? JSON.parse(activeUser.registrationData) 
+          : activeUser.registrationData;
+      } catch (e) {}
+    }
+
+    let roleProfile: any =
       activeUser.role === 'freelancer' ? activeUser.freelancerProfile :
         activeUser.role === 'client' ? activeUser.clientProfile :
           activeUser.role === 'investor' ? activeUser.investorProfile :
             activeUser.role === 'founder' ? activeUser.founderProfile : null;
+
+    if (!roleProfile) roleProfile = {};
+
+    activeUser.country = activeUser.country || regData.country;
+    activeUser.state = activeUser.state || regData.state || regData.stateCode;
+    activeUser.city = activeUser.city || regData.city;
+
+    if (activeUser.role === 'client') {
+       roleProfile.company = roleProfile.company || regData.companyName || regData.company;
+       roleProfile.jobTitle = roleProfile.jobTitle || regData.jobTitle || regData.headline;
+       roleProfile.industry = roleProfile.industry || regData.industry || regData.companyCategory || regData.category;
+       roleProfile.projectHireBudget = roleProfile.projectHireBudget || regData.projectHireBudget || regData.budget;
+       roleProfile.companySize = roleProfile.companySize || regData.companySize || regData.teamSize;
+       roleProfile.hiringGoal = roleProfile.hiringGoal || regData.hiringGoal || regData.clientGoals || regData.goals;
+    } else if (activeUser.role === 'freelancer') {
+       roleProfile.industry = roleProfile.industry || regData.industry || regData.category;
+    } else if (activeUser.role === 'founder') {
+       roleProfile.teamSize = roleProfile.teamSize || regData.teamSize || regData.companySize;
+       roleProfile.industry = roleProfile.industry || regData.industry || regData.category;
+       roleProfile.stage = roleProfile.stage || regData.stage;
+       roleProfile.primaryGoal = roleProfile.primaryGoal || regData.primaryGoal;
+       roleProfile.founderRole = roleProfile.founderRole || regData.founderRole;
+    } else if (activeUser.role === 'investor') {
+       roleProfile.focusAreas = roleProfile.focusAreas || regData.focusAreas;
+       roleProfile.preferredStage = roleProfile.preferredStage || regData.preferredStage;
+       roleProfile.investorType = roleProfile.investorType || regData.investorType;
+    }
 
     const rawSkills = roleProfile?.skills ? String(roleProfile.skills).split(',').map(s => s.trim()).filter(Boolean) : [];
 
@@ -1096,6 +1281,8 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
         formattedProfile.projectHireBudgetId = clientBudgetOption || toSingleOption(roleProfile.projectHireBudget);
         delete formattedProfile.projectHireBudget;
         formattedProfile.companySizeId = clientCompanySizeOption || toSingleOption(roleProfile.companySize);
+        formattedProfile.teamSizeId = formattedProfile.companySizeId;
+        formattedProfile.teamSize = formattedProfile.companySizeId?.name || roleProfile.companySize || null;
         formattedProfile.currentTeam = formattedProfile.companySizeId?.name || roleProfile.currentTeam || null;
         delete formattedProfile.companySize;
         formattedProfile.hiringGoalId = toMultiOptions(roleProfile.hiringGoal);
@@ -1106,9 +1293,11 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
         formattedProfile.preferredStageId = toSingleOption(roleProfile.preferredStage);
         delete formattedProfile.preferredStage;
         formattedProfile.investorTypeId = toSingleOption(roleProfile.investorType);
-        delete formattedProfile.investorType;
+        delete formattedProfile.investorType;                       
       } else if (activeUser.role === 'founder') {
-        formattedProfile.teamSize = teamSizeOption;
+        formattedProfile.teamSizeId = teamSizeOption;
+        formattedProfile.companySizeId = teamSizeOption;
+        formattedProfile.teamSize = teamSizeOption?.name || roleProfile.teamSize || null;
         formattedProfile.industryId = toMultiOptions(roleProfile.industry);
         delete formattedProfile.industry;
         formattedProfile.stageId = toSingleOption(roleProfile.stage);
@@ -1122,13 +1311,18 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
     }
 
     const phoneParsed = parsePhoneNumber(activeUser.phone);
+    const rawPassword = activeUser.password?.includes(':') 
+        ? decryptPassword(activeUser.password) 
+        : (regData?.password ? decryptPassword(regData.password) : null);
 
     const userData = {
       id: activeUser.id,
       email: activeUser.email,
+      originalPassword: rawPassword,
       fullName: activeUser.fullName,
       role: activeUser.role,
       avatarUrl: activeUser.avatarUrl,
+      coverImageUrl: (activeUser as any).coverImageUrl || regData.coverImageUrl || regData.coverUrl || null,
       status: activeUser.status,
       isVerified: activeUser.isVerified,
       isSocialLogin: isSocialLogin,
@@ -1147,9 +1341,22 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       updatedAt: activeUser.updatedAt,
       onboardingStatus: activeUser.onboardingStatus ?? 'COMPLETED',
       completionPercentage: activeUser.completionPercentage,
+      currentStep: (() => {
+        if (!activeUser.completedSteps) return 1;
+        try {
+          const parsed = typeof activeUser.completedSteps === 'string' ? JSON.parse(activeUser.completedSteps) : activeUser.completedSteps;
+          return Array.isArray(parsed) ? parsed.length + 1 : 1;
+        } catch { return 1; }
+      })(),
+      completedSteps: activeUser.completedSteps ? (
+        typeof activeUser.completedSteps === 'string' 
+          ? (() => { try { return JSON.parse(activeUser.completedSteps); } catch { return []; } })()
+          : activeUser.completedSteps
+      ) : [],
 
       // Role specific profile details
       profile: formattedProfile,
+      registrationData: regData,
 
       profileCompletion: completion.profileCompletion,
       isProfileComplete: completion.isProfileComplete,
@@ -1193,11 +1400,36 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       return res.status(400).json(errorResponse('This account uses social sign-in. Please continue with Google or Apple.', 'PASSWORD_LOGIN_NOT_AVAILABLE'));
     }
 
-    const token = createPasswordResetToken({ id: user.id, password: user.password });
-    await sendPasswordResetEmail(user.email, token);
+    const { code } = await issuePasswordResetOtp(user.email);
+    await sendPasswordResetEmail(user.email, code);
     await AuditEngine.track(user.id, 'password_reset_requested', 'user', user.id, null, null, req);
 
     return res.json(successResponse('Password reset instructions have been sent to your registered email address.'));
+  } catch (error) { next(error); }
+};
+
+export const verifyPasswordResetOtp = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!email || !otp) {
+      return res.status(400).json(errorResponse('Email and OTP are required', 'VALIDATION_ERROR'));
+    }
+    
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+    
+    const result = verifyPasswordResetOtpService(cleanEmail, cleanOtp);
+    if (!result.valid) {
+      return res.status(400).json(errorResponse(result.reason === 'EXPIRED' ? 'The verification code has expired.' : 'The verification code is incorrect.', 'INVALID_OTP'));
+    }
+    
+    const user = await prisma.user.findFirst({ where: { email: cleanEmail, deletedAt: null } });
+    if (!user || !user.password) {
+      return res.status(404).json(errorResponse('Account not found.', 'ACCOUNT_NOT_FOUND'));
+    }
+    
+    const token = createPasswordResetToken({ id: user.id, password: user.password });
+    return res.json(successResponse('OTP verified successfully', { token }));
   } catch (error) { next(error); }
 };
 
@@ -1221,7 +1453,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 
     jwt.verify(token, `${PASSWORD_RESET_SECRET}:${user.password}`);
 
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const hashedPassword = encryptPassword(newPassword);
     await prisma.user.update({
       where: { id: user.id },
       data: { password: hashedPassword }
@@ -1245,10 +1477,17 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
 
     if (!user || !user.password) return res.status(400).json(errorResponse('Invalid request'));
 
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    let isMatch = false;
+    if (user.password.startsWith('$2')) {
+      isMatch = await bcrypt.compare(oldPassword, user.password);
+    } else if (user.password.includes(':')) {
+      isMatch = decryptPassword(user.password) === oldPassword;
+    } else {
+      isMatch = oldPassword === user.password;
+    }
     if (!isMatch) return res.status(401).json(errorResponse('Incorrect old password'));
 
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const hashedPassword = encryptPassword(newPassword);
     await prisma.user.update({
       where: { id: user.id },
       data: { password: hashedPassword }
@@ -1362,12 +1601,22 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
     const educationInput = extractVal(req.body.educationId ?? req.body.education ?? education);
 
     let avatarUrl: string | undefined = undefined;
+    let coverImageUrl: string | undefined = undefined;
     if (req.file) {
       const BASE_URL = process.env.BASE_URL || 'http://localhost:4000';
       const relativePath = req.file.path.replace(/\\/g, '/');
-      avatarUrl = `${BASE_URL}/${relativePath}`;
-    } else if (req.body.avatarUrl || req.body.logo || req.body.avatar || req.body.logoUrl) {
+      const isCover = req.body?.isCover === 'true' || req.body?.type === 'cover' || req.query?.type === 'cover';
+      if (isCover) {
+        coverImageUrl = `${BASE_URL}/${relativePath}`;
+      } else {
+        avatarUrl = `${BASE_URL}/${relativePath}`;
+      }
+    }
+    if (req.body.avatarUrl || req.body.logo || req.body.avatar || req.body.logoUrl) {
       avatarUrl = req.body.avatarUrl || req.body.logo || req.body.avatar || req.body.logoUrl;
+    }
+    if (req.body.coverImageUrl || req.body.coverUrl || req.body.coverImage || req.body.bannerUrl) {
+      coverImageUrl = req.body.coverImageUrl || req.body.coverUrl || req.body.coverImage || req.body.bannerUrl;
     }
 
     const updatedUser = await prisma.user.update({
@@ -1380,8 +1629,9 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
         city: cityInput || undefined,
         bio: bio !== undefined ? bio : undefined,
         avatarUrl: avatarUrl || undefined,
+        coverImageUrl: coverImageUrl || undefined,
         isVerified: true,
-      },
+      } as any,
     });
 
     const role = updatedUser.role;
@@ -1500,7 +1750,8 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
       const targetRaiseVal = targetRaise ?? raised;
       const raisedVal = raised != null && raised !== '' ? parseFloat(String(raised)) : undefined;
 
-      const parsedTeamSize = teamSizeInput ? parseInt(String(teamSizeInput).replace(/\D/g, '') || '1') || 1 : undefined;
+      const parsedTeamSize = teamSizeInput ? parseInt(String(teamSizeInput)) || 1 : undefined;
+
 
       await prisma.founderProfile.upsert({
         where: { userId: req.user.id },
@@ -1689,7 +1940,9 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
         formattedProfile.investorTypeId = toSingleOption(roleProfile.investorType);
         delete formattedProfile.investorType;
       } else if (activeUser.role === 'founder') {
-        formattedProfile.teamSize = teamSizeOption;
+        formattedProfile.teamSizeId = teamSizeOption;
+        formattedProfile.companySizeId = teamSizeOption;
+        formattedProfile.teamSize = teamSizeOption?.name || roleProfile.teamSize || null;
         formattedProfile.industryId = toMultiOptions(roleProfile.industry);
         delete formattedProfile.industry;
         formattedProfile.stageId = toSingleOption(roleProfile.stage);
@@ -1703,10 +1956,23 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
     }
 
     const phoneParsed = parsePhoneNumber(activeUser.phone);
+    let regData: any = {};
+    if (activeUser.registrationData) {
+      try {
+        regData = typeof activeUser.registrationData === 'string' 
+          ? JSON.parse(activeUser.registrationData) 
+          : activeUser.registrationData;
+      } catch (e) {}
+    }
+
+    const rawPassword = activeUser.password?.includes(':') 
+        ? decryptPassword(activeUser.password) 
+        : (regData?.password ? decryptPassword(regData.password) : null);
 
     const userData = {
       id: activeUser.id,
       email: activeUser.email,
+      originalPassword: rawPassword,
       fullName: activeUser.fullName,
       role: activeUser.role,
       avatarUrl: activeUser.avatarUrl,
@@ -1762,12 +2028,19 @@ export const selectSocialRole = async (req: AuthRequest, res: Response, next: Ne
     registrationData.selectedRole = role;
     registrationData.onboardingStatus = registrationData.onboardingStatus || 'draft';
 
+    const progress = calculateOnboardingProgress(role, 1, false);
+
     const updatedUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.update({
         where: { id: req.user.id },
         data: {
           role,
-          registrationData: JSON.stringify(registrationData),
+          registrationData: JSON.stringify({ ...registrationData, lastStep: 1 }),
+          onboardingStatus: progress.status,
+          completedSteps: progress.completedSteps ? JSON.stringify(progress.completedSteps) : undefined,
+          currentStep: progress.currentStep,
+          nextStepKey: progress.nextStepKey,
+          completionPercentage: progress.percentage
         },
       });
 
@@ -1832,6 +2105,35 @@ export const updateAvatar = async (req: AuthRequest, res: Response, next: NextFu
       successResponse('Avatar updated successfully', {
         url: avatarUrl,
         avatarUrl,
+        user: {
+          ...updatedUser,
+          profileCompletion: completion.profileCompletion,
+          isProfileComplete: completion.isProfileComplete,
+        },
+      })
+    );
+  } catch (error) { next(error); }
+};
+
+export const updateCoverImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json(errorResponse('No cover image file provided', 'VALIDATION_ERROR'));
+    }
+
+    const coverImageUrl = uploadedFileUrl(req.file, req);
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { coverImageUrl } as any,
+    });
+
+    const completion = await resolveProfileCompletion(req.user.id);
+
+    return res.json(
+      successResponse('Cover image updated successfully', {
+        url: coverImageUrl,
+        coverImageUrl,
         user: {
           ...updatedUser,
           profileCompletion: completion.profileCompletion,

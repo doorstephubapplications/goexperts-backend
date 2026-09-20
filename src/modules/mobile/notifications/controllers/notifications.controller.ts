@@ -22,13 +22,39 @@ export const getNotifications = async (req: AuthRequest, res: Response, next: Ne
       prisma.notification.count({ where })
     ]);
 
-    const shaped = notifications.map((n) => ({
-      ...n,
-      body: n.message,
-      isRead: Boolean(n.readAt),
-      read: Boolean(n.readAt),
-      category: n.type || 'system',
-    }));
+    const shaped = notifications.map((n) => {
+      let metadata: Record<string, unknown> = {};
+      if (n.metadata) {
+        try {
+          const parsed = JSON.parse(n.metadata);
+          if (parsed && typeof parsed === 'object') {
+            metadata = parsed as Record<string, unknown>;
+          }
+        } catch (_) {
+          // Ignore malformed legacy metadata and return the notification itself.
+        }
+      }
+
+      const contextId = metadata.contextId ??
+        metadata.context_id ??
+        metadata.projectId ??
+        metadata.project_id ??
+        metadata.entityId ??
+        metadata.entity_id ??
+        null;
+
+      return {
+        ...n,
+        body: n.message,
+        isRead: Boolean(n.readAt),
+        read: Boolean(n.readAt),
+        category: n.type || 'system',
+        contextId,
+        entityId: contextId,
+        projectId: metadata.projectId ?? metadata.project_id ?? null,
+        role: metadata.role ?? metadata.userRole ?? metadata.inviterRole ?? null,
+      };
+    });
 
     return res.json(successResponse('Notifications retrieved', shaped, { page, limit, total, totalPages: Math.ceil(total / limit) }));
   } catch (error) { next(error); }
@@ -100,20 +126,6 @@ export const updatePreferences = async (req: AuthRequest, res: Response, next: N
     });
     
     return res.json(successResponse('Preferences updated', prefs));
-  } catch (error) { next(error); }
-};
-
-export const testPush = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    await NotificationEngine.queueNotification({
-      userId: req.user.id,
-      type: 'test_push',
-      title: 'Test Push Notification',
-      message: 'This is a test push notification from Go Experts',
-      channel: 'push',
-      payload: { title: 'Test Push', message: 'It works!' }
-    });
-    return res.json(successResponse('Test push notification queued'));
   } catch (error) { next(error); }
 };
 

@@ -93,6 +93,12 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       return res.status(400).json({ success: false, message: "projectId and bidAmount are required" });
     }
 
+    let targetUserEmail = "";
+    let targetUserFullName = "";
+    let projectTitleStr = "";
+    let freelancerEmail = "";
+    let freelancerFullName = "";
+
     const result = await prisma.$transaction(async (tx: any) => {
       // 1. Validate Project Eligibility
       const project = await tx.project.findFirst({ 
@@ -148,20 +154,18 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       });
 
       const targetUser = await tx.user.findUnique({ where: { id: targetUserId } });
-      if (targetUser?.email) {
-        try {
-          await sendEmail(
-            targetUser.email,
-            "New Proposal Received - Go Experts",
-            `<p>Hi ${targetUser.fullName || 'Client'},</p>
-            <p>A freelancer has submitted a new proposal for your project <strong>"${project.title}"</strong>.</p>
-            <p><strong>Bid Amount:</strong> ₹${bidAmount}</p>
-            <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5175'}/business/applications?projectId=${projectId}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:#fff;text-decoration:none;border-radius:5px;">View Proposal</a></p>`
-          );
-        } catch (err) {
-          console.error("Failed to send proposal email:", err);
-        }
+      if (targetUser) {
+        targetUserEmail = targetUser.email || "";
+        targetUserFullName = targetUser.fullName || "";
       }
+      
+      const fUser = await tx.user.findUnique({ where: { id: userId } });
+      if (fUser) {
+        freelancerEmail = fUser.email || "";
+        freelancerFullName = fUser.fullName || "";
+      }
+      
+      projectTitleStr = project.title;
 
       // 5. Create Activity (Optional: Add if ProjectActivity table exists)
       // Since it doesn't explicitly exist as ProjectActivity, we can just use the Admin ActivityLog for now 
@@ -169,6 +173,29 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
 
       return proposal;
     });
+
+    // Send Emails outside of transaction to prevent timeouts
+    if (targetUserEmail) {
+      sendEmail(
+        targetUserEmail,
+        "New Proposal Received - Go Experts",
+        `<p>Hi ${targetUserFullName || 'Client'},</p>
+        <p>A freelancer has submitted a new proposal for your project <strong>"${projectTitleStr}"</strong>.</p>
+        <p><strong>Bid Amount:</strong> ₹${bidAmount}</p>
+        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5175'}/business/applications?projectId=${projectId}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:#fff;text-decoration:none;border-radius:5px;">View Proposal</a></p>`
+      ).catch(err => console.error("Failed to send proposal email:", err));
+    }
+
+    if (freelancerEmail) {
+      sendEmail(
+        freelancerEmail,
+        "Application Submitted Successfully",
+        `<p>Hi ${freelancerFullName || 'Freelancer'},</p>
+        <p>You have successfully applied to the project <strong>"${projectTitleStr}"</strong>.</p>
+        <p><strong>Bid Amount:</strong> ₹${bidAmount}</p>
+        <p>Good luck!</p>`
+      ).catch(err => console.error("Failed to send freelancer email:", err));
+    }
 
     res.json({ success: true, data: result });
   } catch (err: any) {
@@ -631,10 +658,6 @@ export const putFreelancerExperience = async (req: AuthenticatedRequest, res: Re
           title: String(item.title || item.designation || ""),
           company: String(item.company || ""),
           location: item.location ? String(item.location) : null,
-          projects: item.projects ? parseInt(item.projects, 10) : 0,
-          workMode: item.workMode ? String(item.workMode) : null,
-          country: item.country ? String(item.country) : null,
-          city: item.city ? String(item.city) : null,
           industryId: item.industryId ? String(item.industryId) : null,
           startDate: item.startDate ? String(item.startDate) : null,
           endDate: item.endDate ? String(item.endDate) : null,
@@ -669,10 +692,6 @@ export const postFreelancerExperience = async (req: AuthenticatedRequest, res: R
         title: String(item.title || item.designation || ""),
         company: String(item.company || ""),
         location: item.location ? String(item.location) : null,
-        projects: item.projects ? parseInt(item.projects, 10) : 0,
-        workMode: item.workMode ? String(item.workMode) : null,
-        country: item.country ? String(item.country) : null,
-        city: item.city ? String(item.city) : null,
         industryId: item.industryId ? String(item.industryId) : null,
         startDate: item.startDate ? String(item.startDate) : null,
         endDate: item.endDate ? String(item.endDate) : null,
@@ -726,10 +745,6 @@ export const putFreelancerExperienceById = async (req: AuthenticatedRequest, res
         title: item.title !== undefined ? String(item.title) : (item.designation !== undefined ? String(item.designation) : undefined),
         company: item.company !== undefined ? String(item.company) : undefined,
         location: item.location !== undefined ? (item.location ? String(item.location) : null) : undefined,
-        projects: item.projects !== undefined ? parseInt(item.projects, 10) : undefined,
-        workMode: item.workMode !== undefined ? (item.workMode ? String(item.workMode) : null) : undefined,
-        country: item.country !== undefined ? (item.country ? String(item.country) : null) : undefined,
-        city: item.city !== undefined ? (item.city ? String(item.city) : null) : undefined,
         industryId: item.industryId !== undefined ? (item.industryId ? String(item.industryId) : null) : undefined,
         startDate: item.startDate !== undefined ? (item.startDate ? String(item.startDate) : null) : undefined,
         endDate: item.endDate !== undefined ? (item.endDate ? String(item.endDate) : null) : undefined,

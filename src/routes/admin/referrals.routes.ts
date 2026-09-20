@@ -90,20 +90,93 @@ router.delete("/referral_rules/:id", async (req: AuthenticatedRequest, res: Resp
   }
 });
 
-// Pending Referrals
-router.get("/pending_referrals", async (req: AuthenticatedRequest, res: Response) => {
+  // Pending Referrals
+  router.get("/pending_referrals", async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const referrals = await prisma.referral.findMany({
+        where: {
+          referee: {
+            is: {
+              deletedAt: null,
+            },
+          },
+        },
+        include: {
+          referrer: { select: { fullName: true, email: true, role: true } },
+          referee: { select: { fullName: true, email: true, isVerified: true, verified: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const mappedReferrals = referrals.map(r => ({ ...r, type: "REFERRAL" }));
+
+      const welcomeBonuses = await prisma.walletTransaction.findMany({
+        where: { type: "welcome_bonus" },
+        include: {
+          wallet: {
+            include: {
+              user: { select: { fullName: true, email: true, role: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const mappedWelcomeBonuses = welcomeBonuses.map(tx => ({
+        id: tx.id,
+        campaignId: null,
+        referrerId: tx.wallet?.userId,
+        refereeId: null,
+        link: null,
+        qrCode: null,
+        status: tx.status || "CREDITED",
+        createdAt: tx.createdAt,
+        updatedAt: tx.createdAt,
+        type: "WELCOME",
+        referrer: tx.wallet?.user,
+        referee: null,
+      }));
+
+      const combinedData = [...mappedReferrals, ...mappedWelcomeBonuses].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      res.json({ success: true, data: combinedData });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: "Error fetching pending referrals: " + (error?.message || error) });
+    }
+});
+
+router.put("/pending_referrals/:id", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const referrals = await prisma.referral.findMany({
-      
-      include: {
-        referrer: { select: { fullName: true, email: true, role: true } },
-        referee: { select: { fullName: true, email: true, isVerified: true, verified: true } }, rewards: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    res.json({ success: true, data: referrals });
+    const { id } = req.params;
+    const { status, amount } = req.body;
+
+    // Try WalletTransaction (Welcome Bonus)
+    const wt = await prisma.walletTransaction.findUnique({ where: { id } });
+    if (wt) {
+      await prisma.walletTransaction.update({
+        where: { id },
+        data: { 
+          status: status || wt.status,
+          amount: amount !== undefined ? Number(amount) : wt.amount 
+        }
+      });
+      return res.json({ success: true, message: "Welcome Bonus updated" });
+    }
+
+    // Try Referral (Referral Bonus)
+    const ref = await prisma.referral.findUnique({ where: { id } });
+    if (ref) {
+      await prisma.referral.update({
+        where: { id },
+        data: { status: status || ref.status }
+      });
+      return res.json({ success: true, message: "Referral updated" });
+    }
+
+    return res.status(404).json({ success: false, message: "Record not found" });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching pending referrals" });
+    console.error("Error updating record", error);
+    res.status(500).json({ success: false, message: "Error updating record" });
   }
 });
 
@@ -159,7 +232,7 @@ router.get("/cashback_stats", async (req: AuthenticatedRequest, res: Response) =
   try {
     // Get all cashback transactions
     const cashbackTxns = await prisma.walletTransaction.findMany({
-      where: { type: "Cashback" },
+      where: { type: "referral_cashback" },
       include: {
         wallet: {
           include: {
@@ -171,7 +244,10 @@ router.get("/cashback_stats", async (req: AuthenticatedRequest, res: Response) =
       take: 200,
     });
 
+    console.log("CASHBACK TXNS FOUND:", cashbackTxns.length);
+
     const totalDebited = cashbackTxns.reduce((sum, t) => sum + (t.amount || 0), 0);
+    console.log("TOTAL DEBITED:", totalDebited);
 
     res.json({
       success: true,

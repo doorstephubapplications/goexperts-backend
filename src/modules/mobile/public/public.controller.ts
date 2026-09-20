@@ -9,6 +9,7 @@ import {
   parseStartupListQuery,
 } from '../../../services/mobile/project-list-query.service.js';
 import { SETTINGS_DEFAULTS } from '../../../services/settings/settings.defaults.js';
+import { notifyProfileViewed } from '../../../services/mobile/push-events.service.js';
 
 const oneOrMany = <T>(items: T[]): T | T[] => items.length === 1 ? items[0] : items;
 
@@ -90,7 +91,7 @@ const loadCategoryRows = async (search: string, industryId?: string): Promise<Ca
   try {
     let categories = await prisma.skillCategory.findMany({
       where,
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      orderBy: { name: 'asc' },
       select: { id: true, name: true, sortOrder: true, industryId: true },
     });
 
@@ -99,7 +100,7 @@ const loadCategoryRows = async (search: string, industryId?: string): Promise<Ca
       if (search) fallbackWhere.name = { contains: search };
       categories = await prisma.skillCategory.findMany({
         where: fallbackWhere,
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        orderBy: { name: 'asc' },
         select: { id: true, name: true, sortOrder: true, industryId: true },
       });
     }
@@ -266,7 +267,7 @@ export const getExperienceLevels = async (req: Request, res: Response, next: Nex
   try {
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: 'experience_level', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -288,7 +289,7 @@ export const getStartupStages = async (req: Request, res: Response, next: NextFu
   try {
     const options = await prisma.masterOption.findMany({
       where: { type: 'startup_stage', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(async () => {
       return prisma.$queryRawUnsafe<Array<{ id: string; label: string; value: string }>>(
@@ -312,7 +313,7 @@ export const getAvailabilityOptions = async (req: Request, res: Response, next: 
   try {
     const dbOptions = await (prisma as any).masterOption?.findMany({
       where: { type: { in: ['availability', 'freelancer_availability'] }, status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -339,7 +340,7 @@ export const getWorkModes = async (req: Request, res: Response, next: NextFuncti
 
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: 'work_mode', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -357,7 +358,7 @@ export const getHiringGoals = async (req: Request, res: Response, next: NextFunc
     try {
       options = await prisma.masterOption.findMany({
         where: { type: 'hiring_goal', status: 'active' },
-        orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+        orderBy: { label: 'asc' },
         select: { id: true, label: true, value: true },
       });
     } catch {
@@ -398,7 +399,7 @@ export const getInvestorStages = async (req: Request, res: Response, next: NextF
 
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: 'investor_stage', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -410,7 +411,7 @@ export const getPlatformGoals = async (req: Request, res: Response, next: NextFu
   try {
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: 'platform_goal', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -431,15 +432,26 @@ function deduplicateMasterOptions(items: Array<any>): Array<any> {
   return result;
 }
 
+function sortNumericalOptions(items: Array<any>): Array<any> {
+  return items.sort((a, b) => {
+    const extractMin = (val: string) => {
+      if (!val) return 0;
+      const match = val.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    return extractMin(a.label || a.value) - extractMin(b.label || b.value);
+  });
+}
+
 export const getCompanySizes = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const sizes = await (prisma as any).masterOption?.findMany({
       where: { type: 'company_size', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
-    return res.json(successResponse('Company sizes retrieved', deduplicateMasterOptions(sizes || [])));
+    return res.json(successResponse('Company sizes retrieved', sortNumericalOptions(deduplicateMasterOptions(sizes || []))));
   } catch (error) { next(error); }
 };
 
@@ -527,7 +539,7 @@ export const getMasters = async (req: Request, res: Response, next: NextFunction
 
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: { contains: type }, status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -555,7 +567,7 @@ export const getFounderGoals = async (req: Request, res: Response, next: NextFun
   try {
     const dbGoals = await (prisma as any).masterOption?.findMany({
       where: { type: { in: ['founder_goal', 'startup_goal', 'platform_goal'] }, status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -571,7 +583,7 @@ export const getTicketSizes = async (req: Request, res: Response, next: NextFunc
   try {
     const dbTickets = await (prisma as any).masterOption?.findMany({
       where: { type: 'ticket_size', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { min: 'asc' },
       select: { id: true, label: true, value: true, min: true, max: true }
     }).catch(() => []);
 
@@ -583,7 +595,7 @@ export const getInvestorTypes = async (req: Request, res: Response, next: NextFu
   try {
     const types = await (prisma as any).masterOption?.findMany({
       where: { type: 'investor_type', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -595,7 +607,7 @@ export const getFounderTypes = async (req: Request, res: Response, next: NextFun
   try {
     const types = await (prisma as any).masterOption?.findMany({
       where: { type: 'founder_type', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -607,7 +619,7 @@ export const getFounderRoles = async (req: Request, res: Response, next: NextFun
   try {
     const roles = await (prisma as any).masterOption?.findMany({
       where: { type: { in: ['founder_role'] }, status: 'active' },
-      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
@@ -620,7 +632,7 @@ export const getBusinessTypes = async (req: Request, res: Response, next: NextFu
   try {
     const types = await (prisma as any).masterOption?.findMany({
       where: { type: 'business_type', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(async () => {
       return (await prisma.$queryRawUnsafe<any[]>(`SELECT id, label, value FROM master_options WHERE type = 'business_type' AND status = 'active' ORDER BY sort_order ASC`).catch(() => [])) || [];
@@ -637,7 +649,7 @@ export const getServicesTaxonomy = async (req: Request, res: Response, next: Nex
     if (category) {
       const subCats = await prisma.masterOption.findMany({
         where: { type: 'service_taxonomy', groupKey: category, status: 'active' },
-        orderBy: { sortOrder: 'asc' },
+        orderBy: { label: 'asc' },
         select: { id: true, label: true, value: true }
       });
 
@@ -646,7 +658,7 @@ export const getServicesTaxonomy = async (req: Request, res: Response, next: Nex
 
     const categories = await prisma.masterOption.findMany({
       where: { type: 'service_taxonomy', groupKey: 'category', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true, metadata: true }
     });
 
@@ -669,7 +681,7 @@ export const getProjectCategories = async (req: Request, res: Response, next: Ne
     if (category) {
       const subCats = await (prisma as any).masterOption?.findMany({
         where: { type: 'service_taxonomy', groupKey: category, status: 'active' },
-        orderBy: { sortOrder: 'asc' },
+        orderBy: { label: 'asc' },
         select: { id: true, label: true, value: true }
       }).catch(() => []);
 
@@ -678,7 +690,7 @@ export const getProjectCategories = async (req: Request, res: Response, next: Ne
 
     const categories = await (prisma as any).masterOption?.findMany({
       where: { type: 'service_taxonomy', groupKey: 'category', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true, metadata: true }
     }).catch(() => []);
 
@@ -698,12 +710,12 @@ export const getTeamSizes = async (req: Request, res: Response, next: NextFuncti
   try {
     const sizes = await (prisma as any).masterOption?.findMany({
       where: { type: 'team_size', status: 'active' },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
     if (sizes && sizes.length > 0) {
-      return res.json(successResponse('Team sizes retrieved', deduplicateMasterOptions(sizes)));
+      return res.json(successResponse('Team sizes retrieved', sortNumericalOptions(deduplicateMasterOptions(sizes))));
     }
 
     return res.json(successResponse('Team sizes retrieved', []));
@@ -854,6 +866,18 @@ export const getFreelancers = async (req: Request, res: Response, next: NextFunc
     const skip = (page - 1) * limit;
     const userId = (req as any).user?.id as string | undefined;
     const search = String(req.query.search || req.query.q || '').trim();
+    const categoryIds = String(
+      req.query.categoryIds || req.query.categoryId || req.query.industryId || '',
+    )
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const availabilityValues = String(
+      req.query.availability || req.query.availabilities || '',
+    )
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
 
     const where: any = {
       role: 'freelancer',
@@ -865,13 +889,99 @@ export const getFreelancers = async (req: Request, res: Response, next: NextFunc
       where.id = { not: userId };
     }
     if (search) {
-      where.AND = [
-        { OR: [
-          { fullName: { contains: search } },
-          { city: { contains: search } },
-          { investorProfile: { is: { focusAreas: { contains: search } } } },
-        ] },
-      ];
+      const matchingSkills = search.length >= 2
+        ? await (prisma as any).skill?.findMany({
+          where: { name: { contains: search } },
+          select: { id: true, name: true },
+          take: 20,
+        }).catch(() => [])
+        : [];
+
+      const skillProfileFilters = (matchingSkills || []).flatMap((s: any) => [
+        ...(s.name ? [{ skills: { contains: s.name } }] : []),
+      ]);
+
+      const [matchingUsers, matchingProfiles] = await Promise.all([
+        prisma.user.findMany({
+          where: {
+            role: 'freelancer',
+            status: 'active',
+            deletedAt: null,
+            OR: [
+              { fullName: { contains: search } },
+              { city: { contains: search } },
+              { bio: { contains: search } },
+            ],
+          },
+          select: { id: true },
+        }),
+        prisma.freelancerProfile.findMany({
+          where: {
+            OR: [
+              { titleHeadline: { contains: search } },
+              { skills: { contains: search } },
+              ...skillProfileFilters,
+            ],
+          },
+          select: { userId: true },
+        }),
+      ]);
+      const matchingUserIds = new Set([
+        ...matchingUsers.map((user) => user.id),
+        ...matchingProfiles.map((profile) => profile.userId),
+      ]);
+      where.id = {
+        ...(userId ? { not: userId } : {}),
+        in: [...matchingUserIds],
+      };
+    }
+
+    if (categoryIds.length > 0) {
+      const industries = await prisma.industry.findMany({
+        where: { id: { in: categoryIds }, status: 'active' },
+        select: { id: true, name: true },
+      });
+      const categoryProfiles = await prisma.freelancerProfile.findMany({
+        where: {
+          OR: [
+            { industryId: { in: categoryIds } },
+            ...industries.map((industry) => ({
+              industry: { contains: industry.name },
+            })),
+          ],
+        },
+        select: { userId: true },
+      });
+      const categoryUserIds = new Set(
+        categoryProfiles.map((profile) => profile.userId),
+      );
+      const existingIds = where.id?.in as string[] | undefined;
+      where.id = {
+        ...(userId ? { not: userId } : {}),
+        in: existingIds
+          ? existingIds.filter((id) => categoryUserIds.has(id))
+          : [...categoryUserIds],
+      };
+    }
+    if (availabilityValues.length > 0) {
+      const availabilityProfiles = await prisma.freelancerProfile.findMany({
+        where: {
+          OR: availabilityValues.map((value) => ({
+            availability: { contains: value },
+          })),
+        },
+        select: { userId: true },
+      });
+      const availabilityUserIds = new Set(
+        availabilityProfiles.map((profile) => profile.userId),
+      );
+      const existingIds = where.id?.in as string[] | undefined;
+      where.id = {
+        ...(userId ? { not: userId } : {}),
+        in: existingIds
+          ? existingIds.filter((id) => availabilityUserIds.has(id))
+          : [...availabilityUserIds],
+      };
     }
 
     const [freelancers, total] = await Promise.all([
@@ -879,7 +989,7 @@ export const getFreelancers = async (req: Request, res: Response, next: NextFunc
         where,
         select: {
           id: true, fullName: true, avatarUrl: true, city: true, isVerified: true,
-          freelancerProfile: { select: { skills: true, hourlyRate: true, experience: true } }
+          freelancerProfile: { select: { skills: true, hourlyRate: true, experience: true, availability: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip, take: limit
@@ -1096,6 +1206,18 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
     const skip = (page - 1) * limit;
     const userId = (req as any).user?.id as string | undefined;
     const search = String(req.query.search || req.query.q || '').trim();
+    const focusFilterValues = String(
+      req.query.focusAreaId ||
+      req.query.focusAreas ||
+      req.query.focusArea ||
+      req.query.industryId ||
+      req.query.categoryId ||
+      req.query.industry ||
+      '',
+    )
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
 
     const where: any = {
       role: 'investor',
@@ -1106,16 +1228,93 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
     if (userId) {
       where.id = { not: userId };
     }
+    const andFilters: any[] = [];
+    const focusSearchValues = new Set<string>();
     if (search) {
-      where.AND = [{
+      focusSearchValues.add(search);
+      const [matchingOptions, matchingIndustries] = await Promise.all([
+        (prisma as any).masterOption.findMany({
+          where: {
+            status: 'active',
+            OR: [
+              { label: { contains: search } },
+              { value: { contains: search } },
+            ],
+          },
+          select: { id: true, label: true, value: true },
+          take: 25,
+        }).catch(() => []),
+        prisma.industry.findMany({
+          where: { status: 'active', name: { contains: search } },
+          select: { id: true, name: true },
+          take: 25,
+        }).catch(() => []),
+      ]);
+      matchingOptions.forEach((item: any) => {
+        if (item.id) focusSearchValues.add(item.id);
+        if (item.label) focusSearchValues.add(item.label);
+        if (item.value) focusSearchValues.add(item.value);
+      });
+      matchingIndustries.forEach((item) => {
+        if (item.id) focusSearchValues.add(item.id);
+        if (item.name) focusSearchValues.add(item.name);
+      });
+    }
+    if (search) {
+      andFilters.push({
         OR: [
           { fullName: { contains: search } },
           { city: { contains: search } },
           { email: { contains: search } },
           { investorProfile: { is: { firm: { contains: search } } } },
-          { investorProfile: { is: { focusAreas: { contains: search } } } },
+          ...[...focusSearchValues].map((value) => ({
+            investorProfile: { is: { focusAreas: { contains: value } } },
+          })),
         ],
-      }];
+      });
+    }
+    if (focusFilterValues.length > 0) {
+      const [matchingOptions, matchingIndustries] = await Promise.all([
+        (prisma as any).masterOption.findMany({
+          where: {
+            status: 'active',
+            OR: [
+              { id: { in: focusFilterValues } },
+              { label: { in: focusFilterValues } },
+              { value: { in: focusFilterValues } },
+            ],
+          },
+          select: { id: true, label: true, value: true },
+        }).catch(() => []),
+        prisma.industry.findMany({
+          where: {
+            status: 'active',
+            OR: [
+              { id: { in: focusFilterValues } },
+              { name: { in: focusFilterValues } },
+            ],
+          },
+          select: { id: true, name: true },
+        }).catch(() => []),
+      ]);
+      const focusFilterSet = new Set(focusFilterValues);
+      matchingOptions.forEach((item: any) => {
+        if (item.id) focusFilterSet.add(item.id);
+        if (item.label) focusFilterSet.add(item.label);
+        if (item.value) focusFilterSet.add(item.value);
+      });
+      matchingIndustries.forEach((item) => {
+        if (item.id) focusFilterSet.add(item.id);
+        if (item.name) focusFilterSet.add(item.name);
+      });
+      andFilters.push({
+        OR: [...focusFilterSet].map((value) => ({
+          investorProfile: { is: { focusAreas: { contains: value } } },
+        })),
+      });
+    }
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
     }
 
     const [investors, total] = await Promise.all([
@@ -1526,7 +1725,7 @@ export const getStartups = async (req: Request, res: Response, next: NextFunctio
 
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { where, orderBy, page, limit, skip } = parseProjectListQuery(req, { kind: 'public' });
+    const { where, orderBy, page, limit, skip } = await parseProjectListQuery(req, { kind: 'public' });
     const viewerId = (req as any).user?.id as string | undefined;
 
     const activeClients = await prisma.user.findMany({
@@ -1642,7 +1841,47 @@ export const getPricingPlans = async (req: Request, res: Response, next: NextFun
 };
 
 export const getBlogs = async (req: Request, res: Response, next: NextFunction) => {
-  try { return res.json(successResponse('Blogs retrieved', [])); } catch (error) { next(error); }
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const allBlogs = await prisma.blog.findMany({
+      where: { status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const now = new Date();
+    const visibleBlogs = allBlogs.filter((blog) => {
+      if (!blog.publishDate) return true;
+      
+      const pDate = new Date(blog.publishDate);
+      if (blog.publishTime) {
+        const parts = blog.publishTime.split(':');
+        if (parts.length >= 2) {
+          const hours = parseInt(parts[0], 10);
+          const minutes = parseInt(parts[1], 10);
+          if (!isNaN(hours) && !isNaN(minutes)) {
+            pDate.setHours(hours, minutes, 0, 0);
+          }
+        }
+      }
+      
+      return pDate <= now;
+    });
+
+    const total = visibleBlogs.length;
+    const skip = (page - 1) * limit;
+    const paginatedBlogs = visibleBlogs.slice(skip, skip + limit);
+
+    return res.json(successResponse('Blogs retrieved', paginatedBlogs, {
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    }));
+  } catch (error) { next(error); }
 };
 
 export const getFaqs = async (req: Request, res: Response, next: NextFunction) => {
@@ -1720,6 +1959,13 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       }
 
       const data = formatStartupResponse(idea, userMap.get(idea.founder), fpMap.get(idea.founder), industryMap, optionMap, true, platformRaisedMap);
+      await notifyProfileViewed({
+        profileOwnerId: idea.founder,
+        viewerId: (req as AuthRequest).user?.id,
+        viewerName: (req as AuthRequest).user?.fullName,
+        profileType: 'startup',
+        profileId: idea.id,
+      }).catch(console.error);
       return res.json(successResponse('Details retrieved for startup', { ...data, isSaved, hasInvested }));
     }
 
@@ -1782,7 +2028,7 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       const numericTeamSize = profile?.teamSize ?? (reg.teamSize ? parseInt(String(reg.teamSize), 10) || 1 : 1);
       const teamSizeOption = await (prisma as any).masterOption?.findFirst({
         where: { type: 'team_size', status: 'active', min: { lte: numericTeamSize }, max: { gte: numericTeamSize } },
-        orderBy: { sortOrder: 'asc' },
+        orderBy: { label: 'asc' },
         select: { id: true, label: true, value: true },
       }).catch(() => null);
 
@@ -1794,6 +2040,8 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         email: user.email || reg.email || '',
         avatarUrl: user.avatarUrl || reg.avatarUrl || null,
         avatar: user.avatarUrl || reg.avatarUrl || null,
+        coverImageUrl: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
+        coverImage: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
         bio: user.bio || reg.bio || reg.pitch || '',
         phone: user.phone || reg.phone || reg.mobile || '',
         city: user.city || reg.city || '',
@@ -1866,6 +2114,13 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         startup: startupDetails
       };
 
+      await notifyProfileViewed({
+        profileOwnerId: id,
+        viewerId: (req as AuthRequest).user?.id,
+        viewerName: (req as AuthRequest).user?.fullName,
+        profileType: 'founder',
+        profileId: id,
+      }).catch(console.error);
       return res.json(successResponse('Details retrieved for founder', result));
     }
 
@@ -2023,12 +2278,20 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         } catch { }
       }
 
+      await notifyProfileViewed({
+        profileOwnerId: id,
+        viewerId: (req as AuthRequest).user?.id,
+        viewerName: (req as AuthRequest).user?.fullName,
+        profileType: 'freelancer',
+        profileId: id,
+      }).catch(console.error);
       return res.json(successResponse('Details retrieved for freelancer', {
         id: user.id,
         fullName: user.fullName || reg.fullName || "",
         email: user.email,
         phone: user.phone || reg.phone || reg.mobile || "",
         avatarUrl: user.avatarUrl || reg.avatarUrl || null,
+        coverImageUrl: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
         titleHeadline: user.freelancerProfile?.titleHeadline || reg.titleHeadline || reg.title || "Junior web developer",
         title: user.freelancerProfile?.titleHeadline || reg.titleHeadline || reg.title || "Junior web developer",
         bio: user.bio || reg.bio || reg.overview || "",
@@ -2137,6 +2400,13 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         } catch { }
       }
 
+      await notifyProfileViewed({
+        profileOwnerId: id,
+        viewerId: (req as AuthRequest).user?.id,
+        viewerName: (req as AuthRequest).user?.fullName,
+        profileType: 'client',
+        profileId: id,
+      }).catch(console.error);
       return res.json(successResponse('Details retrieved for client', {
         id: user.id,
         userId: user.id,
@@ -2146,6 +2416,8 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         phone: user.phone || reg.phone || reg.mobile || '',
         avatarUrl: user.avatarUrl || reg.avatarUrl || null,
         avatar: user.avatarUrl || reg.avatarUrl || null,
+        coverImageUrl: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
+        coverImage: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
         company: compVal,
         companyName: compVal,
         companySize: csVal,
@@ -2286,6 +2558,13 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       const isSaved = savedIds.has(user.id) || (user.investorProfile?.id && savedIds.has(user.investorProfile.id)) || false;
       const savedData = Boolean(user.investorProfile || Object.keys(reg).length > 0);
 
+      await notifyProfileViewed({
+        profileOwnerId: id,
+        viewerId: (req as AuthRequest).user?.id,
+        viewerName: (req as AuthRequest).user?.fullName,
+        profileType: 'investor',
+        profileId: id,
+      }).catch(console.error);
       return res.json(successResponse('Details retrieved for investor', {
         id: user.id,
         userId: user.id,
@@ -2295,6 +2574,8 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         phone: user.phone || reg.phone || reg.mobile || '',
         avatarUrl: user.avatarUrl || reg.avatarUrl || null,
         avatar: user.avatarUrl || reg.avatarUrl || null,
+        coverImageUrl: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
+        coverImage: (user as any).coverImageUrl || reg.coverImageUrl || reg.coverUrl || null,
         InvestorType: invTypeRaw ? {
           investorTypeId: invTypeRaw,
           investorTypeName: invTypeName,

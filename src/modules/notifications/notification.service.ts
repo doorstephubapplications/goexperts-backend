@@ -109,6 +109,9 @@ export class EmailChannelAdapter implements NotificationChannelAdapter {
 
         const previewUrl = nodemailer.getTestMessageUrl(info);
         console.log(`[EMAIL ADAPTER SUCCESS] Sent email to ${payload.to}, messageId: ${info.messageId}${previewUrl ? ` | Preview: ${previewUrl}` : ''}`);
+        
+        // Push notification removed to prevent duplicate sends when channel='all'
+        
         return { status: "delivered", providerResponse: `SMTP: Sent Successfully (${info.messageId})` };
       } else {
         console.log(`[EMAIL SANDBOX] From: ${from}\nTo: ${payload.to}\nSubject: ${payload.subject}\nBody: ${payload.body}`);
@@ -146,12 +149,16 @@ export class EmailChannelAdapter implements NotificationChannelAdapter {
             </div>
           `,
         });
+
         const previewUrl = nodemailer.getTestMessageUrl(info);
         console.log(`\n======================================================================`);
         console.log(`📬 [EMAIL PREVIEW URL (ETHEREAL TEST MAILBOX)]`);
         console.log(`   Recipient: ${payload.to}`);
         console.log(`   View Mail: ${previewUrl}`);
         console.log(`======================================================================\n`);
+        
+        // Push notification removed to prevent duplicate sends when channel='all'
+        
         return { status: "delivered", providerResponse: `ETHEREAL: ${previewUrl}` };
       } catch (fallbackErr: any) {
         console.error("[EMAIL ADAPTER FALLBACK ERROR]", fallbackErr);

@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import bcrypt from "bcrypt";
 import { prisma } from "../config/database.js";
+import { encryptPassword, decryptPassword } from "../utils/crypto.util.js";
 import { creditWalletForSelf } from "../common/helpers/portal-shared.js";
 import authRoutes from "./auth/auth.routes.js";
 import dashboardRoutes from "./dashboard/dashboard.routes.js";
@@ -11,6 +12,7 @@ import notificationRoutes, { queueRouter, logsRouter } from "./notifications/not
 import mediaRoutes from "./media/media.routes.js";
 import workflowsRoutes from "./workflows/workflows.routes.js";
 import financialsRoutes from "./financials/financials.routes.js";
+import { downloadInvoice } from "../controllers/financials/financials.controller.js";
 import jobsRouter from "./scheduler/jobs.routes.js";
 import automationRulesRouter from "./scheduler/automation.routes.js";
 import systemOpsRouter from "./scheduler/system-ops.routes.js";
@@ -55,6 +57,7 @@ import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
 import { getVerificationStats } from "../common/helpers/verification.js";
+import tasksRoutes from "./tasks.routes.js";
 
 import mobileRoutes from "../modules/mobile/index.js";
 import { saveInvestor, unsaveInvestor } from "../modules/mobile/public/public.controller.js";
@@ -78,9 +81,11 @@ router.use("/subscription", subscriptionRoutes);
 
 import activityRoutes from "./activity/activity.routes.js";
 import supportRoutes from "./support/support.routes.js";
+import connectionsRoutes from "./connections/connections.routes.js";
 
 // Shared Messages routes (real-time chat API for all roles)
 router.use("/messages", messagesRoutes);
+router.use("/connections", connectionsRoutes);
 
 // Activity Timeline routes
 router.use("/activity", activityRoutes);
@@ -94,6 +99,7 @@ router.use("/client", clientRoutes);
 router.use("/investor", investorRoutes);
 router.use("/founder", founderRoutes);
 router.use("/referrals", referralRoutes);
+router.use("/tasks", tasksRoutes);
 
 // Expose OpenAPI specs publicly
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -279,6 +285,8 @@ const tableModelMapping: Record<string, string> = {
   conversations: "Conversation",
   messages: "Message",
   cms_pages: "CmsPage",
+  cms_how_it_works: "CmsHowItWorks",
+  workflow_steps: "WorkflowStep",
   blogs: "Blog",
   faqs: "Faq",
   testimonials: "Testimonial",
@@ -363,6 +371,8 @@ const searchColumnsMapping: Record<string, string[]> = {
   Conversation: ["name", "role"],
   CmsPage: ["name", "category"],
   Blog: ["title", "category", "author"],
+  CmsHowItWorks: ["sectionName", "roleType", "title"],
+  WorkflowStep: ["roleType", "title"],
   Faq: ["question", "answer", "category"],
   Testimonial: ["name", "role", "company", "content"],
   SupportTicket: ["subject", "user", "category"],
@@ -811,8 +821,8 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     title: freelancerProfile.titleHeadline ?? regData.titleHeadline ?? rest.titleHeadline ?? "Freelancer",
     titleHeadline: freelancerProfile.titleHeadline ?? regData.titleHeadline ?? rest.titleHeadline ?? "Freelancer",
     professionalTitle: freelancerProfile.titleHeadline ?? regData.titleHeadline ?? rest.titleHeadline ?? "Freelancer",
-    bio: rest.bio ?? regData.bio ?? null,
-    overview: rest.bio ?? regData.bio ?? null,
+    bio: freelancerProfile.bio ?? founderProfile.founderBio ?? rest.bio ?? regData.bio ?? regData.founderBio ?? null,
+    overview: freelancerProfile.bio ?? founderProfile.founderBio ?? rest.bio ?? regData.bio ?? regData.founderBio ?? null,
     hourly_rate: freelancerProfile.hourlyRate ?? regData.hourlyRate ?? null,
     hourlyRate: freelancerProfile.hourlyRate ?? regData.hourlyRate ?? null,
     experience: freelancerProfile.experience ?? regData.experienceLevel ?? null,
@@ -843,9 +853,12 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     startupName: founderProfile.startupName ?? regData.startupName ?? null,
     pitch: founderProfile.pitch ?? regData.pitch ?? null,
     founderRole: founderProfile.founderRole ?? regData.founderRole ?? null,
-    founderBio: founderProfile.founderBio ?? regData.founderBio ?? null,
+    founderBio: founderProfile.founderBio ?? regData.founderBio ?? rest.bio ?? regData.bio ?? null,
     teamSize: founderProfile.teamSize ?? regData.teamSize ?? null,
+    teamSizeLabel: rLabel(founderProfile.teamSize ?? regData.teamSize ?? null, COMPANY_SIZE_NAME_MAP),
     targetRaise: founderProfile.targetRaise ?? regData.targetRaise ?? null,
+    primaryGoal: founderProfile.primaryGoal ?? (primaryGoalArr.length ? primaryGoalArr[0] : null) ?? regData.primaryGoal ?? null,
+    hiringGoal: clientProfile.hiringGoal ?? (hiringGoalArr.length ? hiringGoalArr[0] : null) ?? regData.hiringGoal ?? null,
 
     wallet_balance: wallet.balance ?? rest.wallet_balance ?? rest.walletBalance ?? 0,
     wallet: wallet.balance !== undefined ? wallet : { balance: rest.wallet_balance ?? rest.walletBalance ?? 0 },
@@ -857,7 +870,14 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
       const regObj = typeof (sanitized as any).registrationData === "string" 
         ? JSON.parse((sanitized as any).registrationData) 
         : (sanitized as any).registrationData;
-      plainPassword = regObj.plainPassword || null;
+      const rawPlainPassword = regObj.plainPassword || regObj.password || null;
+      plainPassword = rawPlainPassword ? decryptPassword(rawPlainPassword) : null;
+    } catch(e) {}
+  }
+
+  if (!plainPassword && password && typeof password === 'string' && password.includes(':')) {
+    try {
+      plainPassword = decryptPassword(password);
     } catch(e) {}
   }
 
@@ -931,13 +951,13 @@ function applyClientProjectCounts<T extends Record<string, any>>(rows: T[], proj
   });
 }
 
-async function resolvePasswordHash(password: unknown) {
+function resolvePasswordHash(password: unknown) {
   const value = typeof password === "string" ? password.trim() : "";
   if (!value) return undefined;
   if (value.length < 8) {
     throw Object.assign(new Error("Password must be at least 8 characters."), { statusCode: 400 });
   }
-  return bcrypt.hash(value, 10);
+  return encryptPassword(value);
 }
 
 const getFreelancerProfilePayload = (body: any) => {
@@ -1456,7 +1476,7 @@ adminFreelancersRouter.post("/", async (req: Request, res: Response, next: NextF
   try {
     const userData = getFreelancerUserPayload(req.body, true);
     const profileData = getFreelancerProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (!userData.fullName || !userData.email) {
       return res.status(400).json({ success: false, message: "Full name and email are required" });
@@ -1493,7 +1513,7 @@ adminFreelancersRouter.post("/", async (req: Request, res: Response, next: NextF
           bio: (userData.bio as string | null | undefined) ?? null,
           verified: Boolean(userData.verified),
           isVerified: Boolean(userData.isVerified),
-          registrationData: JSON.stringify({ plainPassword: req.body.password }),
+          registrationData: JSON.stringify({ plainPassword: req.body.password ? encryptPassword(req.body.password) : null }),
           freelancerProfile: {
             create: profileData,
           },
@@ -1569,7 +1589,7 @@ adminFreelancersRouter.put("/:id", async (req: Request, res: Response, next: Nex
   try {
     const userData = getFreelancerUserPayload(req.body);
     const profileData = getFreelancerProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (passwordHash) {
       userData.password = passwordHash;
@@ -1579,7 +1599,7 @@ adminFreelancersRouter.put("/:id", async (req: Request, res: Response, next: Nex
         ? JSON.parse(existing.registrationData || "{}") 
         : ((existing?.registrationData as any) || {});
       
-      userData.registrationData = JSON.stringify({ ...currentRegData, plainPassword: req.body.password });
+      userData.registrationData = JSON.stringify({ ...currentRegData, plainPassword: req.body.password ? encryptPassword(req.body.password) : null });
     }
 
     await prisma.user.update({
@@ -1737,7 +1757,7 @@ adminClientsRouter.post("/", async (req: Request, res: Response, next: NextFunct
   try {
     const userData = getClientUserPayload(req.body, true);
     const profileData = getClientProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (!userData.fullName || !userData.email) {
       return res.status(400).json({ success: false, message: "Full name and email are required" });
@@ -1796,7 +1816,7 @@ adminClientsRouter.put("/:id", async (req: Request, res: Response, next: NextFun
   try {
     const userData = getClientUserPayload(req.body);
     const profileData = getClientProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (passwordHash) {
       userData.password = passwordHash;
@@ -1923,7 +1943,7 @@ adminInvestorsRouter.post("/", async (req: Request, res: Response, next: NextFun
   try {
     const userData = getInvestorUserPayload(req.body, true);
     const profileData = getInvestorProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (!userData.fullName || !userData.email) {
       return res.status(400).json({ success: false, message: "Full name and email are required" });
@@ -1982,7 +2002,7 @@ adminInvestorsRouter.put("/:id", async (req: Request, res: Response, next: NextF
   try {
     const userData = getInvestorUserPayload(req.body);
     const profileData = getInvestorProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (passwordHash) {
       userData.password = passwordHash;
@@ -2110,7 +2130,7 @@ adminFoundersRouter.post("/", async (req: Request, res: Response, next: NextFunc
   try {
     const userData = getFounderUserPayload(req.body, true);
     const profileData = getFounderProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (!userData.fullName || !userData.email) {
       return res.status(400).json({ success: false, message: "Full name and email are required" });
@@ -2169,7 +2189,7 @@ adminFoundersRouter.put("/:id", async (req: Request, res: Response, next: NextFu
   try {
     const userData = getFounderUserPayload(req.body);
     const profileData = getFounderProfilePayload(req.body);
-    const passwordHash = await resolvePasswordHash(req.body.password);
+    const passwordHash = resolvePasswordHash(req.body.password);
 
     if (passwordHash) {
       userData.password = passwordHash;
@@ -2282,6 +2302,8 @@ router.use("/admin/about-page", authMiddleware as any, aboutRouter);
 Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
   if (["freelancers", "clients", "investors", "founders"].includes(tableName)) return;
 
+  console.log("Mounting CRUD router for:", tableName, modelName);
+
   const searchCols = searchColumnsMapping[modelName] || ["name"];
   const include =
     modelName === "Task"
@@ -2322,12 +2344,43 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
   });
 
   router.use(
-    `/admin/${tableName}`,
+    [`/admin/${tableName}`, `/admin/crud/${tableName}`],
     authMiddleware as any,
     auditMiddleware("mutate", tableName) as any,
     crudRouter
   );
 });
+
+// Provide a convenience admin route for downloading invoice PDFs (used by admin UI)
+router.get(
+  "/admin/invoices/:id/download",
+  authMiddleware as any,
+  // audit read
+  auditMiddleware("read", "invoices") as any,
+  async (req, res, next) => {
+    try {
+      await downloadInvoice(req as any, res as any);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Admin shortcut to resend invoice email with attachment
+router.post(
+  "/admin/invoices/:id/resend",
+  authMiddleware as any,
+  // audit mutate
+  auditMiddleware("mutate", "invoices") as any,
+  async (req, res, next) => {
+    try {
+      const { resendInvoice } = await import("../controllers/financials/financials.controller.js");
+      await resendInvoice(req as any, res as any);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 router.post("/admin/users/:id/remind-kyc", authMiddleware as any, async (req, res, next) => {
   try {
