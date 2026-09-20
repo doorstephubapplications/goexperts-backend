@@ -1,0 +1,131 @@
+import { Response } from 'express';
+import { AuthRequest } from '../../middleware/auth.js';
+import { prisma } from '../../config/db.js';
+
+export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const links = await (prisma as any).socialLink.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, links });
+  } catch (error) {
+    console.error('Error fetching social links:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const addSocialLink = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { platform, url } = req.body;
+
+    if (!platform || !url) {
+      res.status(400).json({ success: false, message: 'Platform and URL are required' });
+      return;
+    }
+
+    const link = await (prisma as any).socialLink.create({
+      data: {
+        userId,
+        platform,
+        url,
+      },
+    });
+
+    res.json({ success: true, link, message: 'Social link added successfully' });
+  } catch (error) {
+    console.error('Error adding social link:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const updateSocialLink = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+    
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { platform, url } = req.body;
+
+    // Check if link exists and belongs to user
+    const existingLink = await (prisma as any).socialLink.findUnique({
+      where: { id },
+    });
+
+    if (!existingLink) {
+      res.status(404).json({ success: false, message: 'Social link not found' });
+      return;
+    }
+
+    if (existingLink.userId !== userId) {
+      res.status(403).json({ success: false, message: 'Forbidden' });
+      return;
+    }
+
+    const updatedLink = await (prisma as any).socialLink.update({
+      where: { id },
+      data: {
+        platform: platform ?? existingLink.platform,
+        url: url ?? existingLink.url,
+      },
+    });
+
+    res.json({ success: true, link: updatedLink, message: 'Social link updated successfully' });
+  } catch (error) {
+    console.error('Error updating social link:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const deleteSocialLink = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    // Check if link exists and belongs to user
+    const existingLink = await (prisma as any).socialLink.findUnique({
+      where: { id },
+    });
+
+    if (!existingLink) {
+      res.status(404).json({ success: false, message: 'Social link not found' });
+      return;
+    }
+
+    if (existingLink.userId !== userId) {
+      res.status(403).json({ success: false, message: 'Forbidden' });
+      return;
+    }
+
+    await (prisma as any).socialLink.delete({
+      where: { id },
+    });
+
+    res.json({ success: true, message: 'Social link deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting social link:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};

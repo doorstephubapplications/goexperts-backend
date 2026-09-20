@@ -1,0 +1,246 @@
+import { Request, Response, NextFunction } from "express";
+import { prisma } from "../../config/database.js";
+import { getVerificationStats, applyVerificationUpdate } from "../../common/helpers/verification.js";
+
+import { getSettingsSection } from "../../services/settings/settings.service.js";
+
+async function triggerWelcomeBonus(user: any) {
+    if (!user || !user.id || !user.email) return;
+
+    try {
+        const settingsRecord = await prisma.setting.findUnique({ where: { key: "app_settings" } });
+        if (!settingsRecord) return;
+        
+        let settings: any = {};
+        try {
+            settings = JSON.parse(settingsRecord.value);
+        } catch(e) {}
+        
+        if (!settings.welcome_bonus_enabled) return;
+
+        const amount = Number(settings.welcome_bonus_amount) || 99;
+
+        // Check if bonus already given
+        const existingTxn = await prisma.walletTransaction.findFirst({
+            where: {
+                wallet: { userId: user.id },
+                description: "Welcome Bonus"
+            }
+        });
+        
+        if (existingTxn) return; // already got it
+
+        await prisma.$transaction(async (tx) => {
+            let wallet = await tx.wallet.findFirst({ where: { userId: user.id } });
+            if (!wallet) {
+                wallet = await tx.wallet.create({ data: { userId: user.id, balance: 0, currency: "INR" } });
+            }
+            const updatedWallet = await tx.wallet.update({
+                where: { id: wallet.id },
+                data: { balance: { increment: amount } }
+            });
+            await tx.walletTransaction.create({
+                data: {
+                    walletId: wallet.id,
+                    type: "Bonus",
+                    direction: "credit",
+                    amount: amount,
+                    description: "Welcome Bonus",
+                    balanceAfter: updatedWallet.balance
+                }
+            });
+        });
+
+        // Send Email
+        const { sendWelcomeBonusEmail } = await import("../../services/mobile/email.service.js");
+        await sendWelcomeBonusEmail(user.email, user.fullName || 'User', amount);
+    } catch (e) {
+        console.error("Welcome bonus error:", e);
+    }
+}
+
+// Get user KYC details (for both freelancer and client)
+export const getUserKyc = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const user = await prisma.user.findFirst({
+            where: { id, deletedAt: null },
+            include: {
+                freelancerProfile: true,
+                clientProfile: true,
+                founderProfile: true,
+                investorProfile: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.json({
+            success: true,
+            data: getVerificationStats(user)
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Update user KYC details (approve/reject/update)
+export const updateUserKyc = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const updatePayload = req.body || {};
+
+        // Fetch user first to check stats if approving
+        const user = await prisma.user.findFirst({
+            where: { id, deletedAt: null },
+            include: {
+                freelancerProfile: true,
+                clientProfile: true,
+                founderProfile: true,
+                investorProfile: true
+            }
+        });
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        // Toggle explicit verified flag on the user record directly
+        if (updatePayload.verified !== undefined || updatePayload.isVerified !== undefined) {
+            const isVerified = Boolean(updatePayload.verified ?? updatePayload.isVerified);
+            
+            if (isVerified) {
+                const checkStats = getVerificationStats(user);
+                if (checkStats.missingCount > 0) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: `Cannot approve user. ${checkStats.missingCount} mandatory verification documents are missing.` 
+                    });
+                }
+            }
+            await prisma.user.update({
+                where: { id },
+                data: { verified: isVerified, isVerified }
+            });
+            
+            if (isVerified) {
+                const { sendAccountActiveEmail, sendPlanActivationEmail } = await import("../../services/mobile/email.service.js");
+                const userObj = await prisma.user.findFirst({ where: { id }, select: { id: true, email: true, fullName: true } });
+                if (userObj && userObj.email) {
+                    await sendAccountActiveEmail(userObj.email, userObj.fullName || 'User');
+                    await sendPlanActivationEmail(userObj.email, userObj.fullName || 'User');
+                    await triggerWelcomeBonus(userObj);
+                }
+            }
+        }
+
+        let stats = null;
+
+        // Apply granular KYC key update (e.g. key: "address", value: "...", status: "verified")
+        if (updatePayload.key && updatePayload.status) {
+            stats = await applyVerificationUpdate(id, updatePayload, true);
+        } else if (updatePayload.kycData && Array.isArray(updatePayload.kycData)) {
+            // Support array of keys if they pass in bulk updates
+            for (const update of updatePayload.kycData) {
+                stats = await applyVerificationUpdate(id, update, true);
+            }
+        } else {
+            // Just returning stats if only verified flag was pushed
+            // We already fetched user above, but we need fresh stats in case they were updated
+            const freshUser = await prisma.user.findFirst({
+                where: { id, deletedAt: null },
+                include: {
+                    freelancerProfile: true,
+                    clientProfile: true,
+                    founderProfile: true,
+                    investorProfile: true
+                }
+            });
+            stats = freshUser ? getVerificationStats(freshUser) : getVerificationStats(user);
+        }
+
+        // Auto-approve user if all required documents are verified
+        if (stats && stats.requiredVerified >= stats.requiredTotal) {
+            const freshUserForCheck = await prisma.user.findFirst({ where: { id, deletedAt: null } });
+            if (freshUserForCheck && (!freshUserForCheck.verified || !freshUserForCheck.isVerified)) {
+                await prisma.user.update({
+                    where: { id },
+                    data: { verified: true, isVerified: true }
+                });
+                const { sendAccountActiveEmail, sendPlanActivationEmail } = await import("../../services/mobile/email.service.js");
+                if (freshUserForCheck.email) {
+                    await sendAccountActiveEmail(freshUserForCheck.email, freshUserForCheck.fullName || 'User');
+                    await sendPlanActivationEmail(freshUserForCheck.email, freshUserForCheck.fullName || 'User');
+                    await triggerWelcomeBonus(freshUserForCheck);
+                }
+            }
+        }
+
+        // Return the updated info using unified format
+        res.json({
+            success: true,
+            data: stats
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Delete / reset user KYC 
+export const deleteUserKyc = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const user = await prisma.user.findFirst({
+            where: { id, deletedAt: null },
+            include: {
+                freelancerProfile: true,
+                clientProfile: true,
+                founderProfile: true,
+                investorProfile: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        // Remove verified status
+        await prisma.user.update({
+            where: { id },
+            data: { verified: false, isVerified: false }
+        });
+
+        // Unified wiping logic
+        const role = String(user.role).toLowerCase();
+
+        if (role === 'freelancer' || role === 'talent') {
+            await prisma.freelancerProfile.upsert({
+                where: { userId: id },
+                update: { verificationJson: JSON.stringify({}) },
+                create: { userId: id, verificationJson: JSON.stringify({}) }
+            });
+        } else if (role === 'client') {
+            await prisma.clientProfile.upsert({
+                where: { userId: id },
+                update: { verificationJson: JSON.stringify({}) },
+                create: { userId: id, verificationJson: JSON.stringify({}) }
+            });
+        } else if (role === 'founder' || role === 'startup founder') {
+            await prisma.founderProfile.upsert({
+                where: { userId: id },
+                update: { verificationJson: JSON.stringify({}) },
+                create: { userId: id, verificationJson: JSON.stringify({}) }
+            });
+        } else if (role === 'investor') {
+            await prisma.investorProfile.upsert({
+                where: { userId: id },
+                update: { verificationJson: JSON.stringify({}) },
+                create: { userId: id, verificationJson: JSON.stringify({}) }
+            });
+        }
+
+        res.json({ success: true, message: "KYC data cleared." });
+    } catch (error) {
+        next(error);
+    }
+};

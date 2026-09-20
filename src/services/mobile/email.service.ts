@@ -1,0 +1,893 @@
+
+import nodemailer from 'nodemailer';
+import { EmailTemplateEngine } from './email.template.js';
+
+const host = process.env.SMTP_HOST || 'mail.goexperts.in';
+const port = parseInt(process.env.SMTP_PORT || '465');
+const user = process.env.SMTP_USER || 'servicedesk@goexperts.in';
+const pass = process.env.SMTP_PASS || 'Goexperts@2025';
+const fromEmail = process.env.SMTP_FROM || 'servicedesk@goexperts.in';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://goexperts.in';
+
+const transporter = nodemailer.createTransport({
+  host,
+  port,
+  secure: port === 465,
+  auth: { user, pass },
+  tls: { rejectUnauthorized: false },
+});
+
+// â”€â”€â”€ Core send utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export const sendEmail = async (to: string, subject: string, html: string): Promise<boolean | string> => {
+  try {
+    const info = await transporter.sendMail({
+      from: `"Go Experts" <${fromEmail}>`,
+      to,
+      subject,
+      html,
+    });
+    console.log(`[EMAIL SENT] To: ${to} | Subject: "${subject}" | ID: ${info.messageId}`);
+    return true;
+  } catch (error: any) {
+    console.error(`[EMAIL FAILED] To: ${to} | Error:`, error);
+    return error.message || "Unknown SMTP Error";
+  }
+};
+
+// â”€â”€â”€ Base email shell (table-based, works in Outlook/Gmail/Apple Mail) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const PLAY_STORE_URL = process.env.PLAY_STORE_URL || 'https://play.google.com/store';
+const APP_STORE_URL  = process.env.APP_STORE_URL  || 'https://apps.apple.com';
+const LINKEDIN_URL   = process.env.LINKEDIN_URL   || 'https://linkedin.com/company/goexperts';
+const TWITTER_URL    = process.env.TWITTER_URL    || 'https://twitter.com/goexperts';
+const INSTAGRAM_URL  = process.env.INSTAGRAM_URL  || 'https://instagram.com/goexperts';
+
+export const shell = (preheader: string, body: string) => `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoExperts</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
+  <style type="text/css">
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+    table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+    img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; display:block; }
+    body { margin:0 !important; padding:0 !important; width:100% !important; }
+    a[x-apple-data-detectors] { color:inherit !important; text-decoration:none !important; }
+    @media only screen and (max-width:620px) {
+      .email-container { width:100% !important; }
+      .fluid { max-width:100% !important; height:auto !important; }
+      .stack-column, .stack-column-center { display:block !important; width:100% !important; max-width:100% !important; direction:ltr !important; }
+      .stack-column-center { text-align:center !important; }
+      .center-on-narrow { text-align:center !important; display:block !important; margin-left:auto !important; margin-right:auto !important; }
+      td.center-on-narrow { display:block !important; }
+      .padding-on-narrow { padding:20px !important; }
+      .app-badge-td { display:block !important; text-align:center !important; padding:6px 0 !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#eef2f7;font-family:Inter,'Helvetica Neue',Arial,sans-serif;">
+
+  <!-- Preheader (hidden preview text) -->
+  <div style="display:none;font-size:1px;color:#eef2f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+
+  <!-- Email wrapper -->
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="background-color:#eef2f7;">
+    <tr>
+      <td style="padding:40px 16px;">
+
+        <!-- Email container -->
+        <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" align="center" width="600" style="max-width:600px;margin:auto;border-radius:14px;box-shadow:0 4px 24px rgba(15,23,42,0.10);">
+
+          <!-- â•â•â• HEADER â•â•â• -->
+          <tr>
+            <td style="background:#ffffff;border-radius:14px 14px 0 0;padding:0;border-bottom:3px solid #e2e8f0;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <!-- Logo -->
+                  <td style="padding:20px 32px;vertical-align:middle;">
+                    <a href="${FRONTEND_URL}" target="_blank" style="text-decoration:none;display:inline-block;">
+                      <!--[if !mso]><!-->
+                      <img
+                        src="${FRONTEND_URL}/logo.png"
+                        alt="GoExperts"
+                        width="160"
+                        height="48"
+                        style="border:0;outline:none;text-decoration:none;display:block;max-width:160px;height:auto;"
+                      />
+                      <!--<![endif]-->
+                      <!--[if mso]>
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="vertical-align:middle;">
+                        <span style="font-size:24px;font-weight:800;font-family:Arial,sans-serif;">
+                          <span style="color:#c0392b;">Go</span><span style="color:#1a2e5a;"> Experts</span>
+                        </span>
+                      </td></tr></table>
+                      <![endif]-->
+                    </a>
+                  </td>
+                  <!-- Right: Tagline -->
+                  <td align="right" style="padding:20px 32px;vertical-align:middle;">
+                    <div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;font-family:Inter,Arial,sans-serif;">Transactional Email</div>
+                    <div style="color:#94a3b8;font-size:10px;font-family:Inter,Arial,sans-serif;margin-top:3px;">Working With You. For You.</div>
+                  </td>
+                </tr>
+                <!-- Orange accent line -->
+                <tr>
+                  <td colspan="2" style="padding:0;">
+                    <div style="height:3px;background:linear-gradient(90deg,#c0392b 0%,#e74c3c 50%,#1a2e5a 100%);"></div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- â•â•â• BODY â•â•â• -->
+          <tr>
+            <td style="background:#ffffff;padding:44px 40px 36px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+              ${body}
+            </td>
+          </tr>
+
+          <!-- â•â•â• FOOTER â€” Info Bar â•â•â• -->
+          <tr>
+            <td style="background:#0d766e;padding:18px 36px;border-left:1px solid #0d766e;border-right:1px solid #0d766e;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="vertical-align:middle;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-right:6px;font-size:14px;">ðŸŒ</td>
+                        <td>
+                          <a href="https://goexperts.in" style="color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;font-family:Inter,Arial,sans-serif;">www.goexperts.in</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right" style="vertical-align:middle;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-right:6px;font-size:14px;">ðŸ“§</td>
+                        <td>
+                          <a href="mailto:servicedesk@goexperts.in" style="color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;font-family:Inter,Arial,sans-serif;">servicedesk@goexperts.in</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- â•â•â• FOOTER â€” App Download â•â•â• -->
+          <tr>
+            <td style="background:#f8fafc;padding:28px 36px 24px;text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+              <p style="margin:0 0 6px;color:#374151;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:Inter,Arial,sans-serif;">Download Our App</p>
+              <p style="margin:0 0 18px;color:#94a3b8;font-size:12px;font-family:Inter,Arial,sans-serif;">Manage your account, projects &amp; connections on the go</p>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                <tr>
+                  <!-- Google Play Badge -->
+                  <td class="app-badge-td" style="padding:0 8px 0 0;vertical-align:middle;">
+                    <a href="${PLAY_STORE_URL}" target="_blank" style="text-decoration:none;display:inline-block;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-radius:9px;overflow:hidden;">
+                        <tr>
+                          <td style="background:#1a1a2e;border-radius:9px;border:1px solid #2d2d44;padding:9px 18px;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                              <tr>
+                                <td style="padding-right:10px;vertical-align:middle;">
+                                  <!-- Play triangle icon -->
+                                  <div style="width:24px;height:28px;position:relative;">
+                                    <div style="width:0;height:0;border-top:14px solid transparent;border-bottom:14px solid transparent;border-left:24px solid;border-left-color:#4ade80;"></div>
+                                  </div>
+                                </td>
+                                <td style="vertical-align:middle;">
+                                  <div style="color:#9ca3af;font-size:9px;letter-spacing:0.5px;text-transform:uppercase;font-family:Inter,Arial,sans-serif;line-height:1;">GET IT ON</div>
+                                  <div style="color:#ffffff;font-size:16px;font-weight:700;font-family:Inter,Arial,sans-serif;line-height:1.3;margin-top:2px;">Google Play</div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </a>
+                  </td>
+                  <!-- App Store Badge -->
+                  <td class="app-badge-td" style="padding:0 0 0 8px;vertical-align:middle;">
+                    <a href="${APP_STORE_URL}" target="_blank" style="text-decoration:none;display:inline-block;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-radius:9px;overflow:hidden;">
+                        <tr>
+                          <td style="background:#1a1a2e;border-radius:9px;border:1px solid #2d2d44;padding:9px 18px;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                              <tr>
+                                <td style="padding-right:10px;vertical-align:middle;">
+                                  <!-- Apple icon approximation -->
+                                  <div style="width:22px;height:26px;text-align:center;font-size:24px;line-height:26px;color:#ffffff;font-family:Arial,sans-serif;">&#63743;</div>
+                                </td>
+                                <td style="vertical-align:middle;">
+                                  <div style="color:#9ca3af;font-size:9px;letter-spacing:0.5px;text-transform:uppercase;font-family:Inter,Arial,sans-serif;line-height:1;">Download on the</div>
+                                  <div style="color:#ffffff;font-size:16px;font-weight:700;font-family:Inter,Arial,sans-serif;line-height:1.3;margin-top:2px;">App Store</div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- â•â•â• FOOTER â€” Social + Copyright â•â•â• -->
+          <tr>
+            <td style="background:#f1f5f9;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 14px 14px;padding:20px 36px 24px;text-align:center;">
+              <!-- Social icons -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin-bottom:14px;">
+                <tr>
+                  <td style="padding:0 6px;">
+                    <a href="${LINKEDIN_URL}" target="_blank" style="text-decoration:none;display:inline-block;">
+                      <div style="width:34px;height:34px;background:#0a66c2;border-radius:8px;text-align:center;line-height:34px;font-size:15px;color:#ffffff;font-weight:700;font-family:Arial,sans-serif;">in</div>
+                    </a>
+                  </td>
+                  <td style="padding:0 6px;">
+                    <a href="${TWITTER_URL}" target="_blank" style="text-decoration:none;display:inline-block;">
+                      <div style="width:34px;height:34px;background:#000000;border-radius:8px;text-align:center;line-height:34px;font-size:16px;color:#ffffff;font-weight:900;font-family:Arial,sans-serif;">&#120143;</div>
+                    </a>
+                  </td>
+                  <td style="padding:0 6px;">
+                    <a href="${INSTAGRAM_URL}" target="_blank" style="text-decoration:none;display:inline-block;">
+                      <div style="width:34px;height:34px;background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);border-radius:8px;text-align:center;line-height:34px;font-size:18px;">ðŸ“·</div>
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <!-- Tagline -->
+              <p style="margin:0 0 10px;color:#475569;font-size:13px;font-weight:600;font-family:Inter,Arial,sans-serif;">GoExperts â€” Connect. Build. Scale. Globally.</p>
+              <!-- Divider -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="60%" align="center" style="margin:0 auto 10px;">
+                <tr><td style="border-top:1px solid #e2e8f0;"></td></tr>
+              </table>
+              <!-- Links -->
+              <p style="margin:0 0 6px;color:#94a3b8;font-size:11px;font-family:Inter,Arial,sans-serif;">
+                <a href="${FRONTEND_URL}/privacy" style="color:#94a3b8;text-decoration:none;">Privacy Policy</a>
+                &nbsp;&bull;&nbsp;
+                <a href="${FRONTEND_URL}/terms" style="color:#94a3b8;text-decoration:none;">Terms of Service</a>
+                &nbsp;&bull;&nbsp;
+                <a href="${FRONTEND_URL}/settings/notifications" style="color:#94a3b8;text-decoration:none;">Unsubscribe</a>
+              </p>
+              <!-- Copyright -->
+              <p style="margin:0;color:#cbd5e1;font-size:11px;font-family:Inter,Arial,sans-serif;">
+                &copy; ${new Date().getFullYear()} GoExperts Private Limited. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+// â”€â”€â”€ Reusable components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const divider = () => `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:24px 0;"><tr><td style="border-top:1px solid #e2e8f0;"></td></tr></table>`;
+
+const ctaButton = (url: string, label: string, bgColor = '#f97316') => `
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:28px auto;">
+  <tr>
+    <td style="border-radius:8px;background-color:${bgColor};" align="center">
+      <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:50px;v-text-anchor:middle;width:240px;" arcsize="16%" stroke="f" fillcolor="${bgColor}"><w:anchorlock/><center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:700;">${label}</center></v:roundrect><![endif]-->
+      <!--[if !mso]><!--><a href="${url}" target="_blank" style="background-color:${bgColor};color:#ffffff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;line-height:50px;text-align:center;text-decoration:none;display:inline-block;border-radius:8px;padding:0 32px;min-width:200px;">
+        ${label}
+      </a><!--<![endif]-->
+    </td>
+  </tr>
+</table>
+`;
+
+const badge = (text: string, bgColor: string, textColor: string) => `
+  <span style="display:inline-block;background-color:${bgColor};color:${textColor};font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:4px 12px;border-radius:20px;">${text}</span>
+`;
+
+const alertBox = (icon: string, title: string, body: string, bg: string, border: string, titleColor: string, bodyColor: string) => `
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:24px 0;">
+  <tr>
+    <td style="background-color:${bg};border-left:4px solid ${border};border-radius:0 8px 8px 0;padding:16px 20px;">
+      <p style="margin:0 0 4px;color:${titleColor};font-size:14px;font-weight:700;">${icon} ${title}</p>
+      <p style="margin:0;color:${bodyColor};font-size:13px;line-height:1.6;">${body}</p>
+    </td>
+  </tr>
+</table>
+`;
+
+const featureList = (items: { icon: string; text: string }[], color: string) => `
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+  ${items.map(item => `
+  <tr>
+    <td style="padding:6px 0;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+          <td style="width:32px;padding-right:12px;vertical-align:top;">
+            <div style="width:28px;height:28px;background-color:${color}15;border-radius:6px;text-align:center;line-height:28px;font-size:14px;">${item.icon}</div>
+          </td>
+          <td style="vertical-align:middle;">
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.5;">${item.text}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>`).join('')}
+</table>
+`;
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// EMAIL 1: Account Active  (sent immediately after admin approves)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+export const sendAccountActiveEmail = (to: string, name: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Account Status Update</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your account is now active! ðŸŽ‰</h1>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
+
+    ${alertBox('âœ…', 'KYC Verification Approved', 'Your identity has been verified by our admin team. Your Go Experts account is now fully active and ready to use.', '#f0fdf4', '#22c55e', '#15803d', '#166534')}
+
+    <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.7;">
+      Welcome to Go Experts â€” a premium platform that connects top global talent with clients, investors, and founders across every industry.
+    </p>
+
+    ${featureList([
+    { icon: 'ðŸ”', text: 'Your account is secured and verified' },
+    { icon: 'ðŸŒ', text: 'Access the full platform and connect globally' },
+    { icon: 'ðŸ“‹', text: 'Your profile is now visible to potential collaborators' },
+  ], '#22c55e')}
+
+    ${divider()}
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f8fafc;border-radius:8px;padding:1px;">
+      <tr><td style="padding:20px 24px;">
+        <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:700;">ðŸ“¨ What happens next?</p>
+        <p style="margin:0;color:#64748b;font-size:13px;line-height:1.7;">
+          Check your inbox for a second email from us â€” it contains a button to <strong>activate your Free 90-Day Plan</strong>. Click it to unlock full platform access.
+        </p>
+      </td></tr>
+    </table>
+
+    <p style="margin:32px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
+      If you have any questions, reply to this email or contact us at 
+      <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>
+    </p>
+    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+
+  return sendEmail(to, 'âœ… Your Go Experts Account is Now Active', shell(
+    `Great news, ${firstName}! Your KYC has been approved and your account is now active.`,
+    body
+  ));
+};
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// EMAIL 2: Activate Free Plan  (sent at same time as Email 1)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+export const sendPlanActivationEmail = (to: string, name: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const activationLink = `${FRONTEND_URL}/verify-plan?email=${encodeURIComponent(to)}`;
+
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Action Required</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Activate your Free Plan ðŸš€</h1>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
+
+    <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.7;">
+      Congratulations on getting approved! You're eligible for a <strong>Free 90-Day Access Plan</strong>. Click the button below, verify your email with a quick OTP, and your plan activates instantly.
+    </p>
+
+    <!-- Plan Card -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border:1px solid #e0f2fe;background:linear-gradient(135deg,#eff6ff 0%,#f0f9ff 100%);border-radius:12px;margin-bottom:24px;">
+      <tr>
+        <td style="padding:24px;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+              <td>
+                <p style="margin:0 0 4px;color:#0369a1;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Free Starter Plan</p>
+                <p style="margin:0 0 16px;color:#0f172a;font-size:22px;font-weight:800;">90 Days Free Access <span style="font-size:14px;color:#64748b;font-weight:400;">â€” No credit card required</span></p>
+                ${featureList([
+    { icon: 'ðŸ’¼', text: 'Post and browse unlimited projects & proposals' },
+    { icon: 'ðŸ¤', text: 'Connect with verified clients, freelancers & investors' },
+    { icon: 'ðŸ”’', text: 'Secure milestone-based payment escrow system' },
+    { icon: 'ðŸ“Š', text: 'Access industry analytics and market insights' },
+  ], '#3b82f6')}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    ${ctaButton(activationLink, 'ðŸ”“ Activate My Free Plan', '#f97316')}
+
+    <p style="margin:0 0 4px;text-align:center;color:#94a3b8;font-size:12px;">Button not working? Copy and paste this link:</p>
+    <p style="margin:0;text-align:center;"><a href="${activationLink}" style="color:#3b82f6;font-size:12px;word-break:break-all;text-decoration:none;">${activationLink}</a></p>
+
+    ${divider()}
+
+    ${alertBox('â°', 'This link is for your account only', 'For your security, the plan activation OTP will be sent to this email address. Do not share your OTP with anyone.', '#fefce8', '#f59e0b', '#92400e', '#78350f')}
+
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+
+  return sendEmail(to, 'ðŸš€ Activate Your Free 90-Day Plan on Go Experts', shell(
+    `Your Free 90-Day Plan is ready, ${firstName}! Click to activate now â€” takes less than 1 minute.`,
+    body
+  ));
+};
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// EMAIL 3: OTP Code  (sent when user clicks "Activate" button)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+export const sendPlanActivationOtpEmail = (to: string, token: string) => {
+  console.log(`\n======================================================================`);
+  console.log(`ðŸ”‘ [PLAN ACTIVATION OTP DISPATCH]`);
+  console.log(`   Recipient: ${to}`);
+  console.log(`   OTP Code:  ${token}`);
+  console.log(`======================================================================\n`);
+
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Verification Code</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your OTP is here ðŸ”</h1>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Use the code below to verify your email and activate your Go Experts free plan.</p>
+
+    <!-- OTP Box -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+      <tr>
+        <td align="center" style="background:#0f172a;border-radius:12px;padding:32px 24px;">
+          <p style="margin:0 0 12px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">One-Time Password</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+            <tr>
+              ${token.split('').map(digit => `
+              <td style="padding:0 4px;">
+                <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
+              </td>`).join('')}
+            </tr>
+          </table>
+          <p style="margin:16px 0 0;color:#475569;font-size:12px;">
+            â± Expires in <strong style="color:#f59e0b;">10 minutes</strong>
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Steps -->
+    <p style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:700;">How to use this code:</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:24px;">
+      ${[
+      ['1', '#f97316', 'Go back to the verification page in your browser'],
+      ['2', '#3b82f6', 'Enter the 6-digit code shown above'],
+      ['3', '#22c55e', 'Click Verify â€” your plan activates instantly!'],
+    ].map(([num, color, text]) => `
+      <tr>
+        <td style="padding:6px 0;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+              <td style="width:32px;vertical-align:top;padding-right:12px;">
+                <div style="width:26px;height:26px;background-color:${color};border-radius:50%;text-align:center;line-height:26px;color:#fff;font-size:12px;font-weight:800;">${num}</div>
+              </td>
+              <td style="vertical-align:middle;">
+                <p style="margin:0;color:#374151;font-size:14px;">${text}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`).join('')}
+    </table>
+
+    ${alertBox('ðŸš«', 'Never share this code', "Go Experts will NEVER ask for your OTP via phone, chat, or any other method. If someone asks for it, it's a scam.", '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
+
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+
+  return sendEmail(to, 'ðŸ” Your Plan Activation Code â€” Go Experts', shell(
+    `Your OTP is ${token}. Use it to activate your Go Experts free plan. Expires in 10 minutes.`,
+    body
+  ));
+};
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// EMAIL 4: Dynamic Industry Welcome  (sent after OTP verified & plan activated)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+export const sendDynamicIndustryEmail = (to: string, name: string, role: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+
+  type Config = {
+    badge: string; badgeBg: string; badgeText: string;
+    headline: string; subheadline: string; intro: string;
+    features: { icon: string; title: string; desc: string }[];
+    cta1Label: string; cta1Url: string; cta1Color: string;
+    cta2Label: string; cta2Url: string;
+    accentColor: string;
+    tips: string[];
+  };
+
+  const configs: Record<string, Config> = {
+    freelancer: {
+      badge: 'Freelancer', badgeBg: '#eff6ff', badgeText: '#1d4ed8',
+      headline: 'Start winning projects today',
+      subheadline: 'Top clients are actively looking for your skills right now.',
+      intro: `Your profile is live and visible to hundreds of verified clients across every industry. Here's how to make the most of your first 90 days:`,
+      features: [
+        { icon: 'ðŸ”', title: 'Browse & Bid on Projects', desc: 'Explore active projects filtered by your skills, budget, and industry category.' },
+        { icon: 'ðŸ’¬', title: 'Submit Winning Proposals', desc: 'Use our AI-powered proposal tips to stand out from other freelancers.' },
+        { icon: 'ðŸ”’', title: 'Get Paid Securely', desc: 'Milestone-based escrow ensures you are always paid for your work on time.' },
+      ],
+      cta1Label: 'ðŸ” Browse Open Projects', cta1Url: `${FRONTEND_URL}/projects`, cta1Color: '#3b82f6',
+      cta2Label: 'Complete your profile â†’', cta2Url: `${FRONTEND_URL}/dashboard/profile`,
+      accentColor: '#3b82f6',
+      tips: ['Add a portfolio to boost your profile visibility by 3x', 'Complete your skills section to get matched to relevant projects', 'Set your availability so clients know when you\'re ready to start'],
+    },
+    client: {
+      badge: 'Client', badgeBg: '#fdf4ff', badgeText: '#7e22ce',
+      headline: 'Find the perfect freelancer',
+      subheadline: 'Your project deserves the best talent. We have thousands of verified professionals.',
+      intro: `Your account is active and ready. Post your first project in under 5 minutes and start receiving proposals from verified freelancers.`,
+      features: [
+        { icon: 'ðŸ“', title: 'Post a Project for Free', desc: 'Describe your project, set your budget, and receive proposals within hours.' },
+        { icon: 'ðŸ‘¥', title: 'Browse Top Talent', desc: 'Filter freelancers by skills, experience, ratings, and industry expertise.' },
+        { icon: 'ðŸ›¡ï¸', title: 'Hire with Confidence', desc: 'Milestone-based payments protect both you and your freelancer.' },
+      ],
+      cta1Label: 'ðŸ“ Post a Project Now', cta1Url: `${FRONTEND_URL}/post-project`, cta1Color: '#8b5cf6',
+      cta2Label: 'Browse freelancers â†’', cta2Url: `${FRONTEND_URL}/freelancers`,
+      accentColor: '#8b5cf6',
+      tips: ['Clear project descriptions get 60% more quality proposals', 'Set a realistic budget to attract experienced freelancers', 'Use milestone payments to manage project risk effectively'],
+    },
+    investor: {
+      badge: 'Investor', badgeBg: '#f0fdf4', badgeText: '#15803d',
+      headline: 'Discover your next investment',
+      subheadline: 'Curated startup opportunities across high-growth industries â€” verified and ready.',
+      intro: `Your investor profile is now active. Start exploring startups across your preferred sectors, connect with founders, and track the opportunities that match your thesis.`,
+      features: [
+        { icon: 'ðŸš€', title: 'Browse Verified Startups', desc: 'Explore startups filtered by industry, stage, traction, and funding ask.' },
+        { icon: 'ðŸ“Š', title: 'Track & Analyze', desc: 'View detailed financials, team backgrounds, and market analysis for each startup.' },
+        { icon: 'ðŸ¤', title: 'Connect with Founders', desc: 'Initiate direct conversations with vetted founders looking for strategic investors.' },
+      ],
+      cta1Label: 'ðŸš€ Explore Startups', cta1Url: `${FRONTEND_URL}/startups`, cta1Color: '#10b981',
+      cta2Label: 'Set investment preferences â†’', cta2Url: `${FRONTEND_URL}/dashboard/preferences`,
+      accentColor: '#10b981',
+      tips: ['Set industry filters to get personalized startup recommendations', 'Complete your investor profile to attract inbound from top founders', 'Follow startups you\'re interested in to track their progress'],
+    },
+    founder: {
+      badge: 'Founder', badgeBg: '#fff7ed', badgeText: '#c2410c',
+      headline: 'Build, raise, and scale',
+      subheadline: 'Connect with investors who believe in your vision and hire the talent to bring it to life.',
+      intro: `Your founder profile is live. Investors are actively browsing for startups like yours. Here is how to maximize your visibility and traction on the platform:`,
+      features: [
+        { icon: 'ðŸ’¡', title: 'Get Discovered by Investors', desc: 'Your startup profile is visible to hundreds of active investors on the platform.' },
+        { icon: 'ðŸ‘©â€ðŸ’»', title: 'Hire Top Freelancers', desc: 'Build your product faster with verified freelance developers, designers, and marketers.' },
+        { icon: 'ðŸ“ˆ', title: 'Track Investor Engagement', desc: 'See which investors have viewed your profile and expressed interest.' },
+      ],
+      cta1Label: 'ðŸ’¡ View Investor Matches', cta1Url: `${FRONTEND_URL}/investors`, cta1Color: '#f59e0b',
+      cta2Label: 'Complete your startup profile â†’', cta2Url: `${FRONTEND_URL}/dashboard/startup`,
+      accentColor: '#f59e0b',
+      tips: ['Add a pitch deck to your profile to increase investor interest by 4x', 'List your traction metrics â€” investors want to see growth', 'Define your funding ask clearly to attract the right investors'],
+    },
+  };
+
+  const cfg: Config = configs[role?.toLowerCase()] || configs['freelancer'];
+
+  const featuresHtml = cfg.features.map(f => `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:16px;">
+      <tr>
+        <td style="width:48px;vertical-align:top;padding-right:16px;">
+          <div style="width:40px;height:40px;background:${cfg.accentColor}15;border-radius:10px;text-align:center;line-height:40px;font-size:20px;">${f.icon}</div>
+        </td>
+        <td style="vertical-align:top;">
+          <p style="margin:0 0 4px;color:#0f172a;font-size:14px;font-weight:700;">${f.title}</p>
+          <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">${f.desc}</p>
+        </td>
+      </tr>
+    </table>
+  `).join('');
+
+  const tipsHtml = cfg.tips.map(t => `
+    <tr><td style="padding:4px 0;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+        <td style="width:20px;vertical-align:top;color:${cfg.accentColor};font-size:14px;padding-right:8px;">â†’</td>
+        <td><p style="margin:0;color:#374151;font-size:13px;line-height:1.5;">${t}</p></td>
+      </tr></table>
+    </td></tr>
+  `).join('');
+
+  const body = `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:8px;">
+      <tr>
+        <td>${badge(cfg.badge, cfg.badgeBg, cfg.badgeText)}</td>
+      </tr>
+    </table>
+    <h1 style="margin:12px 0 4px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">${cfg.headline} ðŸŽ¯</h1>
+    <p style="margin:0 0 8px;color:#64748b;font-size:15px;font-weight:500;">${cfg.subheadline}</p>
+    <p style="margin:0 0 24px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+
+    <!-- Green success bar -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:24px;">
+      <tr><td style="padding:14px 20px;">
+        <p style="margin:0;color:#15803d;font-size:14px;font-weight:700;">ðŸŽ‰ Your free plan is active â€” 90 days remaining</p>
+        <p style="margin:4px 0 0;color:#166534;font-size:13px;">You have full access to everything Go Experts has to offer.</p>
+      </td></tr>
+    </table>
+
+    <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.7;">${cfg.intro}</p>
+
+    ${featuresHtml}
+
+    ${ctaButton(cfg.cta1Url, cfg.cta1Label, cfg.cta1Color)}
+
+    <p style="text-align:center;margin:-12px 0 24px;">
+      <a href="${cfg.cta2Url}" style="color:${cfg.accentColor};font-size:13px;text-decoration:none;font-weight:600;">${cfg.cta2Label}</a>
+    </p>
+
+    ${divider()}
+
+    <!-- Pro Tips -->
+    <p style="margin:0 0 12px;color:#0f172a;font-size:14px;font-weight:700;">ðŸ’¡ Pro tips for your first week:</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:24px;">
+      ${tipsHtml}
+    </table>
+
+    ${divider()}
+
+    <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:600;">Questions? We're here for you.</p>
+    <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">
+      Reply to this email or reach us at <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>. Our team typically responds within 24 hours.
+    </p>
+    <p style="margin:16px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+
+  return sendEmail(
+    to,
+    `ðŸŽ¯ Welcome aboard, ${firstName}! Here's how to get started`,
+    shell(`Your Go Experts free plan is active! Here's everything you need to hit the ground running.`, body)
+  );
+};
+
+// â”€â”€â”€ Utility emails â€” upgraded to premium shell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export const sendWelcomeEmail = (to: string, name: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Welcome</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Welcome to GoExperts! ðŸ‘‹</h1>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
+    <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.7;">
+      We're thrilled to have you join the GoExperts community â€” the premier global talent platform connecting freelancers, clients, investors, and founders.
+    </p>
+    ${ctaButton(`${FRONTEND_URL}/dashboard`, 'ðŸš€ Go to Dashboard', '#f97316')}
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
+      Questions? Reach us at <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>
+    </p>
+    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, 'ðŸ‘‹ Welcome to GoExperts!', shell(`Welcome aboard, ${firstName}! Your GoExperts journey starts now.`, body));
+};
+
+export const sendPasswordResetEmail = (to: string, token: string) => {
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Security</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Password Reset Request ðŸ”‘</h1>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">We received a request to reset your GoExperts password. Use the code below:</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+      <tr>
+        <td align="center" style="background:#0f172a;border-radius:12px;padding:28px 24px;">
+          <p style="margin:0 0 10px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">Reset Code</p>
+          <div style="font-size:36px;font-weight:900;color:#f97316;letter-spacing:8px;font-family:monospace;">${token}</div>
+          <p style="margin:12px 0 0;color:#475569;font-size:12px;">â± Expires in <strong style="color:#f59e0b;">10 minutes</strong></p>
+        </td>
+      </tr>
+    </table>
+    ${alertBox('ðŸš«', 'Did not request this?', 'If you did not request a password reset, you can safely ignore this email. Your account remains secure.', '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, 'ðŸ”‘ Password Reset Request â€” GoExperts', shell('A password reset was requested for your GoExperts account.', body));
+};
+
+export const sendVerificationEmail = (to: string, token: string) => {
+  console.log(`\n======================================================================`);
+  console.log(`ðŸ”‘ [MOBILE OTP DISPATCH]`);
+  console.log(`   Recipient: ${to}`);
+  console.log(`   OTP Code:  ${token}`);
+  console.log(`======================================================================\n`);
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Verification</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email ðŸ“§</h1>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Use the one-time code below to verify your GoExperts account.</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+      <tr>
+        <td align="center" style="background:#0f172a;border-radius:12px;padding:28px 24px;">
+          <p style="margin:0 0 10px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">Verification Code</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+            <tr>
+              ${token.split('').map(digit => `
+              <td style="padding:0 4px;">
+                <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
+              </td>`).join('')}
+            </tr>
+          </table>
+          <p style="margin:14px 0 0;color:#475569;font-size:12px;">â± Expires in <strong style="color:#f59e0b;">10 minutes</strong></p>
+        </td>
+      </tr>
+    </table>
+    ${alertBox('ðŸš«', 'Never share this code', 'GoExperts will NEVER ask for your OTP via phone, chat, or any other method.', '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, 'ðŸ“§ Verify Your Email â€” GoExperts', shell(`Your GoExperts verification code is ${token}. Expires in 10 minutes.`, body));
+};
+
+export const sendAccountDeletedEmail = (to: string, name: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Account Update</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Account Deleted</h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      This is to confirm that your GoExperts account and all associated data have been permanently deleted as requested.
+    </p>
+    ${alertBox('âš ï¸', 'Was this a mistake?', 'If you did not request this deletion, contact our support team immediately at servicedesk@goexperts.in', '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, 'Your GoExperts Account Has Been Deleted', shell('Your GoExperts account has been permanently deleted.', body));
+};
+
+export const sendWelcomeBonusEmail = (to: string, name: string, amount: number) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">KYC Approved</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Welcome Bonus Credited! ðŸŽ‰</h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      Congratulations! Your KYC verification is complete. As a thank you for joining Go Experts, we have credited a <strong>Welcome Bonus of â‚¹${amount}</strong> directly to your wallet.
+    </p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+      <tr>
+        <td align="center" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
+          <p style="margin:0 0 4px;color:#64748b;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Bonus Amount</p>
+          <div style="color:#10b981;font-size:32px;font-weight:800;">â‚¹${amount}</div>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
+      <tr>
+        <td align="center">
+          <a href="${FRONTEND_URL}/dashboard" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">Go to Dashboard</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, 'ðŸŽ‰ Welcome Bonus Credited â€” GoExperts', shell(`Your KYC is approved and your â‚¹${amount} welcome bonus is in your wallet!`, body));
+};
+
+
+export const sendPlanExpiredEmail = (to: string, name: string, role: string, planName?: string | null, expiredAt?: Date | string | null) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const roleName = role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase() : 'Member';
+  const safePlanName = planName || 'your subscription';
+  const expiredDate = expiredAt ? new Date(expiredAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'recently';
+
+  const body = `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:8px;">
+      <tr><td>${badge(roleName, '#fff7ed', '#c2410c')}</td></tr>
+    </table>
+    <h1 style="margin:12px 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your plan has expired</h1>
+    <p style="margin:0 0 22px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
+
+    ${alertBox('??', 'Upgrade required', `Your <strong>${safePlanName}</strong> plan expired on <strong>${expiredDate}</strong>. Your account access is limited until you upgrade or renew your plan.`, '#fff7ed', '#f97316', '#c2410c', '#9a3412')}
+
+    <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.7;">
+      You can still sign in to Go Experts to review your account and complete your upgrade. After upgrading, your account will be reactivated automatically and full platform access will resume.
+    </p>
+
+    ${featureList([
+      { icon: '??', text: 'Login remains available for account and billing access' },
+      { icon: '??', text: 'Upgrade or renew your plan to reactivate your workspace' },
+      { icon: '?', text: 'Your profile, projects, and data remain safely stored' },
+    ], '#f97316')}
+
+    ${ctaButton(`${FRONTEND_URL}/pricing`, 'Upgrade Your Plan', '#E30613')}
+
+    <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:600;">Need help choosing a plan?</p>
+    <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">
+      Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a> and our team will help you reactivate your account.
+    </p>
+    <p style="margin:16px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+
+  return sendEmail(
+    to,
+    'Your Go Experts plan has expired ? upgrade required',
+    shell(`Your ${safePlanName} plan has expired. Please upgrade to continue using Go Experts.`, body)
+  );
+};
+
+export const sendCashbackEmail = (to: string, name: string, amount: number, planName: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Monthly Reward</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Cashback Credited! ðŸ’¸</h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      Your monthly 5% cashback for the <strong>${planName}</strong> plan has just been credited to your GoExperts Wallet!
+    </p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+      <tr>
+        <td align="center" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
+          <p style="margin:0 0 4px;color:#64748b;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Cashback Amount</p>
+          <div style="color:#10b981;font-size:32px;font-weight:800;">â‚¹${amount}</div>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
+      <tr>
+        <td align="center">
+          <a href="${FRONTEND_URL}/dashboard" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">Check Wallet Balance</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, 'ðŸ’¸ Your Monthly Cashback is Here â€” GoExperts', shell(`You just received â‚¹${amount} in your GoExperts wallet!`, body));
+};
+
+export const sendReferralCashbackEmail = (to: string, name: string, amount: number, friendName: string, balanceAfter: number) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Referral Reward</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">You earned cashback! ðŸ’°</h1>
+    <p style="margin:0 0 16px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      Great news! Your friend <strong>${friendName}</strong> just purchased a subscription plan. We've added 5% of their plan value to your wallet as a thank you for referring them.
+    </p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
+      <tr>
+        <td align="center" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:24px;">
+          <p style="margin:0 0 4px;color:#166534;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Cashback Credited</p>
+          <div style="color:#15803d;font-size:32px;font-weight:800;">â‚¹${amount}</div>
+          <p style="margin:8px 0 0;color:#166534;font-size:13px;">New Wallet Balance: â‚¹${balanceAfter}</p>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
+      <tr>
+        <td align="center">
+          <a href="${FRONTEND_URL}/dashboard" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">View Wallet</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, `You've earned ₹${amount} cashback! 💰`, shell(`You just received ₹${amount} in your wallet for referring ${friendName}!`, body));
+};
+
+export const sendSubscriptionReminderEmail = async (
+  to: string, 
+  name: string, 
+  planName: string, 
+  daysLeft: number, 
+  expirationDate: string,
+  renewLink: string
+): Promise<boolean | string> => {
+  const html = EmailTemplateEngine.compile(EmailTemplateEngine.templates.SUBSCRIPTION_REMINDER, {
+    name: name || "User",
+    planName,
+    daysLeft: daysLeft.toString(),
+    expirationDate,
+    renewLink,
+    currentYear: new Date().getFullYear().toString(),
+    supportLink: `${FRONTEND_URL}/support`,
+    settingsLink: `${FRONTEND_URL}/dashboard/subscriptions`
+  });
+  const subject = `Action Required: Your ${planName} expires in ${daysLeft} days`;
+  return await sendEmail(to, subject, html);
+};
