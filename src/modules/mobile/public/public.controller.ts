@@ -267,21 +267,21 @@ export const getExperienceLevels = async (req: Request, res: Response, next: Nex
   try {
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: 'experience_level', status: 'active' },
-      orderBy: { label: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }, { id: 'asc' }],
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
     if (options && options.length > 0) {
-      return res.json(successResponse('Experience levels retrieved', options));
+      const seen = new Set<string>();
+      const uniqueOptions = options.filter((option: any) => {
+        const key = String(option.value || option.label || '').trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return res.json(successResponse('Experience levels retrieved', uniqueOptions));
     }
-
-    const dbLevels = await prisma.experienceLevel.findMany({
-      where: { status: 'active' },
-      orderBy: { createdAt: 'asc' }
-    }).catch(() => []);
-
-    const levels = dbLevels.map((l) => ({ id: l.id, label: l.name, value: l.name }));
-    return res.json(successResponse('Experience levels retrieved', levels));
+    return res.json(successResponse('Experience levels retrieved', []));
   } catch (error) { next(error); }
 };
 
