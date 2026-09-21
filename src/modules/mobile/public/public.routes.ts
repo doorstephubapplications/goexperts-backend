@@ -14,7 +14,7 @@ import {
   getRoleColor
 } from './public.controller.js';
 import { authenticate, authenticateOptional } from '../../../middlewares/auth.js';
-import { cacheControl } from '../../../middleware/cache.js';
+import { cacheControl, noCache } from '../../../middleware/cache.js';
 import { getSettingsSection } from '../../../services/settings/settings.service.js';
 import { upload, handleUploadError } from '../../../middleware/upload.js';
 import { createProject, updateProject, deleteProject, updateProjectStatus } from '../client/controllers/projects.controller.js';
@@ -234,8 +234,8 @@ router.delete('/verification', authenticate, deleteMyVerification as any);
 
 router.get('/pricing', masterCache, getPricing);
 router.get('/pricing_plans', masterCache, getPricingPlans);
-router.get('/blogs', directoryCache, getBlogs);
-router.get('/blogs/:id', directoryCache, getById('blog'));
+router.get('/blogs', noCache, getBlogs);
+router.get('/blogs/:id', noCache, getById('blog'));
 router.get('/faqs', masterCache, getFaqs);
 router.get('/testimonials', masterCache, getTestimonials);
 router.post('/contact', submitContact);

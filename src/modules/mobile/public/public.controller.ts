@@ -1846,7 +1846,7 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
     const limit = parseInt(req.query.limit as string) || 20;
 
     const allBlogs = await prisma.blog.findMany({
-      where: { status: 'active' },
+      where: { status: 'active', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -1908,6 +1908,18 @@ export const search = async (req: Request, res: Response, next: NextFunction) =>
 
 export const getById = (modelName: string) => async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (modelName === 'blog') {
+      const blog = await prisma.blog.findFirst({
+        where: { id: req.params.id, status: 'active', deletedAt: null },
+      });
+
+      if (!blog) {
+        return res.status(404).json({ success: false, message: 'Blog not found' });
+      }
+
+      return res.json(successResponse('Blog details', blog));
+    }
+
     if (modelName === 'project') {
       const project = await prisma.project.findFirst({
         where: { id: req.params.id, deletedAt: null },
