@@ -59,17 +59,26 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
     const status = req.query.status as string | undefined;
     const search = String(req.query.search || req.query.q || '').trim();
 
-    const where: any = { freelancerId: req.user.id, deletedAt: null };
+    const where: any = {
+      deletedAt: null,
+      OR: [
+        { freelancerId: req.user.id },
+        { project: { client: req.user.id } },
+      ],
+    };
     if (status) where.status = status;
 
     if (search) {
-      where.OR = [
-        { project: { title: { contains: search } } },
-        { project: { description: { contains: search } } },
-        { coverLetter: { contains: search } },
-        { project: { category: { contains: search } } },
-        { project: { technology: { contains: search } } },
-      ];
+      where.AND = [{ OR: where.OR }, {
+        OR: [
+          { project: { title: { contains: search } } },
+          { project: { description: { contains: search } } },
+          { coverLetter: { contains: search } },
+          { project: { category: { contains: search } } },
+          { project: { technology: { contains: search } } },
+        ],
+      }];
+      delete where.OR;
     }
 
     const [proposals, total] = await Promise.all([

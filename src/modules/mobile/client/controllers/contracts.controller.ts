@@ -41,7 +41,10 @@ export const listContracts = async (req: AuthRequest, res: Response, next: NextF
 export const getContract = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const contract = await prisma.contract.findFirst({
-      where: { id: req.params.id, clientId: req.user.id },
+      where: {
+        clientId: req.user.id,
+        OR: [{ id: req.params.id }, { proposalId: req.params.id }],
+      },
       include: {
         freelancer: {
           select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true }
