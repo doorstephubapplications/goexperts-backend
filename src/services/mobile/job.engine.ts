@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { prisma } from '../../config/database.js';
+import { startUnreadMessageDigestCron } from '../../jobs/unread-digest.job.js';
 
 export class JobEngine {
   /**
@@ -68,5 +69,8 @@ export class JobEngine {
     });
 
     console.log('🕒 Background Job Engine Initialized');
+    
+    // 5. Unread Message Digest
+    startUnreadMessageDigestCron();
   }
 }

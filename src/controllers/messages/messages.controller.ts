@@ -262,6 +262,15 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
           return res.status(400).json({ success: false, message: 'Connection invitation already exists or was rejected' });
         }
 
+        if (targetUser && targetUser.status?.toLowerCase() !== 'active') {
+          return res.status(403).json({ success: false, message: 'User is not eligible to receive connection requests' });
+        }
+
+        const { checkRateLimit } = await import('../../common/helpers/rate-limit.js');
+        if (!checkRateLimit(userId, 'connection:request', 5, 15 * 60000)) { // 5 per 15 minutes
+          return res.status(429).json({ success: false, message: 'Too many connection requests. Please try again later.' });
+        }
+
         if (!initialMessage) {
            return res.json({ success: true, message: 'Ready to send connection request', data: { pendingConnection: true } });
         }
@@ -298,6 +307,30 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
           });
         } catch(err) {}
 
+        // Send Email
+        try {
+          const receiverInfo = await prisma.user.findUnique({ where: { id: finalRecipientId } });
+          if (receiverInfo) {
+            const { sendEmail, shell } = await import('../../services/mobile/email.service.js');
+            const emailBody = `
+              <p>Hi ${receiverInfo.fullName},</p>
+              <p><strong>${newInvite.sender.fullName}</strong> (${newInvite.sender.role}) wants to connect with you on GoExperts.</p>
+              <p>They sent the following message:</p>
+              <blockquote style="border-left: 4px solid #e2e8f0; padding-left: 1rem; margin-left: 0; color: #475569;">
+                <em>"${newInvite.firstMessage || 'I would like to connect.'}"</em>
+              </blockquote>
+              <p><a href="https://goexperts.in/dashboard/invitations" style="display:inline-block;padding:10px 20px;background:#10B981;color:#fff;text-decoration:none;border-radius:5px;font-weight:bold;">View Request</a></p>
+            `;
+            sendEmail(
+              receiverInfo.email,
+              `${newInvite.sender.fullName} sent you a connection request`,
+              shell("New Connection Request", emailBody)
+            ).catch(e => console.error("Email error:", e));
+          }
+        } catch(err) {
+          console.error("Failed to trigger request email", err);
+        }
+
         return res.status(200).json({ success: true, message: 'Connection request sent', data: newInvite });
       }
     }
@@ -319,8 +352,9 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
       });
     }
 
+    let createdMessage = null;
     if (initialMessage && finalRecipientId) {
-      await prisma.message.create({
+      createdMessage = await prisma.message.create({
         data: {
           conversationId: conv.id,
           senderId: userId,
@@ -345,7 +379,7 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
       } as any);
     }
 
-    res.status(201).json({ success: true, conversation: conv });
+    res.status(201).json({ success: true, conversation: conv, message: createdMessage });
   } catch (err) {
     next(err);
   }
@@ -429,6 +463,52 @@ export const updateConversationState = async (req: AuthenticatedRequest, res: Re
     });
 
     res.json({ success: true, state });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const markMessageRead = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const { id } = req.params;
+
+    const message = await prisma.message.findUnique({
+      where: { id },
+      include: { conversation: true }
+    });
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    if (message.conversation.userA !== userId && message.conversation.userB !== userId && req.user?.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    // Only mark it read if it hasn't been read yet and the sender is not the current user
+    if (message.senderId === userId) {
+      return res.status(403).json({ success: false, message: "Cannot mark your own message as read" });
+    }
+
+    if (!message.readAt) {
+      await prisma.message.update({
+        where: { id },
+        data: { readAt: new Date() }
+      });
+      
+      // Decrement conversation unread count safely
+      if (message.conversation.unread > 0) {
+        await prisma.conversation.update({
+          where: { id: message.conversationId },
+          data: { unread: { decrement: 1 } }
+        });
+      }
+    }
+
+    res.json({ success: true, message: "Message marked as read" });
   } catch (err) {
     next(err);
   }
