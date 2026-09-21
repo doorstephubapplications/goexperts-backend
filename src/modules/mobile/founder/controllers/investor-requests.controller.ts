@@ -30,8 +30,15 @@ export const listInvestorRequests = async (req: AuthRequest, res: Response, next
     const skip = (page - 1) * limit;
 
     const [requests, total] = await Promise.all([
-      prisma.investment.findMany({ where: { startup: req.user.id, status: 'Pending' }, skip, take: limit, orderBy: { createdAt: 'desc' } }),
-      prisma.investment.count({ where: { startup: req.user.id, status: 'Pending' } })
+      prisma.investment.findMany({
+        where: { startup: req.user.id, status: { in: ['Pending', 'Active', 'Rejected'] } },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.investment.count({
+        where: { startup: req.user.id, status: { in: ['Pending', 'Active', 'Rejected'] } },
+      })
     ]);
     return res.json(successResponse('Investor requests retrieved', requests, { page, limit, total, totalPages: Math.ceil(total / limit) }));
   } catch (error) { next(error); }
@@ -98,10 +105,35 @@ export const rejectRequest = async (req: AuthRequest, res: Response, next: NextF
 
 export const scheduleRequestMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { date, time } = req.body;
+    const { date, time, title, agenda, meetingLink } = req.body;
     const investment = await findOwnedInvestmentRequest(req.params.id, req.user.id);
     if (!investment) return res.status(404).json(errorResponse('Request not found', 'NOT_FOUND'));
-    await prisma.investment.update({ where: { id: investment.id }, data: { meetingDate: `${date}T${time}Z` } });
+
+    const meetingDateStr = `${date}T${time}Z`;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.investment.update({ 
+        where: { id: investment.id }, 
+        data: { meetingDate: meetingDateStr } 
+      });
+
+      await tx.meeting.create({
+        data: {
+          title: title || 'Offer Meeting',
+          agenda: agenda || '',
+          founder: req.user.id,
+          investor: investment.investor,
+          date,
+          time,
+          meetingLink: meetingLink || '',
+          createdBy: req.user.id,
+          status: 'Scheduled',
+          mode: 'Online',
+          duration: 45
+        }
+      });
+    });
+
     return res.json(successResponse('Meeting scheduled for request'));
   } catch (error) { next(error); }
 };
