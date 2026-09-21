@@ -116,6 +116,7 @@ model User {
   longitude               Float?
   bio                     String?
   referralCode            String?                 @unique @map("referral_code")
+  timezone                String                  @default("UTC")
   createdAt               DateTime                @default(now()) @map("created_at")
   updatedAt               DateTime                @updatedAt @map("updated_at")
   lastLoginAt             DateTime?               @map("last_login_at")
@@ -175,6 +176,7 @@ model User {
   careerApplications            CareerApplication[]
   savedJobs                     SavedJob[]
   recruiterNotes                RecruiterNote[]
+  messageEmailDigests           MessageEmailDigest[]
 
   @@index([role])
   @@index([status])
@@ -550,6 +552,19 @@ model Message {
   @@index([conversationId], map: "messages_conversation_id_fkey")
   @@index([replyToId], map: "messages_reply_to_id_fkey")
   @@map("messages")
+}
+
+model MessageEmailDigest {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  localDate String   @map("local_date")
+  status    String   @default("PROCESSING")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, localDate])
+  @@map("message_email_digests")
 }
 
 model Subscription {
