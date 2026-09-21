@@ -323,16 +323,41 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
            return res.status(200).json(successResponse('Ready to send connection request', { pendingConnection: true }));
         }
 
-        // Create Invitation
+        // Create the invitation and a visible pending conversation for the sender.
         const newInvite = await prisma.connectionInvitation.create({
           data: {
             senderId: req.user.id,
             receiverId: trueRecipientId,
             firstMessage: trimmedText,
-            status: 'PENDING'
+            status: 'PENDING',
           },
-          include: { sender: true }
+          include: { sender: true },
         });
+
+        const pendingConversation = await prisma.conversation.create({
+          data: {
+            name: 'Chat',
+            role: req.user.role,
+            status: 'PENDING',
+            userA: req.user.id,
+            userB: trueRecipientId,
+            msg: trimmedText,
+            time: new Date().toISOString(),
+          },
+        });
+
+        if (trimmedText || attachmentUrl) {
+          await prisma.message.create({
+            data: {
+              conversationId: pendingConversation.id,
+              from: 'me',
+              senderId: req.user.id,
+              text: trimmedText || '[Attachment]',
+              attachmentUrl: attachmentUrl || null,
+              time: new Date().toISOString(),
+            },
+          });
+        }
         
         await NotificationEngine.queueNotification({
           userId: trueRecipientId,
@@ -351,7 +376,13 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
           });
         } catch (err) {}
 
-        return res.status(200).json(successResponse('Connection request sent', newInvite));
+        return res.status(200).json(successResponse('Connection request sent', {
+          ...newInvite,
+          conversationId: pendingConversation.id,
+          status: 'PENDING',
+          isMine: true,
+          text: trimmedText,
+        }));
       }
     }
 
