@@ -183,7 +183,7 @@ export function getVerificationStats(user: any) {
                 : missingCount > 0
                     ? "MISSING"
                     : "PENDING",
-        accountVerified: profileApproved,
+        accountVerified: profileApproved || kycApproved,
         fullName: user.fullName,
         email: user.email,
     };
