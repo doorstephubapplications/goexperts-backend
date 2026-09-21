@@ -254,6 +254,7 @@ export const getConversation = async (req: AuthRequest, res: Response, next: Nex
       return {
         ...m,
         conversationId: conversation.id,
+        conversationStatus: conversation.status,
         from: isMine ? 'me' : m.from,
         senderId: (m as any).senderId || (isMine
           ? req.user.id
@@ -315,6 +316,28 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
         });
 
         if (existingInvite) {
+          if (existingInvite.status === 'PENDING' && existingInvite.senderId === req.user.id) {
+            const pendingConversation = await prisma.conversation.findFirst({
+              where: {
+                userA: req.user.id,
+                userB: trueRecipientId,
+                status: 'PENDING',
+                deletedAt: null,
+              },
+              include: { messages: { orderBy: { createdAt: 'asc' }, take: 1 } },
+            });
+            const firstMessage = pendingConversation?.messages?.[0];
+            return res.status(200).json(successResponse('Connection request pending', {
+              ...(firstMessage || {}),
+              id: firstMessage?.id || '',
+              conversationId: pendingConversation?.id || '',
+              text: firstMessage?.text || existingInvite.firstMessage || '',
+              senderId: req.user.id,
+              from: 'me',
+              isMine: true,
+              conversationStatus: 'PENDING',
+            }));
+          }
           return res.status(400).json(errorResponse('Connection invitation already exists or was rejected', 'INVITATION_EXISTS'));
         }
 
@@ -481,6 +504,7 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
         senderId: req.user.id,
         isMine: true,
         conversationId: conv.id,
+        conversationStatus: conv.status,
       })
     );
   } catch (error) {
