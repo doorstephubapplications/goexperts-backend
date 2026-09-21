@@ -1812,4 +1812,57 @@ router.get("/help-center/articles/:slug", async (req, res, next) => {
         next(err);
     }
 });
+// Public Investors List
+router.get("/investors", async (req, res, next) => {
+    try {
+        const { page = 1, pageSize = 12 } = req.query;
+        const skip = (Number(page) - 1) * Number(pageSize);
+        const take = Number(pageSize);
+        let filters = {};
+        if (req.query.filters) {
+            try {
+                filters = JSON.parse(req.query.filters);
+            }
+            catch { }
+        }
+        const where = { role: { in: ["investor", "Investor"] }, deletedAt: null };
+        if (filters.industry && filters.industry.in && filters.industry.in.length > 0) {
+            where.investorProfile = { ...where.investorProfile, focusAreas: { contains: filters.industry.in[0] } };
+        }
+        if (filters.stage && filters.stage.in) {
+            where.investorProfile = { ...where.investorProfile, preferredStage: { in: filters.stage.in } };
+        }
+        if (req.query.search) {
+            where.OR = [
+                { fullName: { contains: String(req.query.search) } },
+                { investorProfile: { firm: { contains: String(req.query.search) } } }
+            ];
+        }
+        const users = await prisma.user.findMany({
+            where,
+            include: { investorProfile: true },
+            skip,
+            take,
+            orderBy: { createdAt: "desc" }
+        });
+        const total = await prisma.user.count({ where });
+        const rows = users.map((u) => {
+            const p = u.investorProfile;
+            return {
+                id: u.id,
+                name: p?.firm || u.fullName || "Unnamed Investor",
+                pitch: p?.focusAreas || "Investment firm focused on early stage startups.",
+                industry: p?.focusAreas || "Multi-sector",
+                stage: p?.preferredStage || "Seed",
+                location: u.country || "Remote",
+                funding: (p?.ticketMin && p?.ticketMax) ? `$${p.ticketMin} - $${p.ticketMax}` : "Undisclosed",
+                verified: true
+            };
+        });
+        res.json({ success: true, rows, total, page: Number(page), pageSize: Number(pageSize) });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 export default router;

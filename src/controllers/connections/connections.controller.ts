@@ -190,7 +190,7 @@ export const acceptInvitation = async (req: AuthenticatedRequest, res: Response,
       return res.status(400).json({ success: false, message: 'Invitation is no longer pending' });
     }
 
-    const { conversation } = result;
+    const { conv: conversation } = result;
 
     // 4. Notify sender
     const title = 'Connection Accepted';

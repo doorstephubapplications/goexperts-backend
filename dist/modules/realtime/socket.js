@@ -71,6 +71,16 @@ export function initSocket(httpServer) {
                     const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });
                     if (conversation) {
                         recipientId = conversation.userA === user.id ? conversation.userB : conversation.userA;
+                        if (!conversation.projectId) {
+                            const [a, b] = [user.id, recipientId].sort();
+                            const connection = await prisma.connection.findUnique({
+                                where: { userOneId_userTwoId: { userOneId: a, userTwoId: b } }
+                            });
+                            if (!connection || connection.status !== 'ACTIVE') {
+                                ack?.({ success: false, message: 'You must be connected to send a message.' });
+                                return;
+                            }
+                        }
                         const nowLabel = new Date().toLocaleTimeString();
                         message = await prisma.message.create({
                             data: {

@@ -2118,7 +2118,7 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
         }
         next();
     });
-    router.use(`/admin/${tableName}`, authMiddleware, auditMiddleware("mutate", tableName), crudRouter);
+    router.use([`/admin/${tableName}`, `/admin/crud/${tableName}`], authMiddleware, auditMiddleware("mutate", tableName), crudRouter);
 });
 // Provide a convenience admin route for downloading invoice PDFs (used by admin UI)
 router.get("/admin/invoices/:id/download", authMiddleware, 

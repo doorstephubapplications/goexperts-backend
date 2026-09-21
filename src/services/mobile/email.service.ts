@@ -1071,3 +1071,25 @@ export const sendReferralCashbackEmail = (to: string, name: string, amount: numb
   `;
   return sendEmail(to, `You've earned ₹${amount} cashback! 💰`, shell(`You just received ₹${amount} in your wallet for referring ${friendName}!`, body));
 };
+
+export const sendSubscriptionReminderEmail = (to: string, name: string, planName: string, daysLeft: number, formattedExpiration: string, renewLink: string) => {
+  const firstName = (name || 'User').split(' ')[0];
+  const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Subscription Reminder</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Your plan expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''} ⏳</h1>
+    <p style="margin:0 0 16px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      Your <strong>${planName}</strong> is expiring on <strong>${formattedExpiration}</strong>.
+      Renew now to maintain uninterrupted access to GoExperts.
+    </p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
+      <tr>
+        <td align="center">
+          <a href="${renewLink}" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">Renew Subscription</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
+  `;
+  return sendEmail(to, `Your subscription expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`, shell(`Your ${planName} expires soon! Renew now.`, body));
+};
