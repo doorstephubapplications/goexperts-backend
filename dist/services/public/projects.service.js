@@ -33,10 +33,21 @@ export async function listPublicProjects(options) {
         if (categoryName)
             where.category = categoryName;
         if (search) {
+            const matchingSkills = search.length >= 2
+                ? await prisma.skill.findMany({
+                    where: { name: { contains: search }, status: "active" },
+                    select: { id: true, name: true },
+                    take: 20,
+                }).catch(() => [])
+                : [];
+            const technologyTerms = [
+                search,
+                ...matchingSkills.flatMap((skill) => [skill.id, skill.name]),
+            ];
             where.OR = [
                 { title: { contains: search } },
                 { category: { contains: search } },
-                { technology: { contains: search } },
+                ...technologyTerms.map((term) => ({ technology: { contains: term } })),
             ];
         }
         const total = await prisma.project.count({ where });

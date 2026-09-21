@@ -96,7 +96,11 @@ router.get("/settings/general", async (req, res) => {
 });
 router.get("/settings/splash", async (req, res) => {
     const result = await getSettingsSection("splash", req);
-    res.json(result);
+    res.json({
+        success: true,
+        section: result.section,
+        data: result.data,
+    });
 });
 const COUNTRY_INFO_MAP = {
     "india": { code: "IN", phoneCode: "+91", flag: "🇮🇳", currencyCode: "INR" },

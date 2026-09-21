@@ -279,7 +279,11 @@ export class NotificationService {
             }
         }
         const channelsToQueue = channel
-            ? (channel === "omnichannel" ? ["email", "push", "in_app"] : [channel])
+            ? (channel === "omnichannel"
+                ? ["email", "push", "in_app"]
+                : channel === "push"
+                    ? ["push", "in_app"]
+                    : [channel])
             : (templateChannels.length > 0 ? templateChannels : ["in_app"]);
         const notificationsCreated = [];
         for (const chan of channelsToQueue) {

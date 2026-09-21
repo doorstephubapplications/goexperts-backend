@@ -247,12 +247,8 @@ export const completePaymentFromWebhook = async (
     const { creditWalletForSelf } = await import("../../../common/helpers/portal-shared.js");
     await creditWalletForSelf(payment.userId, Number(payment.amount), "deposit", "Funds deposited via Payment Gateway");
   }
-<<<<<<< HEAD
-  
-=======
   if (purpose === 'wallet_topup') {
     await creditWalletForPayment(payment.userId, payment.id, payment.amount);
   }
->>>>>>> af01fa0296a817657ae9fe62f4a61b553a2feda5
   return payment;
 };
