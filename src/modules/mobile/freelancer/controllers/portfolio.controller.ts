@@ -169,15 +169,19 @@ const normalizeItem = async (body: Record<string, unknown>, existing?: Portfolio
   const now = new Date().toISOString();
 
   // Parse skills: accept [{skillId, skillName}], ["string"], or comma-separated string
-  const rawSkills = body.skills || body.technologies || existing?.skills || existing?.technologies;
+  const hasSkills = Object.prototype.hasOwnProperty.call(body, 'skills');
+  const rawSkills = hasSkills
+    ? body.skills
+    : body.technologies || existing?.skills || existing?.technologies;
   let skillNames: string[] = [];
   let inputSkillMap: Record<string, string> = {}; // name -> provided skillId
 
   if (Array.isArray(rawSkills)) {
     for (const item of rawSkills) {
-      if (typeof item === 'object' && item !== null && (item as any).skillName) {
-        const name = String((item as any).skillName).trim();
-        const id = (item as any).skillId ? String((item as any).skillId).trim() : '';
+      if (typeof item === 'object' && item !== null) {
+        const entry = item as any;
+        const name = String(entry.skillName || entry.name || entry.label || '').trim();
+        const id = String(entry.skillId || entry.id || '').trim();
         if (name) {
           skillNames.push(name);
           if (id) inputSkillMap[name.toLowerCase()] = id;

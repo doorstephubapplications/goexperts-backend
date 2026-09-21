@@ -200,7 +200,14 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
 
 export const getConversation = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const conversation = await resolveConversation(req.user.id, req.user.role, req.params.id);
+    const conversation = await resolveConversation(req.user.id, req.user.role, req.params.id)
+      || await prisma.conversation.findFirst({
+        where: {
+          id: req.params.id,
+          deletedAt: null,
+          OR: [{ userA: req.user.id }, { userB: req.user.id }],
+        },
+      });
     if (!conversation) {
       return res.json(successResponse('Messages retrieved', []));
     }
@@ -241,6 +248,7 @@ export const getConversation = async (req: AuthRequest, res: Response, next: Nex
       return {
         ...m,
         conversationId: conversation.id,
+        conversationStatus: conversation.status,
         from: isMine ? 'me' : m.from,
         senderId: (m as any).senderId || (isMine
           ? req.user.id

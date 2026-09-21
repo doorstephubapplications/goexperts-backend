@@ -558,7 +558,7 @@ model MessageEmailDigest {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   localDate String   @map("local_date")
-  status    String   @default("PROCESSING") // PROCESSING, SENT, FAILED
+  status    String   @default("PROCESSING")
   createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

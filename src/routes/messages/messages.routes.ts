@@ -7,8 +7,7 @@ import {
   createOrFindConversation,
   updateConversationStatus,
   addAdminNote,
-  updateConversationState,
-  markMessageRead
+  updateConversationState
 } from "../../controllers/messages/messages.controller.js";
 
 const router = Router();
@@ -22,7 +21,6 @@ router.get("/conversations/:id/messages", getConversationMessages as any);
 router.patch("/conversations/:id/status", updateConversationStatus as any);
 router.post("/conversations/:id/admin-note", addAdminNote as any);
 router.put("/conversations/:id/state", updateConversationState as any);
-router.patch("/:id/read", markMessageRead as any);
 
 export default router;
 

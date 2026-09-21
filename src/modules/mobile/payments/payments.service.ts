@@ -97,6 +97,29 @@ export const initiatePaymentService = async (
   };
 };
 
+const creditWalletForPayment = async (userId: string, paymentId: string, amount: number) => {
+  const wallet = await prisma.wallet.upsert({
+    where: { userId },
+    update: {},
+    create: { userId, balance: 0, currency: 'INR' },
+  });
+  const updated = await prisma.wallet.update({
+    where: { id: wallet.id },
+    data: { balance: { increment: amount } },
+  });
+  await prisma.walletTransaction.create({
+    data: {
+      walletId: wallet.id,
+      type: 'credit',
+      amount,
+      direction: 'credit',
+      description: `Wallet top-up for payment ${paymentId}`,
+      balanceAfter: updated.balance,
+      status: 'completed',
+    },
+  });
+};
+
 export const verifyPaymentService = async (
   userId: string,
   paymentId: string,
@@ -172,6 +195,9 @@ export const verifyPaymentService = async (
         : 'monthly';
     await activateUserSubscription(userId, planId, billingCycle);
   }
+  if (purpose === 'wallet_topup') {
+    await creditWalletForPayment(userId, payment.id, payment.amount);
+  }
 
   return { status: 'success', paymentId: payment.id };
 };
@@ -221,6 +247,12 @@ export const completePaymentFromWebhook = async (
     const { creditWalletForSelf } = await import("../../../common/helpers/portal-shared.js");
     await creditWalletForSelf(payment.userId, Number(payment.amount), "deposit", "Funds deposited via Payment Gateway");
   }
+<<<<<<< HEAD
   
+=======
+  if (purpose === 'wallet_topup') {
+    await creditWalletForPayment(payment.userId, payment.id, payment.amount);
+  }
+>>>>>>> af01fa0296a817657ae9fe62f4a61b553a2feda5
   return payment;
 };

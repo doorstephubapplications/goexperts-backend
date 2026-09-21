@@ -11,15 +11,26 @@ export const listContracts = async (req: AuthRequest, res: Response, next: NextF
     const search = String(req.query.search || req.query.q || '').trim();
     const status = req.query.status as string;
 
-    const where: any = { freelancerId: req.user.id };
+    const partyWhere = {
+      OR: [{ freelancerId: req.user.id }, { clientId: req.user.id }],
+    };
+    const where: any = { ...partyWhere };
     if (status) where.status = status;
     if (search) {
-      where.OR = [
-        { project: { title: { contains: search } } },
-        { project: { description: { contains: search } } },
-        { client: { fullName: { contains: search } } },
-        { contractNumber: { contains: search } },
-      ];
+      const searchFilter = {
+        OR: [
+          { project: { title: { contains: search } } },
+          { project: { description: { contains: search } } },
+          { client: { fullName: { contains: search } } },
+          { contractNumber: { contains: search } },
+        ],
+      };
+      if (partyWhere.OR) {
+        where.AND = [{ OR: partyWhere.OR }, searchFilter];
+        delete where.OR;
+      } else {
+        where.OR = searchFilter.OR;
+      }
     }
 
     const [contracts, total] = await Promise.all([
@@ -52,7 +63,10 @@ export const listContracts = async (req: AuthRequest, res: Response, next: NextF
 export const getContractDetails = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const contract = await prisma.contract.findFirst({
-      where: { id: req.params.id, freelancerId: req.user.id },
+      where: {
+        id: req.params.id,
+        OR: [{ freelancerId: req.user.id }, { clientId: req.user.id }],
+      },
       include: {
         client: {
           select: { id: true, fullName: true, avatarUrl: true }

@@ -79,14 +79,14 @@ export const notifyAccountStatusChanged = (userId: string, status: 'active' | 'i
     payload: { event: status === 'active' ? 'account_activated' : 'account_deactivated', status },
   });
 
-export const notifyProjectApplication = async (params: {
+export const notifyProjectApplication = (params: {
   clientId: string;
   freelancerId: string;
   freelancerName?: string;
   projectId: string;
   projectTitle?: string;
-}) => {
-  await queuePush({
+}) =>
+  queuePush({
     userId: params.clientId,
     type: 'PROJECT_APPLICATION_SUBMITTED',
     title: 'New project application',
@@ -98,17 +98,3 @@ export const notifyProjectApplication = async (params: {
       freelancerId: params.freelancerId,
     },
   });
-
-  await queuePush({
-    userId: params.freelancerId,
-    type: 'PROJECT_APPLICATION_SUBMITTED',
-    title: 'Application Submitted',
-    message: `You successfully applied to ${params.projectTitle || 'the project'}.`,
-    channel: 'all',
-    payload: {
-      event: 'project_application_submitted',
-      projectId: params.projectId,
-      freelancerId: params.freelancerId,
-    },
-  });
-};

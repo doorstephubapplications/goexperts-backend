@@ -20,6 +20,9 @@ export class NotificationEngine {
       await this.createQueueItem(data.userId, data.type, data.title, data.message, 'in_app', data.payload, data.scheduledAt);
       await this.createQueueItem(data.userId, data.type, data.title, data.message, 'email', data.payload, data.scheduledAt);
       await this.createQueueItem(data.userId, data.type, data.title, data.message, 'push', data.payload, data.scheduledAt);
+    } else if (data.channel === 'push') {
+      await this.createQueueItem(data.userId, data.type, data.title, data.message, 'push', data.payload, data.scheduledAt);
+      await this.createQueueItem(data.userId, data.type, data.title, data.message, 'in_app', data.payload, data.scheduledAt);
     } else {
       await this.createQueueItem(data.userId, data.type, data.title, data.message, data.channel, data.payload, data.scheduledAt);
     }

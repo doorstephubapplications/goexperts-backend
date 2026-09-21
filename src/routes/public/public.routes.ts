@@ -130,7 +130,11 @@ router.get("/settings/general", async (req: Request, res: Response) => {
 
 router.get("/settings/splash", async (req: Request, res: Response) => {
   const result = await getSettingsSection("splash", req);
-  res.json(result);
+  res.json({
+    success: true,
+    section: result.section,
+    data: result.data,
+  });
 });
 
 const COUNTRY_INFO_MAP: Record<string, { code: string; phoneCode: string; flag: string; currencyCode: string }> = {
@@ -2018,6 +2022,7 @@ router.get("/help-center/articles/:slug", async (req: Request, res: Response, ne
   }
 });
 
+<<<<<<< HEAD
 // Public Investors List
 router.get("/investors", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -2129,4 +2134,6 @@ router.get("/investors/:id", async (req: Request, res: Response, next: NextFunct
   }
 });
 
+=======
+>>>>>>> af01fa0296a817657ae9fe62f4a61b553a2feda5
 export default router;

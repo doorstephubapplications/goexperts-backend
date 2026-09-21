@@ -88,12 +88,20 @@ export const listMeetings = async (req: AuthRequest, res: Response, next: NextFu
 
     const [meetings, total] = await Promise.all([
       prisma.meeting.findMany({
-        where: { founder: req.user.id, deletedAt: null },
+        where: {
+          deletedAt: null,
+          OR: [{ founder: req.user.id }, { createdBy: req.user.id }],
+        },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.meeting.count({ where: { founder: req.user.id, deletedAt: null } }),
+      prisma.meeting.count({
+        where: {
+          deletedAt: null,
+          OR: [{ founder: req.user.id }, { createdBy: req.user.id }],
+        },
+      }),
     ]);
 
     const userIds = [...new Set(meetings.flatMap((meeting) => [meeting.founder, meeting.investor, meeting.createdBy].filter(Boolean) as string[]))];

@@ -112,85 +112,51 @@ export const acceptInvitation = async (req: AuthenticatedRequest, res: Response,
       return res.status(400).json({ success: false, message: 'Invitation is no longer pending' });
     }
 
-    const [userOneId, userTwoId] = [invitation.senderId, invitation.receiverId].sort();
-
-    // 1. Transactional Updates
-    const result = await prisma.$transaction(async (tx) => {
-      // Atomic state transition
-      const invUpdate = await tx.connectionInvitation.updateMany({
-        where: { id, receiverId: userId, status: 'PENDING' },
-        data: { status: 'ACCEPTED', acceptedAt: new Date() }
-      });
-
-      if (invUpdate.count === 0) {
-        return null;
-      }
-
-      const conn = await tx.connection.upsert({
-        where: { userOneId_userTwoId: { userOneId, userTwoId } },
-        update: { status: 'ACTIVE' },
-        create: { userOneId, userTwoId, status: 'ACTIVE' }
-      });
-
-      // Prevent duplicate conversation
-      let conv = await tx.conversation.findFirst({
-        where: {
-          OR: [
-            { userA: userOneId, userB: userTwoId },
-            { userA: userTwoId, userB: userOneId },
-          ],
-          contextType: 'CONNECTION' // wait, original didn't use contextType, but it used 'STARTUP' or default? The original didn't set contextType in create.
-        }
-      });
-      // The original code did not set contextType in conversation.create. 
-      // It just did: name: 'Chat', userA: userOneId, userB: userTwoId.
-      // So let's look for any generic conversation between the two.
-      
-      if (!conv) {
-        conv = await tx.conversation.findFirst({
-          where: {
-            OR: [
-              { userA: userOneId, userB: userTwoId },
-              { userA: userTwoId, userB: userOneId },
-            ]
-          }
-        });
-      }
-
-      if (!conv) {
-        conv = await tx.conversation.create({
-          data: {
-            name: 'Chat',
-            role: invitation.sender.role,
-            status: 'active',
-            userA: userOneId,
-            userB: userTwoId,
-            msg: invitation.firstMessage,
-            time: new Date().toISOString()
-          }
-        });
-      }
-
-      if (invitation.firstMessage) {
-        await tx.message.create({
-          data: {
-            conversationId: conv.id,
-            from: invitation.sender.fullName,
-            senderId: invitation.senderId,
-            text: invitation.firstMessage,
-            time: new Date().toISOString()
-          }
-        });
-      }
-
-      return { conn, conv };
+    // 1. Update status
+    const updated = await prisma.connectionInvitation.update({
+      where: { id },
+      data: { status: 'ACCEPTED', acceptedAt: new Date() }
     });
 
-    if (!result) {
-      return res.status(400).json({ success: false, message: 'Invitation is no longer pending' });
-    }
+    // 2. Create Connection
+    const [userOneId, userTwoId] = [invitation.senderId, invitation.receiverId].sort();
+    
+    await prisma.connection.upsert({
+      where: {
+        userOneId_userTwoId: { userOneId, userTwoId }
+      },
+      update: { status: 'ACTIVE' },
+      create: {
+        userOneId,
+        userTwoId,
+        status: 'ACTIVE'
+      }
+    });
 
-    const { conv: conversation } = result;
+    // 3. Create Conversation & Move Message
+    const conversation = await prisma.conversation.create({
+      data: {
+        name: 'Chat',
+        role: invitation.sender.role,
+        status: 'active',
+        userA: userOneId,
+        userB: userTwoId,
+        msg: invitation.firstMessage,
+        time: new Date().toISOString()
+      }
+    });
+
+    if (invitation.firstMessage) {
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          from: invitation.sender.fullName,
+          senderId: invitation.senderId,
+          text: invitation.firstMessage,
+          time: new Date().toISOString()
+        }
+      });
+    }
 
     // 4. Notify sender
     const title = 'Connection Accepted';
@@ -210,35 +176,13 @@ export const acceptInvitation = async (req: AuthenticatedRequest, res: Response,
 
     const { getIo } = await import('../../socket/index.js');
     try {
-      const io = getIo();
-      if (io) {
-        io.to(invitation.senderId).emit('connection_request_accepted', {
-          connectionId: userOneId, 
-          invitationId: id
-        });
-      }
+      getIo().to(invitation.senderId).emit('connection_request_accepted', {
+        connectionId: userOneId, // just payload
+        invitationId: id
+      });
     } catch (err) {}
     
-    // 5. Email sender
-    try {
-      const { sendEmail, shell } = await import('../../services/mobile/email.service.js');
-      const emailBody = `
-        <p>Hi ${invitation.sender.fullName},</p>
-        <p><strong>${invitation.receiver.fullName}</strong> (${invitation.receiver.role}) has accepted your connection request.</p>
-        <p>You can now start chatting with them on GoExperts.</p>
-        <p><a href="https://goexperts.in/dashboard/messages?conv=${conversation.id}" style="display:inline-block;padding:10px 20px;background:#10B981;color:#fff;text-decoration:none;border-radius:5px;font-weight:bold;">Open Conversation</a></p>
-      `;
-      // Don't wait for email to finish, let it run async
-      sendEmail(
-        invitation.sender.email,
-        "Your connection request was accepted",
-        shell("Connection Accepted", emailBody)
-      ).catch(e => console.error("Email error:", e));
-    } catch(err) {
-      console.error("Failed to trigger acceptance email", err);
-    }
-    
-    return res.json({ success: true, message: 'Invitation accepted successfully', data: result });
+    return res.json({ success: true, message: 'Invitation accepted successfully', data: updated });
   } catch (error) { next(error); }
 };
 
@@ -256,14 +200,14 @@ export const rejectInvitation = async (req: AuthenticatedRequest, res: Response,
       return res.status(404).json({ success: false, message: 'Invitation not found' });
     }
 
-    const updated = await prisma.connectionInvitation.updateMany({
-      where: { id, receiverId: userId, status: 'PENDING' },
-      data: { status: 'REJECTED', rejectedAt: new Date() }
-    });
-
-    if (updated.count === 0) {
+    if (invitation.status !== 'PENDING') {
       return res.status(400).json({ success: false, message: 'Invitation is no longer pending' });
     }
+
+    const updated = await prisma.connectionInvitation.update({
+      where: { id },
+      data: { status: 'REJECTED', rejectedAt: new Date() }
+    });
 
     const { getIO } = await import('../../modules/realtime/socket.js');
     try {

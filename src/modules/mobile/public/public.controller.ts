@@ -267,21 +267,21 @@ export const getExperienceLevels = async (req: Request, res: Response, next: Nex
   try {
     const options = await (prisma as any).masterOption?.findMany({
       where: { type: 'experience_level', status: 'active' },
-      orderBy: { label: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }, { id: 'asc' }],
       select: { id: true, label: true, value: true }
     }).catch(() => []);
 
     if (options && options.length > 0) {
-      return res.json(successResponse('Experience levels retrieved', options));
+      const seen = new Set<string>();
+      const uniqueOptions = options.filter((option: any) => {
+        const key = String(option.value || option.label || '').trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return res.json(successResponse('Experience levels retrieved', uniqueOptions));
     }
-
-    const dbLevels = await prisma.experienceLevel.findMany({
-      where: { status: 'active' },
-      orderBy: { createdAt: 'asc' }
-    }).catch(() => []);
-
-    const levels = dbLevels.map((l) => ({ id: l.id, label: l.name, value: l.name }));
-    return res.json(successResponse('Experience levels retrieved', levels));
+    return res.json(successResponse('Experience levels retrieved', []));
   } catch (error) { next(error); }
 };
 
@@ -1230,6 +1230,7 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
     }
     const andFilters: any[] = [];
     const focusSearchValues = new Set<string>();
+    let searchProfileIds: string[] = [];
     if (search) {
       focusSearchValues.add(search);
       const [matchingOptions, matchingIndustries] = await Promise.all([
@@ -1259,6 +1260,19 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
         if (item.id) focusSearchValues.add(item.id);
         if (item.name) focusSearchValues.add(item.name);
       });
+      const matchingProfiles = await prisma.investorProfile.findMany({
+        where: {
+          OR: [
+            { firm: { contains: search } },
+            ...[...focusSearchValues].map((value) => ({
+              focusAreas: { contains: value },
+            })),
+          ],
+        },
+        select: { userId: true },
+        take: 500,
+      }).catch(() => []);
+      searchProfileIds = matchingProfiles.map((profile) => profile.userId);
     }
     if (search) {
       andFilters.push({
@@ -1266,10 +1280,7 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
           { fullName: { contains: search } },
           { city: { contains: search } },
           { email: { contains: search } },
-          { investorProfile: { is: { firm: { contains: search } } } },
-          ...[...focusSearchValues].map((value) => ({
-            investorProfile: { is: { focusAreas: { contains: value } } },
-          })),
+          { id: { in: searchProfileIds } },
         ],
       });
     }
@@ -1307,10 +1318,17 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
         if (item.id) focusFilterSet.add(item.id);
         if (item.name) focusFilterSet.add(item.name);
       });
+      const matchingProfiles = await prisma.investorProfile.findMany({
+        where: {
+          OR: [...focusFilterSet].map((value) => ({
+            focusAreas: { contains: value },
+          })),
+        },
+        select: { userId: true },
+        take: 500,
+      }).catch(() => []);
       andFilters.push({
-        OR: [...focusFilterSet].map((value) => ({
-          investorProfile: { is: { focusAreas: { contains: value } } },
-        })),
+        id: { in: matchingProfiles.map((profile) => profile.userId) },
       });
     }
     if (andFilters.length > 0) {
@@ -1846,7 +1864,7 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
     const limit = parseInt(req.query.limit as string) || 20;
 
     const allBlogs = await prisma.blog.findMany({
-      where: { status: 'active' },
+      where: { status: 'active', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -1908,6 +1926,18 @@ export const search = async (req: Request, res: Response, next: NextFunction) =>
 
 export const getById = (modelName: string) => async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (modelName === 'blog') {
+      const blog = await prisma.blog.findFirst({
+        where: { id: req.params.id, status: 'active', deletedAt: null },
+      });
+
+      if (!blog) {
+        return res.status(404).json({ success: false, message: 'Blog not found' });
+      }
+
+      return res.json(successResponse('Blog details', blog));
+    }
+
     if (modelName === 'project') {
       const project = await prisma.project.findFirst({
         where: { id: req.params.id, deletedAt: null },

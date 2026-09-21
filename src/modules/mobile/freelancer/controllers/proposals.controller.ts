@@ -4,7 +4,6 @@ import { successResponse, errorResponse } from '../../../../core/response.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { notifyProjectApplication } from '../../../../services/mobile/push-events.service.js';
-import { sendEmail } from '../../../../services/mobile/email.service.js';
 
 const proposalAttachments = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -60,17 +59,26 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
     const status = req.query.status as string | undefined;
     const search = String(req.query.search || req.query.q || '').trim();
 
-    const where: any = { freelancerId: req.user.id, deletedAt: null };
+    const where: any = {
+      deletedAt: null,
+      OR: [
+        { freelancerId: req.user.id },
+        { project: { client: req.user.id } },
+      ],
+    };
     if (status) where.status = status;
 
     if (search) {
-      where.OR = [
-        { project: { title: { contains: search } } },
-        { project: { description: { contains: search } } },
-        { coverLetter: { contains: search } },
-        { project: { category: { contains: search } } },
-        { project: { technology: { contains: search } } },
-      ];
+      where.AND = [{ OR: where.OR }, {
+        OR: [
+          { project: { title: { contains: search } } },
+          { project: { description: { contains: search } } },
+          { coverLetter: { contains: search } },
+          { project: { category: { contains: search } } },
+          { project: { technology: { contains: search } } },
+        ],
+      }];
+      delete where.OR;
     }
 
     const [proposals, total] = await Promise.all([
@@ -136,30 +144,9 @@ export const createProposal = async (req: AuthRequest, res: Response, next: Next
           projectId: project.id,
           projectTitle: project.title,
         });
-
-        const clientUser = await prisma.user.findUnique({ where: { id: project.client }, select: { email: true, fullName: true } });
-        if (clientUser?.email) {
-          await sendEmail(
-            clientUser.email,
-            'New Project Application Received',
-            `<p>Hi ${clientUser.fullName || 'Client'},</p><p>A freelancer, ${req.user.fullName || 'someone'}, has just applied to your project <strong>${project.title}</strong>.</p><p>Log in to Go Experts to view the proposal.</p>`
-          ).catch((e) => console.error('Client email err:', e));
-        }
       } catch (notifError) {
         console.error('Failed to queue notification for proposal:', notifError);
       }
-    }
-
-    try {
-      if (req.user.email) {
-        await sendEmail(
-          req.user.email,
-          'Application Submitted Successfully',
-          `<p>Hi ${req.user.fullName || 'Freelancer'},</p><p>You have successfully applied to the project <strong>${project.title}</strong>.</p><p>Good luck!</p>`
-        ).catch((e) => console.error('Freelancer email err:', e));
-      }
-    } catch (emailErr) {
-      console.error('Failed to send freelancer email:', emailErr);
     }
 
     return res.status(201).json(successResponse('Proposal created', await shapeProposal(proposal, req.user.id)));
