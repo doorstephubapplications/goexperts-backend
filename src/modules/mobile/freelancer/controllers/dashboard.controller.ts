@@ -91,11 +91,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       });
     });
 
-    const upcomingMeetingsList = rawUpcomingMeetings.map(m => ({
-      ...m,
-      targetDetails: targetMap.get(m.founder === userId ? m.investor : m.founder) || null
-    }));
-
     // Compute earnings from payments
     const lifetimeEarnings = allPayments.reduce((acc, p) => acc + p.amount, 0);
     const now = new Date();
@@ -143,13 +138,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       proposals: proposalsChart
     };
 
-    const recentActivities = (notifications || []).map(n => ({
-      id: n.id,
-      title: n.title,
-      content: n.message,
-      createdAt: n.createdAt,
-    }));
-
     const authUser = await prisma.user.findUnique({
       where: { id: userId },
       include: { freelancerProfile: true },
@@ -196,14 +184,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       reviewCount: reviews.length,
       topSkills,
       projectStatistics: { total: acceptedProjects + completedProjects, completed: completedProjects },
-      charts: {
-        earnings: earningsChart,
-        projects: projectsChart,
-        proposals: proposalsChart,
-        monthlyActivity,
-      },
-      upcomingMeetingsList,
-      recentActivities,
     };
 
     return res.json(successResponse('Freelancer dashboard retrieved', data));

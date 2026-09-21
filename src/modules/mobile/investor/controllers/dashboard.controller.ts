@@ -162,24 +162,12 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       });
     });
 
-    const upcomingMeetingsList = rawUpcomingMeetings.map(m => ({
-      ...m,
-      founderDetails: meetingFounderMap.get(m.founder) || null
-    }));
-
     // Recent notifications as activities
     const notifications = await prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
-    const recentActivities = notifications.map(n => ({
-      id: n.id,
-      title: n.title,
-      content: n.message,
-      createdAt: n.createdAt,
-    }));
-
     // Portfolio value from active investments
     const activeInvestmentsList = allInvestments.filter(inv => inv.status === 'Active');
     const portfolioValue = activeInvestmentsList.reduce((sum, inv) => sum + inv.offer, 0);
@@ -275,19 +263,9 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         upcomingMeetings: upcomingMeetingsCount,
         watchlistCount,
         supportTickets: supportTicketsCount,
-        charts: {
-          portfolioGrowth,
-          investmentAllocation,
-          industryDistribution,
-          fundingStageDistribution,
-          monthlyInvestments,
-          roiTrend,
-        },
         widgets: {
           recommendedStartups,
           trendingStartups: trendingStartupsList,
-          recentActivities,
-          upcomingMeetingsList,
         },
       })
     );

@@ -108,11 +108,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       });
     });
 
-    const upcomingMeetingsList = rawUpcomingMeetings.map(m => ({
-      ...m,
-      targetDetails: targetMap.get(m.founder === userId ? m.investor : m.founder) || null
-    }));
-
     // Compute monthly spend & spend trend from real payments
     const now = new Date();
     const monthlySpend = allPayments
@@ -140,13 +135,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
     const acceptedProposals = await prisma.proposal.count({
       where: { project: { client: userId }, status: 'accepted' },
     });
-
-    const recentActivities = (notifications || []).map(n => ({
-      id: n.id,
-      title: n.title,
-      content: n.message,
-      createdAt: n.createdAt,
-    }));
 
     const authUser = await prisma.user.findUnique({
       where: { id: userId },
@@ -193,18 +181,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         upcomingMeetings,
         supportTickets: supportTicketsCount,
         walletBalance: totalSpendWallet?.balance || 0,
-        charts: {
-          spendTrend,
-          projectStatus: {
-            active: activeProjects,
-            draft: draftProjects,
-            completed: completedProjects,
-          },
-          proposalFunnel: { pending: pendingProposals, shortlisted: shortlistedProposals, accepted: acceptedProposals },
-          categoryDistribution,
-        },
-        upcomingMeetingsList,
-        recentActivities,
       })
     );
   } catch (error) {

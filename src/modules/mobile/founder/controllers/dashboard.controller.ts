@@ -165,11 +165,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       });
     });
 
-    const upcomingMeetingsList = rawUpcomingMeetings.map(m => ({
-      ...m,
-      investorDetails: investorMap.get(m.investor) || null
-    }));
-
     // Populate investor details for pending requests
     const investorIdsForInvestments = rawPendingInvestments.map(i => i.investor);
     const investmentInvestors = investorIdsForInvestments.length > 0 ? await prisma.user.findMany({
@@ -211,13 +206,6 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
-    const recentActivities = notifications.map(n => ({
-      id: n.id,
-      title: n.title,
-      content: n.message,
-      createdAt: n.createdAt,
-    }));
-
     // --- Compute real values from startup idea ---
     const fundingGoal = startupIdea?.funding || 0;
     const fundingRaised = allInvestments
@@ -340,20 +328,8 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         pendingDocuments: pendingDocumentsCount,
         unreadNotifications,
         unreadMessages,
-        charts: {
-          fundingProgress,
-          investorGrowth: investorGrowthArr,
-          startupProfileViews,
-          monthlyFundingTrend,
-          burnRate,
-          cashFlow,
-          revenueTrend,
-          milestoneCompletion,
-        },
         widgets: {
           recommendedInvestors,
-          upcomingMeetingsList,
-          recentActivities,
           recentDocuments: recentDocuments,
           aiSuggestions: aiSuggestions,
           pendingInvestorRequestsList,
