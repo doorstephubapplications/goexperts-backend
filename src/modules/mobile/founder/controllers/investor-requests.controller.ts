@@ -110,14 +110,15 @@ export const scheduleRequestMeeting = async (req: AuthRequest, res: Response, ne
     if (!investment) return res.status(404).json(errorResponse('Request not found', 'NOT_FOUND'));
 
     const meetingDateStr = `${date}T${time}Z`;
+    let createdMeeting: any;
 
     await prisma.$transaction(async (tx) => {
-      await tx.investment.update({ 
+      await tx.investment.update({
         where: { id: investment.id }, 
         data: { meetingDate: meetingDateStr } 
       });
 
-      await tx.meeting.create({
+      createdMeeting = await tx.meeting.create({
         data: {
           title: title || 'Offer Meeting',
           agenda: agenda || '',
@@ -134,7 +135,7 @@ export const scheduleRequestMeeting = async (req: AuthRequest, res: Response, ne
       });
     });
 
-    return res.json(successResponse('Meeting scheduled for request'));
+    return res.json(successResponse('Meeting scheduled for request', createdMeeting));
   } catch (error) { next(error); }
 };
 
