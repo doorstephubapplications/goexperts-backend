@@ -1,0 +1,1667 @@
+[2026-07-28T06:38:13.373Z] PRISMA ERROR:
+
+Invalid `prisma.country.findFirst()` invocation in
+C:\Users\goexp\Downloads\git\web\goexperts-ai\backend\src\routes\public\public.routes.ts:82:45
+
+  79 }
+  80 
+  81 if (!matchedCountry) {
+→ 82   matchedCountry = await prisma.country.findFirst(
+Error converting field "code" of expected non-nullable type "String", found incompatible value of "null".
+
+[2026-08-15T11:10:37.965Z] PRISMA ERROR:
+
+Invalid `prisma.project.findFirst()` invocation in
+D:\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:965:42
+
+  962 router.get("/projects/:slug", async (req: Request, res: Response, next: NextFunction) => {
+  963   try {
+  964     const { slug } = req.params;
+→ 965     const project = await prisma.project.findFirst({
+            where: {
+              OR: [
+                {
+                  id: "26d8ef1b-2f1e-4cba-8f64-3b04aac8138a"
+                },
+                {
+                  slug: "26d8ef1b-2f1e-4cba-8f64-3b04aac8138a"
+                }
+              ],
+              deletedAt: null
+            },
+            include: {
+              client: {
+              ~~~~~~
+                select: {
+                  fullName: true,
+                  email: true,
+                  avatarUrl: true,
+                  company: true,
+                  industry: true,
+                  verified: true
+                }
+              },
+          ?   contracts?: true,
+          ?   milestones?: true,
+          ?   proposals?: true,
+          ?   reviews?: true,
+          ?   tasks?: true
+            }
+          })
+
+Invalid scalar field `client` for include statement on model Project. Available options are marked with ?.
+Note that include statements only accept relation fields.
+
+[2026-08-15T11:10:38.018Z] PRISMA ERROR:
+
+Invalid `prisma.project.findFirst()` invocation in
+D:\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:965:42
+
+  962 router.get("/projects/:slug", async (req: Request, res: Response, next: NextFunction) => {
+  963   try {
+  964     const { slug } = req.params;
+→ 965     const project = await prisma.project.findFirst({
+            where: {
+              OR: [
+                {
+                  id: "26d8ef1b-2f1e-4cba-8f64-3b04aac8138a"
+                },
+                {
+                  slug: "26d8ef1b-2f1e-4cba-8f64-3b04aac8138a"
+                }
+              ],
+              deletedAt: null
+            },
+            include: {
+              client: {
+              ~~~~~~
+                select: {
+                  fullName: true,
+                  email: true,
+                  avatarUrl: true,
+                  company: true,
+                  industry: true,
+                  verified: true
+                }
+              },
+          ?   contracts?: true,
+          ?   milestones?: true,
+          ?   proposals?: true,
+          ?   reviews?: true,
+          ?   tasks?: true
+            }
+          })
+
+Invalid scalar field `client` for include statement on model Project. Available options are marked with ?.
+Note that include statements only accept relation fields.
+
+[2026-08-21T06:07:34.258Z] PRISMA ERROR:
+
+Invalid `prisma.user.findMany()` invocation in
+D:\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:764:36
+
+  761 
+  762 router.get("/delete-requests", async (req: Request, res: Response, next: NextFunction) => {
+  763   try {
+→ 764     const rows = await prisma.user.findMany(
+Authentication failed against database server at `localhost`, the provided database credentials for `goexperts_user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+
+[2026-08-22T05:55:13.297Z] PRISMA ERROR:
+
+Invalid `prisma.project.groupBy()` invocation in
+D:\goexperts\Go-Experts-backend\src\controllers\admin\sidebar-counts.controller.ts:39:22
+
+  36 prisma.user.count({ where: { role: "founder", deletedAt: null } }),
+  37 prisma.project.count({ where: { deletedAt: null } }),
+  38 prisma.project.count({ where: { status: "open", deletedAt: null } }),
+→ 39 prisma.project.groupBy({
+       select: {
+         _count: {
+           select: {
+             id: true
+           }
+         },
+         industry: true
+       },
+       by: [
+         "industry"
+       ]
+       ~~~~~~~~~~~~
+     })
+
+Invalid value for argument `by`. Expected ProjectScalarFieldEnum.
+
+[2026-08-22T05:55:19.245Z] PRISMA ERROR:
+
+Invalid `prisma.project.groupBy()` invocation in
+D:\goexperts\Go-Experts-backend\src\controllers\admin\sidebar-counts.controller.ts:39:22
+
+  36 prisma.user.count({ where: { role: "founder", deletedAt: null } }),
+  37 prisma.project.count({ where: { deletedAt: null } }),
+  38 prisma.project.count({ where: { status: "open", deletedAt: null } }),
+→ 39 prisma.project.groupBy({
+       select: {
+         _count: {
+           select: {
+             id: true
+           }
+         },
+         industry: true
+       },
+       by: [
+         "industry"
+       ]
+       ~~~~~~~~~~~~
+     })
+
+Invalid value for argument `by`. Expected ProjectScalarFieldEnum.
+
+[2026-08-22T05:55:55.015Z] PRISMA ERROR:
+
+Invalid `prisma.project.groupBy()` invocation in
+D:\goexperts\Go-Experts-backend\src\controllers\admin\sidebar-counts.controller.ts:39:22
+
+  36 prisma.user.count({ where: { role: "founder", deletedAt: null } }),
+  37 prisma.project.count({ where: { deletedAt: null } }),
+  38 prisma.project.count({ where: { status: "open", deletedAt: null } }),
+→ 39 prisma.project.groupBy({
+       select: {
+         _count: {
+           select: {
+             id: true
+           }
+         },
+         industry: true
+       },
+       by: [
+         "industry"
+       ]
+       ~~~~~~~~~~~~
+     })
+
+Invalid value for argument `by`. Expected ProjectScalarFieldEnum.
+
+[2026-08-23T03:08:25.244Z] PRISMA ERROR:
+
+Invalid `prisma.contract.findFirst()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\client\client.controller.ts:1688:44
+
+  1685 if (!user) return res.status(404).json({ success: false, message: "User not found" });
+  1686 
+  1687 const contractId = req.params.id;
+→ 1688 const contract = await prisma.contract.findFirst({
+         where: {
+           id: "1d6f8abd-f3f8-418e-8e4c-acc2a685c124",
+           project: {
+             clientId: undefined
+           }
+         },
+         include: {
+           project: true,
+           freelancer: true,
+           milestones: true,
+           ~~~~~~~~~~
+       ?   client?: true
+         }
+       })
+
+Unknown field `milestones` for include statement on model `Contract`. Available options are marked with ?.
+
+[2026-08-23T03:08:25.664Z] PRISMA ERROR:
+
+Invalid `prisma.contract.findFirst()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\client\client.controller.ts:1688:44
+
+  1685 if (!user) return res.status(404).json({ success: false, message: "User not found" });
+  1686 
+  1687 const contractId = req.params.id;
+→ 1688 const contract = await prisma.contract.findFirst({
+         where: {
+           id: "1d6f8abd-f3f8-418e-8e4c-acc2a685c124",
+           project: {
+             clientId: undefined
+           }
+         },
+         include: {
+           project: true,
+           freelancer: true,
+           milestones: true,
+           ~~~~~~~~~~
+       ?   client?: true
+         }
+       })
+
+Unknown field `milestones` for include statement on model `Contract`. Available options are marked with ?.
+
+[2026-08-23T05:07:27.598Z] PRISMA ERROR:
+
+Invalid `prisma.conversation.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\messages\messages.controller.ts:18:45
+
+  15 const userId = requireUser(req, res);
+  16 if (!userId) return;
+  17 
+→ 18 const convs = await prisma.conversation.findMany({
+       where: {
+         OR: [
+           {
+             userA: "8c7c55c5-6651-4955-a42e-86f35b55bb17"
+           },
+           {
+             userB: "8c7c55c5-6651-4955-a42e-86f35b55bb17"
+           }
+         ]
+       },
+       include: {
+         project: {
+         ~~~~~~~
+           select: {
+             id: true,
+             title: true
+           }
+         },
+     ?   messages?: true
+       },
+       orderBy: {
+         updatedAt: "desc"
+       }
+     })
+
+Unknown field `project` for include statement on model `Conversation`. Available options are marked with ?.
+
+[2026-08-23T05:07:27.679Z] PRISMA ERROR:
+
+Invalid `prisma.conversation.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\messages\messages.controller.ts:18:45
+
+  15 const userId = requireUser(req, res);
+  16 if (!userId) return;
+  17 
+→ 18 const convs = await prisma.conversation.findMany({
+       where: {
+         OR: [
+           {
+             userA: "8c7c55c5-6651-4955-a42e-86f35b55bb17"
+           },
+           {
+             userB: "8c7c55c5-6651-4955-a42e-86f35b55bb17"
+           }
+         ]
+       },
+       include: {
+         project: {
+         ~~~~~~~
+           select: {
+             id: true,
+             title: true
+           }
+         },
+     ?   messages?: true
+       },
+       orderBy: {
+         updatedAt: "desc"
+       }
+     })
+
+Unknown field `project` for include statement on model `Conversation`. Available options are marked with ?.
+
+[2026-08-23T08:25:40.331Z] PRISMA ERROR:
+
+Invalid `prisma.conversation.findUnique()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\messages\messages.controller.ts:104:44
+
+  101 const { id } = req.params;
+  102 if (!id) return res.status(400).json({ success: false, message: "conversation id required" });
+  103 
+→ 104 const conv = await prisma.conversation.findUnique({
+        where: {
+          id: "b55f5483-28e9-4903-bcb1-c8c601c4d954"
+        },
+        include: {
+          project: {
+            select: {
+              id: true,
+              title: true,
+              clientId: true,
+              ~~~~~~~~
+      ?       client?: true,
+      ?       freelancer?: true,
+      ?       budget?: true,
+      ?       budgetMin?: true,
+      ?       budgetMax?: true,
+      ?       category?: true,
+      ?       technology?: true,
+      ?       timeline?: true,
+      ?       description?: true,
+      ?       workMode?: true,
+      ?       experienceLevel?: true,
+      ?       attachments?: true,
+      ?       rawDetails?: true,
+      ?       shareCount?: true,
+      ?       status?: true,
+      ?       createdAt?: true,
+      ?       updatedAt?: true,
+      ?       deletedAt?: true,
+      ?       industryId?: true,
+      ?       contracts?: true,
+      ?       milestones?: true,
+      ?       proposals?: true,
+      ?       reviews?: true,
+      ?       tasks?: true,
+      ?       Invitation?: true,
+      ?       Shortlist?: true,
+      ?       Conversation?: true,
+      ?       _count?: true
+            }
+          }
+        }
+      })
+
+Unknown field `clientId` for select statement on model `Project`. Available options are marked with ?.
+
+[2026-08-23T17:24:58.455Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:25:06.367Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:25:07.235Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:31:14.296Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:31:14.371Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:35:49.132Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:35:49.270Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:36:24.268Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "010adca1-2198-4e52-a4fd-3363fbca6497"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:36:24.355Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "010adca1-2198-4e52-a4fd-3363fbca6497"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:36:45.714Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "010adca1-2198-4e52-a4fd-3363fbca6497"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:36:45.794Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "010adca1-2198-4e52-a4fd-3363fbca6497"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:37:02.350Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-23T17:37:06.656Z] PRISMA ERROR:
+
+Invalid `prisma.referral.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\referral\referral.controller.ts:63:45
+
+  60 const referralLink = `${process.env.FRONTEND_URL || "http://localhost:5175"}/register?ref=${user.referralCode}`;
+  61 
+  62 // Get referrals
+→ 63 const referrals = await prisma.referral.findMany({
+       where: {
+         referrerId: "0162e163-a042-4e6d-9030-66b8ec6a319a"
+       },
+       include: {
+         referredUser: {
+         ~~~~~~~~~~~~
+           select: {
+             fullName: true,
+             createdAt: true
+           }
+         },
+         campaign: {
+           select: {
+             name: true
+           }
+         },
+     ?   events?: true,
+     ?   rewards?: true,
+     ?   click?: true,
+     ?   referee?: true,
+     ?   referrer?: true
+       }
+     })
+
+Unknown field `referredUser` for include statement on model `Referral`. Available options are marked with ?.
+
+[2026-08-25T03:54:42.410Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:54:42.432Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:54:52.397Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:55:03.256Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:55:13.257Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:55:23.249Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:55:30.566Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:55:41.249Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-08-25T03:55:51.254Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:29:28
+
+  26 const take = Number(pageSize);
+  27 
+  28 const [tickets, total] = await Promise.all([
+→ 29   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+           ~~~~~~~~
+             orderBy: {
+               createdAt: "asc"
+             }
+           }
+         }
+       })
+
+Unknown field `messages` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+<<<<<<< Updated upstream
+[2026-09-11T08:25:16.443Z] PRISMA ERROR:
+
+Invalid `prisma.project.count()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\sidebar-counts.controller.ts:60:48
+
+  57 if (lastRead) {
+  58   whereClause.createdAt = { gt: new Date(lastRead) };
+  59 }
+→ 60 const unreadCount = await prisma.project.count(
+Timed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 9)
+
+[2026-09-11T08:26:49.706Z] PRISMA ERROR:
+
+Invalid `prisma.user.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:900:36
+
+  897 
+  898 router.get("/delete-requests", async (req: Request, res: Response, next: NextFunction) => {
+  899   try {
+→ 900     const rows = await prisma.user.findMany(
+Timed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 9)
+
+[2026-09-12T05:12:40.973Z] PRISMA ERROR:
+
+Invalid `prisma.user.findUnique()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\auth\auth.controller.ts:2620:36
+
+  2617 try {
+  2618   const { email } = req.query;
+  2619   if (!email) return res.json({ success: true, message: 'Verified', data: { verified: false } });
+→ 2620   const user = await prisma.user.findUnique(
+Server has closed the connection.
+
+[2026-09-12T05:12:42.986Z] PRISMA ERROR:
+
+Invalid `prisma.user.findUnique()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\auth\auth.controller.ts:2620:36
+
+  2617 try {
+  2618   const { email } = req.query;
+  2619   if (!email) return res.json({ success: true, message: 'Verified', data: { verified: false } });
+→ 2620   const user = await prisma.user.findUnique(
+Server has closed the connection.
+
+[2026-09-15T04:49:46.766Z] PRISMA ERROR:
+
+Invalid `prisma.country.findFirst()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:317:45
+
+  314 }
+  315 
+  316 if (!matchedCountry) {
+→ 317   matchedCountry = await prisma.country.findFirst(
+Authentication failed against database server at `127.0.0.1`, the provided database credentials for `root` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `127.0.0.1`.
+
+[2026-09-15T04:49:46.780Z] PRISMA ERROR:
+=======
+[2026-09-11T05:36:58.335Z] PRISMA ERROR:
+
+Invalid `prisma.country.findFirst()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:312:45
+
+  309 }
+  310 
+  311 if (!matchedCountry) {
+→ 312   matchedCountry = await prisma.country.findFirst(
+Authentication failed against database server at `localhost`, the provided database credentials for `goexperts_user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+
+[2026-09-11T05:36:58.387Z] PRISMA ERROR:
+
+Invalid `prisma.subscriptionPlan.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:1314:49
+
+  1311   whereCondition.duration = { not: "90_days" };
+  1312 }
+  1313 
+→ 1314 const plans = await prisma.subscriptionPlan.findMany(
+Authentication failed against database server at `localhost`, the provided database credentials for `goexperts_user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+
+[2026-09-11T05:36:58.390Z] PRISMA ERROR:
+>>>>>>> Stashed changes
+
+Invalid `prisma.user.count()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\prisma-compat.ts:286:37
+
+  283 const orderByClause = { [orderBy]: ascending ? "asc" : "desc" } as const;
+  284 
+  285 try {
+→ 286   const total = await prisma.user.count(
+<<<<<<< Updated upstream
+Authentication failed against database server at `127.0.0.1`, the provided database credentials for `root` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `127.0.0.1`.
+
+[2026-09-15T04:49:46.847Z] PRISMA ERROR:
+
+Invalid `prisma.subscriptionPlan.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:1319:49
+
+  1316   whereCondition.duration = { not: "90_days" };
+  1317 }
+  1318 
+→ 1319 const plans = await prisma.subscriptionPlan.findMany(
+Authentication failed against database server at `127.0.0.1`, the provided database credentials for `root` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `127.0.0.1`.
+
+[2026-09-15T04:49:46.900Z] PRISMA ERROR:
+=======
+Authentication failed against database server at `localhost`, the provided database credentials for `goexperts_user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+
+[2026-09-11T05:36:58.426Z] PRISMA ERROR:
+>>>>>>> Stashed changes
+
+Invalid `prisma.user.count()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\prisma-compat.ts:286:37
+
+  283 const orderByClause = { [orderBy]: ascending ? "asc" : "desc" } as const;
+  284 
+  285 try {
+→ 286   const total = await prisma.user.count(
+<<<<<<< Updated upstream
+Authentication failed against database server at `127.0.0.1`, the provided database credentials for `root` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `127.0.0.1`.
+
+[2026-09-15T04:49:46.930Z] PRISMA ERROR:
+
+Invalid `prisma.subscriptionPlan.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:1319:49
+
+  1316   whereCondition.duration = { not: "90_days" };
+  1317 }
+  1318 
+→ 1319 const plans = await prisma.subscriptionPlan.findMany(
+Authentication failed against database server at `127.0.0.1`, the provided database credentials for `root` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `127.0.0.1`.
+
+[2026-09-15T05:40:31.771Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:40:32.842Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:40:35.766Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:40:37.011Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:40:46.133Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:40:47.382Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:41:00.807Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:41:02.042Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:41:11.293Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:41:12.527Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+
+[2026-09-15T05:41:25.564Z] PRISMA ERROR:
+
+Invalid `prisma.masterOption.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\common\helpers\crud-factory.ts:107:47
+
+  104 const techMap = Object.fromEntries(techs.map((c: any) => [c.id, c.name]));
+  105 
+  106 const moIds = [...new Set(rows.flatMap((r: any) => [r.budgetRangeId, r.workMode]).filter(Boolean))];
+→ 107 const mos = await prisma.masterOption.findMany({
+        where: {
+          id: {
+            in: [
+              "3837dfac-c0ed-40e0-95fc-1226a94d43de",
+              "05287399-272f-4b03-a37e-4ed1c642f165",
+              "2819d222-0af1-4f3b-b069-9a113b674837",
+              "5d3a03e3-41f5-4609-87c9-46306fd2a004",
+              "0d01fe50-a980-4c6f-b589-27db5659bbc8"
+            ]
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          ~~~~
+      ?   type?: true,
+      ?   label?: true,
+      ?   value?: true,
+      ?   min?: true,
+      ?   max?: true,
+      ?   groupKey?: true,
+      ?   sortOrder?: true,
+      ?   metadata?: true,
+      ?   status?: true,
+      ?   createdAt?: true,
+      ?   updatedAt?: true
+        }
+      })
+
+Unknown field `name` for select statement on model `MasterOption`. Available options are marked with ?.
+=======
+Authentication failed against database server at `localhost`, the provided database credentials for `goexperts_user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+
+[2026-09-11T05:36:58.453Z] PRISMA ERROR:
+
+Invalid `prisma.subscriptionPlan.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:1314:49
+
+  1311   whereCondition.duration = { not: "90_days" };
+  1312 }
+  1313 
+→ 1314 const plans = await prisma.subscriptionPlan.findMany(
+Authentication failed against database server at `localhost`, the provided database credentials for `goexperts_user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+>>>>>>> Stashed changes
+
