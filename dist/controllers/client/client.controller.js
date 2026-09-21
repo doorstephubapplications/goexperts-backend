@@ -376,13 +376,14 @@ export const listClientProjects = async (req, res, next) => {
                 select: { id: true, label: true, value: true, min: true, max: true }
             }).catch(() => []);
         }
-        const enrichedRows = rows.map(r => {
+        let enrichedRows = rows.map(r => {
             const br = budgetRanges.find(b => b.id === r.budgetRangeId);
             return {
                 ...r,
                 budgetRange: br ? { id: br.id, label: br.label, min: br.min, max: br.max, value: br.value } : null
             };
         });
+        enrichedRows = await enrichProjects(enrichedRows);
         const totalPages = Math.ceil(total / limit);
         res.json({
             success: true,
@@ -556,7 +557,8 @@ export const getClientProject = async (req, res, next) => {
                 select: { id: true, label: true, value: true, min: true, max: true }
             }).catch(() => null);
         }
-        res.json({ success: true, data: { ...project, budgetRange, tasks, proposals, contracts } });
+        const enrichedProject = (await enrichProjects([{ ...project, budgetRange, tasks, proposals, contracts }]))[0];
+        res.json({ success: true, data: enrichedProject });
     }
     catch (err) {
         handleError(err, res, next);
@@ -2368,3 +2370,89 @@ export const listClientRoles = async (req, res, next) => {
         handleError(err, res, next);
     }
 };
+async function enrichProjects(projects) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const allIds = new Set();
+    projects.forEach(r => {
+        ['category', 'technology', 'workMode', 'industryId', 'experienceLevel', 'skills'].forEach(field => {
+            const val = r[field];
+            if (typeof val === 'string') {
+                val.split(',').map(s => s.trim()).filter(s => uuidRegex.test(s)).forEach(id => allIds.add(id));
+            }
+        });
+        if (r.client && uuidRegex.test(r.client))
+            allIds.add(r.client);
+    });
+    const moMap = new Map();
+    if (allIds.size > 0) {
+        const idsArr = Array.from(allIds);
+        const [moRes, userRes, industryRes, workModeRes, skillRes, categoryRes] = await Promise.all([
+            prisma.masterOption?.findMany({
+                where: { id: { in: idsArr } },
+                select: { id: true, label: true, value: true }
+            }).catch(() => []),
+            prisma.user.findMany({
+                where: { id: { in: idsArr } },
+                select: { id: true, fullName: true }
+            }).catch(() => []),
+            prisma.industry.findMany({
+                where: { id: { in: idsArr } },
+                select: { id: true, name: true }
+            }).catch(() => []),
+            prisma.workMode?.findMany({
+                where: { id: { in: idsArr } },
+                select: { id: true, name: true }
+            }).catch(() => []),
+            prisma.skill.findMany({
+                where: { id: { in: idsArr } },
+                select: { id: true, name: true }
+            }).catch(() => []),
+            prisma.skillCategory.findMany({
+                where: { id: { in: idsArr } },
+                select: { id: true, name: true }
+            }).catch(() => [])
+        ]);
+        moRes?.forEach((mo) => moMap.set(mo.id, mo.label || mo.value));
+        userRes?.forEach((u) => moMap.set(u.id, u.fullName));
+        industryRes?.forEach((i) => moMap.set(i.id, i.name));
+        workModeRes?.forEach((w) => moMap.set(w.id, w.name));
+        skillRes?.forEach((s) => moMap.set(s.id, s.name));
+        categoryRes?.forEach((c) => moMap.set(c.id, c.name));
+    }
+    const mapVal = (val) => {
+        if (typeof val !== 'string')
+            return val;
+        return val.split(',').map(s => {
+            const t = s.trim();
+            // Handle prefix fallbacks for experience level if needed
+            if (t === 'mo_experience_level_intermediate')
+                return 'Intermediate';
+            if (t === 'mo_experience_level_expert')
+                return 'Expert';
+            if (t === 'mo_experience_level_beginner')
+                return 'Beginner';
+            return moMap.get(t) || t;
+        }).join(', ');
+    };
+    return projects.map(r => ({
+        ...r,
+        category: mapVal(r.category),
+        technology: mapVal(r.technology),
+        workMode: mapVal(r.workMode),
+        industryId: mapVal(r.industryId),
+        experienceLevel: mapVal(r.experienceLevel),
+        skills: mapVal(r.skills),
+        client: moMap.get(r.client) || r.client,
+        clientName: moMap.get(r.client) || r.client,
+        attachmentsParsed: (() => {
+            if (!r.attachments)
+                return [];
+            try {
+                return JSON.parse(r.attachments);
+            }
+            catch {
+                return [];
+            }
+        })()
+    }));
+}

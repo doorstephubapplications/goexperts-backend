@@ -181,21 +181,33 @@ export const completePaymentFromWebhook = async (
   txnid: string,
   productinfo: string
 ) => {
+  // Atomically update payment to 'completed' only if it isn't already completed.
+  // This prevents race conditions (double crediting) if the webhook is called concurrently.
+  const updateResult = await prisma.payment.updateMany({
+    where: { 
+      transactionId: txnid,
+      status: { not: 'completed' }
+    },
+    data: { status: 'completed' },
+  });
+
+  // If count is 0, the payment was either already completed or not found.
+  if (updateResult.count === 0) {
+    const existing = await prisma.payment.findFirst({ where: { transactionId: txnid } });
+    return existing || null;
+  }
+
+  // Now fetch the payment to proceed with business logic
   const payment = await prisma.payment.findFirst({
     where: { transactionId: txnid },
   });
   if (!payment) return null;
-  if (payment.status === 'completed') return payment;
-
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: 'completed' },
-  });
 
   const meta = (await loadPaymentMeta(payment.id)) || {};
   const parsed = parseProductInfo(productinfo || String(meta.productinfo || ''));
   const purpose = String(meta.purpose || parsed.purpose || '');
   const planId = String(meta.planId || parsed.planId || '');
+  
   if (purpose === 'subscription' && planId) {
     await activateUserSubscription(
       payment.userId,
@@ -205,6 +217,10 @@ export const completePaymentFromWebhook = async (
           ? 'yearly'
           : 'monthly')
     );
+  } else if (purpose === 'wallet_deposit' || productinfo.toLowerCase().includes('wallet')) {
+    const { creditWalletForSelf } = await import("../../../common/helpers/portal-shared.js");
+    await creditWalletForSelf(payment.userId, Number(payment.amount), "deposit", "Funds deposited via Payment Gateway");
   }
+  
   return payment;
 };

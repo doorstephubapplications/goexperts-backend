@@ -2,6 +2,20 @@ import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { getIo } from "../../socket/index.js";
+import { sendEmail, shell } from "../../services/mobile/email.service.js";
+import { emitNotification } from "../../services/notifications/notification-events.service.js";
+
+// Helper to attach requester info to tickets
+async function attachRequesters(tickets: any[]) {
+  const requesterIds = [...new Set(tickets.map(t => t.requesterId).filter(Boolean))] as string[];
+  if (requesterIds.length === 0) return tickets;
+  const users = await prisma.user.findMany({
+    where: { id: { in: requesterIds } },
+    select: { id: true, fullName: true, email: true, avatarUrl: true, role: true }
+  });
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+  return tickets.map(t => ({ ...t, requester: userMap[t.requesterId] || null }));
+}
 
 // 1. List All Tickets (Admin)
 export const listAdminTickets = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -31,17 +45,17 @@ export const listAdminTickets = async (req: AuthenticatedRequest, res: Response,
         skip,
         take,
         orderBy: { createdAt: "desc" },
-        include: {
-          messages: { orderBy: { createdAt: "asc" } }
-        }
+        include: { messages: { orderBy: { createdAt: "asc" } } }
       }),
       prisma.supportTicket.count({ where })
     ]);
 
+    const ticketsWithRequesters = await attachRequesters(tickets);
+
     res.json({
       success: true,
-      data: tickets,
-      items: tickets,
+      data: ticketsWithRequesters,
+      items: ticketsWithRequesters,
       total,
       page: Number(page),
       pageSize: take
@@ -58,15 +72,23 @@ export const getAdminTicket = async (req: AuthenticatedRequest, res: Response, n
     const ticket = await prisma.supportTicket.findUnique({
       where: { id },
       include: {
-        messages: {
-          orderBy: { createdAt: "asc" } // Admins see internal notes as well
-        }
+        messages: { orderBy: { createdAt: "asc" } }
       }
     });
 
     if (!ticket) return res.status(404).json({ success: false, message: "Ticket not found" });
 
-    res.json({ success: true, ticket, data: ticket });
+    // Attach requester info manually
+    let requester = null;
+    if (ticket.requesterId) {
+      requester = await prisma.user.findUnique({
+        where: { id: ticket.requesterId },
+        select: { id: true, fullName: true, email: true, avatarUrl: true, role: true }
+      });
+    }
+
+    const ticketWithRequester = { ...ticket, requester };
+    res.json({ success: true, ticket: ticketWithRequester, data: ticketWithRequester });
   } catch (err) {
     next(err);
   }
@@ -90,6 +112,30 @@ export const updateAdminTicket = async (req: AuthenticatedRequest, res: Response
       where: { id },
       data
     });
+
+    if ((status === "RESOLVED" || status === "CLOSED") && ticket.requesterId) {
+      const u = await prisma.user.findUnique({ where: { id: ticket.requesterId } });
+      if (u) {
+        await emitNotification({
+          userId: u.id,
+          role: ticket.requesterRole || u.role,
+          type: "TICKET_RESOLVED",
+          title: `Support Ticket ${status}`,
+          message: `Your support ticket #${ticket.ticketNumber?.slice(-8) || 'ticket'} has been ${status.toLowerCase()}.`,
+          actionUrl: "/dashboard/support"
+        }).catch(console.error);
+
+        if (u.email) {
+          const body = `
+            <p>Hi ${u.fullName || 'there'},</p>
+            <p>Your support ticket <b>#${ticket.ticketNumber?.slice(-8) || 'ticket'}</b> regarding "${ticket.subject}" has been marked as <b>${status}</b>.</p>
+            <p>If you have any further questions or if this issue was not fully resolved, you can reopen it by replying to the ticket in your dashboard.</p>
+            <a href="https://goexperts.com/dashboard/support" style="display:inline-block;padding:10px 20px;background:#6366f1;color:#fff;text-decoration:none;border-radius:6px;margin-top:15px;">View Ticket</a>
+          `;
+          await sendEmail(u.email, `Support Ticket ${status} - Go Experts`, shell(`Support Ticket #${ticket.ticketNumber?.slice(-8) || 'ticket'} ${status}`, body)).catch(console.error);
+        }
+      }
+    }
 
     // Notify user via socket
     const io = getIo();

@@ -566,7 +566,13 @@ router.post("/webhooks/easebuzz", async (req, res) => {
         const statusRaw = String(status || req.body?.udf1 || "").toLowerCase();
         const isBrowser = req.headers.accept?.includes("text/html");
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5175";
+        let userRole = "freelancer";
+        let isWalletDeposit = String(productinfo || "").toLowerCase().includes("wallet");
         if (txnid) {
+            const payment = await prisma.payment.findFirst({ where: { transactionId: String(txnid) }, include: { user: true } });
+            if (payment?.user) {
+                userRole = String(payment.user.role || "").toLowerCase();
+            }
             const { verifyEasebuzzReverseHash } = await import("../../modules/mobile/payments/gateways/easebuzz.gateway.js");
             const { completePaymentFromWebhook } = await import("../../modules/mobile/payments/payments.service.js");
             const valid = verifyEasebuzzReverseHash(String(txnid || ""), String(amount || ""), String(status || ""), String(hash || ""), String(email || ""), String(firstname || ""), String(productinfo || ""));
@@ -575,13 +581,22 @@ router.post("/webhooks/easebuzz", async (req, res) => {
             }
             else if (valid) {
                 // Mark as failed if valid hash but not success status
-                const payment = await prisma.payment.findFirst({ where: { transactionId: String(txnid) } });
                 if (payment) {
                     await prisma.payment.update({ where: { id: payment.id }, data: { status: "failed" } });
                 }
             }
         }
         if (isBrowser) {
+            if (isWalletDeposit) {
+                let prefix = "dashboard";
+                if (userRole.includes("founder"))
+                    prefix = "founder";
+                else if (userRole.includes("client") || userRole.includes("business"))
+                    prefix = "business";
+                else if (userRole.includes("investor"))
+                    prefix = "investor";
+                return res.redirect(`${frontendUrl}/${prefix}/wallet?status=${statusRaw}`);
+            }
             return res.redirect(`${frontendUrl}/pricing?status=${statusRaw}`);
         }
         return res.json({ success: true, received: true });

@@ -3,6 +3,7 @@ export type ConversationContextType =
   | "PROPOSAL"
   | "INVITATION"
   | "INVESTMENT"
+  | "INVESTOR"
   | "STARTUP"
   | "MEETING"
   | "SUPPORT"
@@ -20,8 +21,8 @@ export function canCreateConversation(
     return contextType === "SUPPORT" || contextType === "DISPUTE" || contextType === "ADMIN";
   }
 
-  // Any authenticated platform user can start a conversation about a startup or general inquiry
-  if (contextType === "STARTUP" || contextType === "GENERAL" || !contextType) {
+  // Any authenticated platform user can start a conversation about a startup, investor, or general inquiry
+  if (contextType === "STARTUP" || contextType === "GENERAL" || contextType === "INVESTOR" || !contextType) {
     return true;
   }
 
@@ -32,7 +33,7 @@ export function canCreateConversation(
   }
 
   if (rolePair === "founder-investor") {
-    return ["INVESTMENT", "STARTUP", "MEETING", "GENERAL"].includes(contextType || "");
+    return ["INVESTMENT", "INVESTOR", "STARTUP", "MEETING", "GENERAL"].includes(contextType || "");
   }
 
   return true;

@@ -1665,3 +1665,534 @@ Authentication failed against database server at `localhost`, the provided datab
 Please make sure to provide valid database credentials for the database server at `localhost`.
 >>>>>>> Stashed changes
 
+[2026-09-21T15:38:14.933Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:38:15.888Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findUnique()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:63:47
+
+  60 export const getAdminTicket = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  61   try {
+  62     const { id } = req.params;
+→ 63     const ticket = await prisma.supportTicket.findUnique({
+           where: {
+             id: "a4f8eca2-00b0-408a-bf79-a8c69e0ee4e5"
+           },
+           include: {
+             messages: {
+               orderBy: {
+                 createdAt: "asc"
+               }
+             },
+             requester: {
+             ~~~~~~~~~
+               select: {
+                 id: true,
+                 fullName: true,
+                 email: true,
+                 avatarUrl: true,
+                 role: true
+               }
+             }
+           }
+         })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:38:34.882Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findUnique()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:63:47
+
+  60 export const getAdminTicket = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  61   try {
+  62     const { id } = req.params;
+→ 63     const ticket = await prisma.supportTicket.findUnique({
+           where: {
+             id: "a4f8eca2-00b0-408a-bf79-a8c69e0ee4e5"
+           },
+           include: {
+             messages: {
+               orderBy: {
+                 createdAt: "asc"
+               }
+             },
+             requester: {
+             ~~~~~~~~~
+               select: {
+                 id: true,
+                 fullName: true,
+                 email: true,
+                 avatarUrl: true,
+                 role: true
+               }
+             }
+           }
+         })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:38:34.901Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:38:50.031Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:00.876Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:06.793Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findUnique()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:63:47
+
+  60 export const getAdminTicket = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  61   try {
+  62     const { id } = req.params;
+→ 63     const ticket = await prisma.supportTicket.findUnique({
+           where: {
+             id: "a4f8eca2-00b0-408a-bf79-a8c69e0ee4e5"
+           },
+           include: {
+             messages: {
+               orderBy: {
+                 createdAt: "asc"
+               }
+             },
+             requester: {
+             ~~~~~~~~~
+               select: {
+                 id: true,
+                 fullName: true,
+                 email: true,
+                 avatarUrl: true,
+                 role: true
+               }
+             }
+           }
+         })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:13.330Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:13.417Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:23.012Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:33.025Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:43.895Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:39:53.889Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:40:03.048Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+
+[2026-09-21T15:40:13.891Z] PRISMA ERROR:
+
+Invalid `prisma.supportTicket.findMany()` invocation in
+C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin\support-desk.controller.ts:31:28
+
+  28 const take = Number(pageSize);
+  29 
+  30 const [tickets, total] = await Promise.all([
+→ 31   prisma.supportTicket.findMany({
+         where: {},
+         skip: 0,
+         take: 100,
+         orderBy: {
+           createdAt: "desc"
+         },
+         include: {
+           messages: {
+             orderBy: {
+               createdAt: "asc"
+             }
+           },
+           requester: {
+           ~~~~~~~~~
+             select: {
+               id: true,
+               fullName: true,
+               email: true,
+               avatarUrl: true,
+               role: true
+             }
+           }
+         }
+       })
+
+Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
+

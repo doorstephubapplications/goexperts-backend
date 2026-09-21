@@ -47,7 +47,7 @@ const router = Router();
 router.use(authMiddleware as any);
 router.use(requireOnboarding as any);
 // --- Multi-Role Routes (Client, Investor, Founder) ---
-const multiRole = portalRoleMiddleware(["client", "investor", "founder"]) as any;
+const multiRole = portalRoleMiddleware(["client", "investor", "founder", "freelancer", "business", "user"]) as any;
 
 router.get("/projects", multiRole, listClientProjects as any);
 router.post("/projects/search", multiRole, listClientProjects as any);

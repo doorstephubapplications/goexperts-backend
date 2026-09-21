@@ -1846,20 +1846,67 @@ router.get("/investors", async (req, res, next) => {
             orderBy: { createdAt: "desc" }
         });
         const total = await prisma.user.count({ where });
+        const allIndustries = await prisma.industry.findMany().catch(() => []);
+        const allStages = await prisma.startupStage.findMany().catch(() => []);
+        const allCountries = await prisma.country.findMany().catch(() => []);
+        const allSkillCats = await prisma.skillCategory.findMany().catch(() => []);
+        const allSkills = await prisma.skill.findMany().catch(() => []);
+        const allOptions = [...allIndustries, ...allStages, ...allCountries, ...allSkillCats, ...allSkills];
+        const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+        const resolveNames = (idsStr, list) => {
+            if (!idsStr)
+                return "";
+            return idsStr.split(",").map(id => {
+                const trimmed = id.trim();
+                const found = list.find(x => x.id === trimmed);
+                if (found)
+                    return found.name;
+                if (isUUID(trimmed))
+                    return null; // If it's a UUID but not found, hide it
+                return trimmed; // If it's a regular string like "Multi-sector", keep it
+            }).filter(Boolean).join(", ");
+        };
         const rows = users.map((u) => {
             const p = u.investorProfile;
             return {
                 id: u.id,
                 name: p?.firm || u.fullName || "Unnamed Investor",
-                pitch: p?.focusAreas || "Investment firm focused on early stage startups.",
-                industry: p?.focusAreas || "Multi-sector",
-                stage: p?.preferredStage || "Seed",
-                location: u.country || "Remote",
-                funding: (p?.ticketMin && p?.ticketMax) ? `$${p.ticketMin} - $${p.ticketMax}` : "Undisclosed",
+                pitch: u.bio || "Investment firm focused on early stage startups.",
+                industry: resolveNames(p?.focusAreas || "", allOptions) || "Multi-sector",
+                stage: resolveNames(p?.preferredStage || "", allStages) || "Seed",
+                location: resolveNames(u.country || "", allOptions) || u.country || "Remote",
+                funding: (p?.ticketMin && p?.ticketMax) ? `$${p.ticketMin.toLocaleString()} - $${p.ticketMax.toLocaleString()}` : "Undisclosed",
                 verified: true
             };
         });
         res.json({ success: true, rows, total, page: Number(page), pageSize: Number(pageSize) });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+// Public Single Investor Details
+router.get("/investors/:id", async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const user = await prisma.user.findUnique({
+            where: { id },
+            include: { investorProfile: true }
+        });
+        if (!user || user.role?.toLowerCase() !== "investor") {
+            return res.status(404).json({ success: false, message: "Investor not found" });
+        }
+        const p = user.investorProfile;
+        res.json({
+            success: true,
+            data: {
+                id: user.id,
+                name: p?.firm || user.fullName || "Unnamed Investor",
+                pitch: user.bio || "Investment firm focused on early stage startups.",
+                firmName: p?.firm || "Ventures",
+                verified: true
+            }
+        });
     }
     catch (err) {
         next(err);
