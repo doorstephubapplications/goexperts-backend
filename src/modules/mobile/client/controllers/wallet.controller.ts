@@ -18,7 +18,12 @@ export const getTransactions = async (req: AuthRequest, res: Response, next: Nex
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
     const [transactions, total] = await Promise.all([
-      prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, skip, take: limit }),
+      prisma.walletTransaction.findMany({
+        where: { walletId: wallet.id },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
       prisma.walletTransaction.count({ where: { walletId: wallet.id } })
     ]);
     return res.json(successResponse('Transactions retrieved', transactions, { page, limit, total, totalPages: Math.ceil(total / limit) }));
