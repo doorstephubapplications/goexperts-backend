@@ -1,0 +1,85 @@
+import { Request, Response, NextFunction } from "express";
+import { prisma } from "../../config/database.js";
+import { issueEmailOtp, verifyEmailOtp } from "../../services/mobile/otp.service.js";
+import { sendPlanActivationOtpEmail, sendDynamicIndustryEmail } from "../../services/mobile/email.service.js";
+import { activateFreeTrialOnKycApproval } from "../../services/subscription/free-trial.service.js";
+
+const errorResponse = (message: string, code: string) => ({ success: false, message, code });
+const successResponse = (message: string, data?: any) => ({ success: true, message, data });
+
+export const sendActivationOtp = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json(errorResponse('Email is required', 'VALIDATION_ERROR'));
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { email, deletedAt: null }
+    });
+
+    if (!user) {
+      return res.status(404).json(errorResponse('User not found', 'USER_NOT_FOUND'));
+    }
+
+    if (!user.verified) {
+      return res.status(403).json(errorResponse('KYC is not approved yet', 'KYC_NOT_APPROVED'));
+    }
+
+    const { code } = await issueEmailOtp(email);
+    const emailSent = await sendPlanActivationOtpEmail(email, code);
+
+    if (!emailSent) {
+      return res.status(500).json(errorResponse('Failed to send OTP email', 'EMAIL_SEND_FAILED'));
+    }
+
+    return res.json(successResponse('OTP sent successfully', { email }));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyActivationOtp = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json(errorResponse('Email and OTP are required', 'VALIDATION_ERROR'));
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { email, deletedAt: null }
+    });
+
+    if (!user) {
+      return res.status(404).json(errorResponse('User not found', 'USER_NOT_FOUND'));
+    }
+
+    // Verify OTP (returns { valid: boolean, reason?: string })
+    const otpResult = verifyEmailOtp(email, otp);
+    if (!otpResult.valid) {
+      const msg = otpResult.reason === 'EXPIRED'
+        ? 'OTP has expired. Please request a new one.'
+        : 'Invalid OTP. Please try again.';
+      return res.status(400).json(errorResponse(msg, otpResult.reason || 'INVALID_OTP'));
+    }
+
+    // Activate the free trial
+    const activation = await activateFreeTrialOnKycApproval(user.id);
+
+    // Send dynamic industry-level engagement email (Email #3)
+    try {
+      await sendDynamicIndustryEmail(user.email, user.fullName || 'User', user.role);
+    } catch (emailErr) {
+      console.warn('[PlanActivation] Dynamic email failed:', emailErr);
+    }
+
+    return res.json(successResponse('Free plan activated successfully', {
+      planActivated: activation.success,
+      expiresAt: activation.expiresAt ?? null
+    }));
+  } catch (error) {
+    next(error);
+  }
+};

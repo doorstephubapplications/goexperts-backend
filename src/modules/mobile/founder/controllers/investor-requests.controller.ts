@@ -1,0 +1,144 @@
+import { Response, NextFunction } from 'express';
+import { prisma } from '../../../../config/database.js';
+import { successResponse, errorResponse } from '../../../../core/response.js';
+import { AuthRequest } from '../../../../middlewares/auth.js';
+import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
+
+const findOwnedInvestmentRequest = async (id: string, userId: string) => {
+  const founderIdeas = await prisma.startupIdea.findMany({
+    where: { founder: userId, deletedAt: null },
+    select: { id: true, startup: true },
+  }).catch(() => []);
+  const startupKeys = [
+    userId,
+    ...founderIdeas.map((idea) => idea.id),
+    ...founderIdeas.map((idea) => idea.startup).filter(Boolean),
+  ];
+  return prisma.investment.findFirst({
+    where: {
+      id,
+      deletedAt: null,
+      startup: { in: startupKeys },
+    } as any,
+  });
+};
+
+export const listInvestorRequests = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const skip = (page - 1) * limit;
+
+    const [requests, total] = await Promise.all([
+      prisma.investment.findMany({
+        where: { startup: req.user.id, status: { in: ['Pending', 'Active', 'Rejected'] } },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.investment.count({
+        where: { startup: req.user.id, status: { in: ['Pending', 'Active', 'Rejected'] } },
+      })
+    ]);
+    return res.json(successResponse('Investor requests retrieved', requests, { page, limit, total, totalPages: Math.ceil(total / limit) }));
+  } catch (error) { next(error); }
+};
+
+export const getInvestorRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const request = await findOwnedInvestmentRequest(req.params.id, req.user.id);
+    if (!request) return res.status(404).json(errorResponse('Request not found', 'NOT_FOUND'));
+    return res.json(successResponse('Investor request details', request));
+  } catch (error) { next(error); }
+};
+
+export const acceptRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const investment = await findOwnedInvestmentRequest(req.params.id, req.user.id);
+    if (!investment) return res.status(404).json(errorResponse('Request not found', 'NOT_FOUND'));
+
+    await prisma.$transaction([
+      prisma.investment.updateMany({
+        where: {
+          startup: investment.startup,
+          id: { not: investment.id },
+          status: 'Pending',
+        },
+        data: { status: 'Rejected' },
+      }),
+      prisma.investment.update({
+        where: { id: investment.id },
+        data: { status: 'Active' },
+      }),
+    ]);
+
+    await NotificationEngine.queueNotification({
+      userId: investment.investor,
+      type: 'investment_accepted',
+      title: 'Investment Accepted',
+      message: `${req.user.fullName || 'The founder'} has accepted your investment request!`,
+      channel: 'all',
+    });
+
+    return res.json(successResponse('Request accepted'));
+  } catch (error) { next(error); }
+};
+
+export const rejectRequest = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const investment = await findOwnedInvestmentRequest(req.params.id, req.user.id);
+    if (!investment) return res.status(404).json(errorResponse('Request not found', 'NOT_FOUND'));
+
+    await prisma.investment.update({ where: { id: investment.id }, data: { status: 'Rejected' } });
+
+    await NotificationEngine.queueNotification({
+      userId: investment.investor,
+      type: 'investment_rejected',
+      title: 'Investment Rejected',
+      message: `${req.user.fullName || 'The founder'} has declined your investment request at this time.`,
+      channel: 'all'
+    });
+
+    return res.json(successResponse('Request rejected'));
+  } catch (error) { next(error); }
+};
+
+export const scheduleRequestMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { date, time, title, agenda, meetingLink } = req.body;
+    const investment = await findOwnedInvestmentRequest(req.params.id, req.user.id);
+    if (!investment) return res.status(404).json(errorResponse('Request not found', 'NOT_FOUND'));
+
+    const meetingDateStr = `${date}T${time}Z`;
+    let createdMeeting: any;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.investment.update({
+        where: { id: investment.id }, 
+        data: { meetingDate: meetingDateStr } 
+      });
+
+      createdMeeting = await tx.meeting.create({
+        data: {
+          title: title || 'Offer Meeting',
+          agenda: agenda || '',
+          founder: req.user.id,
+          investor: investment.investor,
+          date,
+          time,
+          meetingLink: meetingLink || '',
+          createdBy: req.user.id,
+          status: 'Scheduled',
+          mode: 'Online',
+          duration: 45
+        }
+      });
+    });
+
+    return res.json(successResponse('Meeting scheduled for request', createdMeeting));
+  } catch (error) { next(error); }
+};
+
+export const messageInvestor = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try { return res.status(201).json(successResponse('Message sent to investor')); } catch (error) { next(error); }
+};
