@@ -53,6 +53,8 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       prisma.message.count({
         where: {
           conversation: {
+            deletedAt: null,
+            status: 'active',
             OR: [{ userA: userId }, { userB: userId }],
           },
           senderId: { not: userId },
