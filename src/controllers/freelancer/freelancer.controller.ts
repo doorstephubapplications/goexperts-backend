@@ -1243,12 +1243,18 @@ export const updateFreelancerProfile = async (
       }
     }
 
-    const hourlyRateRaw = body.hourlyRate;
+    const hourlyRateRaw = body.hourlyRate ?? body.monthlyRate;
     let hourlyRate = existing.freelancerProfile?.hourlyRate ?? null;
+    console.log("[DEBUG] updateFreelancerProfile - body:", JSON.stringify(body));
+    console.log("[DEBUG] updateFreelancerProfile - hourlyRateRaw:", hourlyRateRaw);
+    
     if (hourlyRateRaw != null && hourlyRateRaw !== "") {
       const n = Number(String(hourlyRateRaw).replace(/[^0-9.]/g, ""));
       hourlyRate = Number.isFinite(n) ? n : null;
+    } else if (hourlyRateRaw === "" || hourlyRateRaw === 0) {
+      hourlyRate = null;
     }
+    console.log("[DEBUG] updateFreelancerProfile - parsed hourlyRate:", hourlyRate);
 
     const currency = body.currency != null ? String(body.currency).trim() : existing.freelancerProfile?.currency ?? null;
     
