@@ -58,6 +58,14 @@ const resolveTrueUserId = async (targetId: string): Promise<string | null> => {
     const fp = await prisma.freelancerProfile.findUnique({ where: { id: targetId } }).catch(() => null);
     if (fp) user = await prisma.user.findUnique({ where: { id: fp.userId } }).catch(() => null);
   }
+  if (!user) {
+    const founder = await prisma.founderProfile.findUnique({ where: { id: targetId } }).catch(() => null);
+    if (founder) user = await prisma.user.findUnique({ where: { id: founder.userId } }).catch(() => null);
+  }
+  if (!user) {
+    const investor = await prisma.investorProfile.findUnique({ where: { id: targetId } }).catch(() => null);
+    if (investor) user = await prisma.user.findUnique({ where: { id: investor.userId } }).catch(() => null);
+  }
   return user ? user.id : null;
 };
 

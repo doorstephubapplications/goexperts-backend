@@ -73,6 +73,16 @@ const resolveConversation = async (
     const fp = await prisma.freelancerProfile.findUnique({ where: { id: targetId } }).catch(() => null);
     if (fp) user = await prisma.user.findUnique({ where: { id: fp.userId } }).catch(() => null);
   }
+  if (!user) {
+    // Check if targetId is a founderProfile ID
+    const founder = await prisma.founderProfile.findUnique({ where: { id: targetId } }).catch(() => null);
+    if (founder) user = await prisma.user.findUnique({ where: { id: founder.userId } }).catch(() => null);
+  }
+  if (!user) {
+    // Check if targetId is an investorProfile ID
+    const investor = await prisma.investorProfile.findUnique({ where: { id: targetId } }).catch(() => null);
+    if (investor) user = await prisma.user.findUnique({ where: { id: investor.userId } }).catch(() => null);
+  }
 
   if (user) {
     return findOrCreateDm(viewerId, viewerRole, user.id, projectId);
