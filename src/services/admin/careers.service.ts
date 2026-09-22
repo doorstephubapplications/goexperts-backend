@@ -6,60 +6,126 @@ export interface CareersPageContent {
   hero: {
     eyebrow: string;
     heading: string;
-    highlightText: string;
+    highlightText?: string;
     description: string;
-    image?: string;
-    imageAlt?: string;
+    ctaLabel?: string;
+    ctaAnchor?: string;
     primaryCtaLabel?: string;
     primaryCtaUrl?: string;
     secondaryCtaLabel?: string;
     secondaryCtaUrl?: string;
+    image?: string;
+    imageAlt?: string;
     enabled: boolean;
   };
-  whyJoinUs: Array<{
+  highlights?: Array<{
     id: string;
     icon: string;
     title: string;
     description: string;
-    order: number;
+    sortOrder: number;
     enabled: boolean;
   }>;
-  culture: {
+  whyGoExperts?: {
     title: string;
-    description: string;
-    videoUrl?: string;
-    valuesList: string[];
+    subtitle: string;
+    image?: string;
+    imageAlt?: string;
+    items: Array<{
+      id: string;
+      title: string;
+      description: string;
+      sortOrder: number;
+      enabled: boolean;
+    }>;
     enabled: boolean;
   };
-  benefits: Array<{
-    id: string;
-    icon: string;
+  lifeAtGoExperts?: {
+    title: string;
+    subtitle: string;
+    largeImage?: string;
+    largeImageAlt?: string;
+    smallImage1?: string;
+    smallImage1Alt?: string;
+    smallImage2?: string;
+    smallImage2Alt?: string;
+    enabled: boolean;
+  };
+  howWeWork?: {
+    title: string;
+    principles: Array<{
+      id: string;
+      title: string;
+      description: string;
+      sortOrder: number;
+      enabled: boolean;
+    }>;
+    enabled: boolean;
+  };
+  culture?: {
     title: string;
     description: string;
-    order: number;
+    items: Array<{
+      id: string;
+      number: string;
+      title: string;
+      description: string;
+      sortOrder: number;
+      enabled: boolean;
+    }>;
     enabled: boolean;
-  }>;
-  hiringProcess: Array<{
-    stepNumber: number;
-    icon: string;
+  };
+  people?: {
     title: string;
-    description: string;
-    order: number;
+    statement: string;
+    image?: string;
+    imageAlt?: string;
+    testimonials?: Array<{
+      id: string;
+      quote: string;
+      name: string;
+      designation: string;
+      department: string;
+      portrait?: string;
+      enabled: boolean;
+    }>;
     enabled: boolean;
-  }>;
-  faqs: Array<{
-    id: string;
-    question: string;
-    answer: string;
-    order: number;
-  }>;
+  };
+  benefits?: {
+    title: string;
+    items: Array<{
+      id: string;
+      icon: string;
+      title: string;
+      description: string;
+      sortOrder: number;
+      enabled: boolean;
+    }>;
+    enabled: boolean;
+  };
+  cta?: {
+    heading: string;
+    highlightText?: string;
+    description: string;
+    primaryLabel: string;
+    primaryUrl: string;
+    secondaryLabel?: string;
+    secondaryUrl?: string;
+    enabled: boolean;
+  };
   seo: {
     metaTitle: string;
     metaDescription: string;
     canonicalUrl: string;
     ogTitle: string;
     ogDescription: string;
+    ogImage?: string;
+    robotsIndex?: string;
   };
+  // Legacy fields â€” kept for backwards compatibility
+  whyJoinUs?: any[];
+  hiringProcess?: any[];
+  faqs?: any[];
 }
 
 const PAGE_NAME = "Careers";
@@ -108,40 +174,95 @@ export class CareersCmsService {
           secondaryCtaUrl: "#company-culture",
           enabled: true,
         },
-        whyJoinUs: [
-          { id: "w-1", icon: "Rocket", title: "High Ownership & Impact", description: "Ship real features that touch thousands of founders, freelancers, and enterprise customers globaly.", order: 1, enabled: true },
-          { id: "w-2", icon: "Globe2", title: "Remote-First Environment", description: "Work from wherever you perform best with flexible working hours and asynchronous collaboration tools.", order: 2, enabled: true },
-          { id: "w-3", icon: "TrendingUp", title: "Rapid Career Trajectory", description: "Fast-track your professional growth with mentorship, competitive equity grants, and clear career ladders.", order: 3, enabled: true },
+        highlights: [
+          { id: "h-1", icon: "People", title: "People", description: "Build with talented, curious people who genuinely care.", sortOrder: 1, enabled: true },
+          { id: "h-2", icon: "Product", title: "Product", description: "Solve meaningful problems at real scale.", sortOrder: 2, enabled: true },
+          { id: "h-3", icon: "Growth", title: "Growth", description: "Learn, experiment and evolve continuously.", sortOrder: 3, enabled: true },
+          { id: "h-4", icon: "Impact", title: "Impact", description: "Build something people use and genuinely value.", sortOrder: 4, enabled: true },
         ],
-        culture: {
-          title: "Rooted in Trust, Transparency & Speed",
-          description: "We foster an autonomous, low-friction work culture where great ideas win regardless of seniority or title. We celebrate transparency, relentless execution, and high psychological safety.",
-          valuesList: ["Customer First", "Extreme Ownership", "Default to Open", "Radical Simplicity"],
+        whyGoExperts: {
+          title: "Why Go Experts?",
+          subtitle: "Build meaningful products with people who care about what they create.",
+          image: "",
+          imageAlt: "Team working together",
+          items: [
+            { id: "w-1", title: "Meaningful Work", description: "Build products designed to create real opportunities for professionals and businesses.", sortOrder: 1, enabled: true },
+            { id: "w-2", title: "Ownership", description: "Take responsibility for ideas, decisions and outcomes from the very start.", sortOrder: 2, enabled: true },
+            { id: "w-3", title: "Continuous Learning", description: "Grow through experimentation, collaboration and challenging problems every day.", sortOrder: 3, enabled: true },
+            { id: "w-4", title: "Build Together", description: "Work across disciplines and perspectives to create better, more thoughtful products.", sortOrder: 4, enabled: true },
+          ],
           enabled: true,
         },
-        benefits: [
-          { id: "b-1", icon: "Banknote", title: "Competitive Salary & Equity", description: "Top 10% market compensation with generous stock option packages for all full-time employees.", order: 1, enabled: true },
-          { id: "b-2", icon: "HeartHandshake", title: "Comprehensive Healthcare", description: "Premium medical, dental, and mental health coverage for you and your dependents.", order: 2, enabled: true },
-          { id: "b-3", icon: "Sparkles", title: "Annual Learning Stipend", description: "$1,500 annual budget for conferences, courses, books, and professional certifications.", order: 3, enabled: true },
-          { id: "b-4", icon: "Coffee", title: "Home Office Setup", description: "$1,000 one-time setup allowance + modern MacBook Pro hardware provided on Day 1.", order: 4, enabled: true },
-        ],
-        hiringProcess: [
-          { stepNumber: 1, icon: "FileText", title: "1. Online Application", description: "Submit your resume and portfolio via our careers portal.", order: 1, enabled: true },
-          { stepNumber: 2, icon: "Headphones", title: "2. Recruiter Recruiter Call", description: "30-minute introductory call to align on role fit, culture, and expectations.", order: 2, enabled: true },
-          { stepNumber: 3, icon: "Code", title: "3. Technical Assessment", description: "Practical hands-on task or architecture discussion related to daily work.", order: 3, enabled: true },
-          { stepNumber: 4, icon: "Users", title: "4. Team Interviews", description: "Deep-dive sessions with future teammates and cross-functional partners.", order: 4, enabled: true },
-          { stepNumber: 5, icon: "CheckCircle2", title: "5. Official Offer", description: "Competitive offer extended with full compensation and benefits overview.", order: 5, enabled: true },
-        ],
-        faqs: [
-          { id: "f-1", question: "Can I work remotely from outside India?", answer: "Yes! Over 60% of our engineering and product teams work remotely across North America, Europe, Southeast Asia, and India.", order: 1 },
-          { id: "f-2", question: "What is the typical interview process timeline?", answer: "Our hiring process is designed to be fast and respectful. Most candidates complete all stages within 10 to 14 business days.", order: 2 },
-        ],
+        lifeAtGoExperts: {
+          title: "Life at Go Experts",
+          subtitle: "A place to build, learn, collaborate and grow.",
+          largeImage: "",
+          largeImageAlt: "Go Experts office",
+          smallImage1: "",
+          smallImage1Alt: "Team working",
+          smallImage2: "",
+          smallImage2Alt: "Team brainstorming",
+          enabled: true,
+        },
+        howWeWork: {
+          title: "How we work",
+          principles: [
+            { id: "p-1", title: "Think Customer First", description: "Understand the people who use what we build and make decisions that serve them.", sortOrder: 1, enabled: true },
+            { id: "p-2", title: "Move With Purpose", description: "Move quickly while keeping quality and long-term thinking in balance.", sortOrder: 2, enabled: true },
+            { id: "p-3", title: "Take Ownership", description: "Own problems end-to-end â€” from idea to outcome, without waiting to be asked.", sortOrder: 3, enabled: true },
+            { id: "p-4", title: "Keep Learning", description: "Stay curious, share what you know and continuously improve as a team.", sortOrder: 4, enabled: true },
+          ],
+          enabled: true,
+        },
+        culture: {
+          title: "Culture is how we work together.",
+          description: "We believe great products come from teams that trust each other, challenge assumptions and keep learning.",
+          items: [
+            { id: "c-1", number: "01", title: "Customer Focus", description: "Every decision starts with the people we serve.", sortOrder: 1, enabled: true },
+            { id: "c-2", number: "02", title: "Ownership", description: "We act like owners, not passengers.", sortOrder: 2, enabled: true },
+            { id: "c-3", number: "03", title: "Collaboration", description: "The best ideas emerge from honest, open dialogue.", sortOrder: 3, enabled: true },
+            { id: "c-4", number: "04", title: "Curiosity", description: "We ask why and keep exploring until we understand deeply.", sortOrder: 4, enabled: true },
+            { id: "c-5", number: "05", title: "Long-Term Thinking", description: "We build for durability, not just speed.", sortOrder: 5, enabled: true },
+            { id: "c-6", number: "06", title: "Continuous Learning", description: "We stay curious and grow through every experience.", sortOrder: 6, enabled: true },
+          ],
+          enabled: true,
+        },
+        people: {
+          title: "Meet the people behind Go Experts",
+          statement: "We're a team of builders, problem-solvers and people who enjoy turning difficult ideas into useful products.",
+          image: "",
+          imageAlt: "Go Experts team",
+          testimonials: [],
+          enabled: true,
+        },
+        benefits: {
+          title: "Grow with Go Experts",
+          items: [
+            { id: "b-1", icon: "BookOpen", title: "Learning & Development", description: "Budget for courses, conferences, books and certifications to keep growing.", sortOrder: 1, enabled: true },
+            { id: "b-2", icon: "TrendingUp", title: "Professional Growth", description: "Clear paths to grow your career with mentorship, feedback and honest conversations.", sortOrder: 2, enabled: true },
+            { id: "b-3", icon: "Layers", title: "Flexible Work", description: "Outcome-driven culture with flexibility on where and when you do your best work.", sortOrder: 3, enabled: true },
+            { id: "b-4", icon: "Users", title: "Team Collaboration", description: "Work closely with a diverse, talented and genuinely supportive team.", sortOrder: 4, enabled: true },
+            { id: "b-5", icon: "Target", title: "Meaningful Ownership", description: "Real responsibility and direct impact on the product from day one.", sortOrder: 5, enabled: true },
+            { id: "b-6", icon: "Heart", title: "Team Activities", description: "Regular team moments â€” both remote and in person.", sortOrder: 6, enabled: true },
+          ],
+          enabled: true,
+        },
+        cta: {
+          heading: "Build something that matters.",
+          description: "Explore what we're building and discover where you could contribute to the future of professional work.",
+          primaryLabel: "Explore Go Experts",
+          primaryUrl: "/",
+          secondaryLabel: "Visit Go Experts",
+          secondaryUrl: "/about",
+          enabled: true,
+        },
         seo: {
-          metaTitle: "Careers at Go Experts — Join Our Global Team",
-          metaDescription: "Explore open remote and hybrid positions at Go Experts. Work on borderless talent infrastructure, AI matching, and escrow platform technology.",
+          metaTitle: "Careers at Go Experts | Build the Future of Work",
+          metaDescription: "Explore careers at Go Experts and discover opportunities to build products, solve meaningful problems and shape the future of professional work.",
           canonicalUrl: "https://goexperts.in/careers",
-          ogTitle: "Careers — Build the Future of Work at Go Experts",
-          ogDescription: "We are hiring engineers, product designers, and growth leaders.",
+          ogTitle: "Careers at Go Experts | Build the Future of Work",
+          ogDescription: "Explore careers at Go Experts and discover opportunities to build products, solve meaningful problems and shape the future of professional work.",
+          robotsIndex: "index, follow",
         },
       };
 
@@ -263,7 +384,7 @@ export class CareersCmsService {
   }
 
   /* ============================================================ */
-  /* 💼 JOB OPENINGS METHODS                                      */
+  /* ðŸ’¼ JOB OPENINGS METHODS                                      */
   /* ============================================================ */
 
   /**
@@ -292,9 +413,9 @@ export class CareersCmsService {
           salaryVisibility: true,
           shortSummary: "Lead the full-stack architecture of our core Web & API platforms using React, Node.js, and TypeScript.",
           fullDescription: "We are seeking a Senior Product Engineer to lead the architecture and development of our core web ecosystem...",
-          responsibilities: "• Architect scalable web services\n• Collaborate with Product & Design\n• Maintain high unit test coverage",
-          requirements: "• 5+ years with React and TypeScript\n• Experience building REST/GraphQL APIs\n• High autonomy",
-          benefits: "• Top tier salary & equity\n• $1,500 annual learning budget\n• Flexible remote work",
+          responsibilities: "â€¢ Architect scalable web services\nâ€¢ Collaborate with Product & Design\nâ€¢ Maintain high unit test coverage",
+          requirements: "â€¢ 5+ years with React and TypeScript\nâ€¢ Experience building REST/GraphQL APIs\nâ€¢ High autonomy",
+          benefits: "â€¢ Top tier salary & equity\nâ€¢ $1,500 annual learning budget\nâ€¢ Flexible remote work",
           status: "published",
           featured: true,
         },
@@ -317,9 +438,9 @@ export class CareersCmsService {
           salaryVisibility: true,
           shortSummary: "Craft intuitive, world-class design systems and component libraries across web and mobile surfaces.",
           fullDescription: "Join our core design team to establish and evolve the Go Experts Design System...",
-          responsibilities: "• Evolve component guidelines in Figma\n• Conduct user research & usability testing\n• Partner with frontend engineers",
-          requirements: "• 3+ years in SaaS product design\n• Mastery of Figma & prototyping\n• Portfolio demonstrating systems thinking",
-          benefits: "• Premium health insurance\n• Modern hardware of choice",
+          responsibilities: "â€¢ Evolve component guidelines in Figma\nâ€¢ Conduct user research & usability testing\nâ€¢ Partner with frontend engineers",
+          requirements: "â€¢ 3+ years in SaaS product design\nâ€¢ Mastery of Figma & prototyping\nâ€¢ Portfolio demonstrating systems thinking",
+          benefits: "â€¢ Premium health insurance\nâ€¢ Modern hardware of choice",
           status: "published",
           featured: true,
         },
@@ -342,9 +463,9 @@ export class CareersCmsService {
           salaryVisibility: true,
           shortSummary: "Lead platform risk mitigation, identity verification protocols, and payment dispute resolution.",
           fullDescription: "We are hiring a Trust & Safety Lead to protect our global marketplace...",
-          responsibilities: "• Define KYC/AML verification policies\n• Oversee dispute resolution workflows\n• Manage risk analytics",
-          requirements: "• 6+ years in marketplace or Fintech risk management\n• Strong knowledge of regulatory compliance",
-          benefits: "• Equity options\n• Unlimited PTO policy",
+          responsibilities: "â€¢ Define KYC/AML verification policies\nâ€¢ Oversee dispute resolution workflows\nâ€¢ Manage risk analytics",
+          requirements: "â€¢ 6+ years in marketplace or Fintech risk management\nâ€¢ Strong knowledge of regulatory compliance",
+          benefits: "â€¢ Equity options\nâ€¢ Unlimited PTO policy",
           status: "published",
           featured: false,
         },
@@ -572,7 +693,7 @@ export class CareersCmsService {
   }
 
   /* ============================================================ */
-  /* 📄 CAREER APPLICATIONS METHODS                               */
+  /* ðŸ“„ CAREER APPLICATIONS METHODS                               */
   /* ============================================================ */
 
   /**

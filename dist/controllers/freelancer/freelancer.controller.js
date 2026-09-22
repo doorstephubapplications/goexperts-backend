@@ -1618,6 +1618,16 @@ export const searchPublishedProjects = async (req, res, next) => {
             status: "open",
             deletedAt: null
         };
+        if (req.query.excludeRole || req.body.excludeRole) {
+            const excludeRole = String(req.query.excludeRole || req.body.excludeRole).trim().toLowerCase();
+            where.AND = where.AND || [];
+            where.AND.push({
+                OR: [
+                    { creatorRole: { not: excludeRole } },
+                    { creatorRole: null }
+                ]
+            });
+        }
         if (keyword) {
             where.OR = [
                 { title: { contains: String(keyword) } },

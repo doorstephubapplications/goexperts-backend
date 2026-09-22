@@ -28,7 +28,7 @@ export class AboutPublishService {
     }
 
     // Atomic publish transaction
-    const [revision, updatedPage, audit] = await prisma.$transaction([
+    const [revision, updatedPage] = await prisma.$transaction([
       // Create immutable revision
       prisma.aboutRevision.create({
         data: {
@@ -49,9 +49,6 @@ export class AboutPublishService {
           status: 'published',
         },
       }),
-      // Audit log (Assuming there's a generic activity/audit log, but we'll mock it if not)
-      // We will skip audit insertion if we don't have the model, but ideally we'd insert here.
-      // prisma.auditLog.create({...})
     ]);
 
     return {

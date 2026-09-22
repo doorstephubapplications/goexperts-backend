@@ -349,6 +349,9 @@ export const listClientProjects = async (req, res, next) => {
         if (category) {
             andFilters.push({ category: { contains: category } });
         }
+        if (query.role) {
+            andFilters.push({ creatorRole: String(query.role).trim().toLowerCase() });
+        }
         if (search) {
             andFilters.push({
                 OR: [
@@ -487,10 +490,12 @@ export const createClientProject = async (req, res, next) => {
             const d = new Date(val);
             return Number.isNaN(d.getTime()) ? null : d;
         };
+        const creatorRole = body.creatorRole ? String(body.creatorRole).trim().toLowerCase() : (req.user?.role || "client");
         const project = await prisma.project.create({
             data: {
                 title,
                 client: userId,
+                creatorRole,
                 budget,
                 budgetMin,
                 budgetMax,

@@ -30,6 +30,17 @@ export async function listPublicProjects(options) {
             status: { in: ["open", "approved", "active", "Published", "Open", "Approved", "Active", "closed", "Closed", "completed", "Completed"] },
             client: { in: activeClientIds },
         };
+        if (options?.excludeRole) {
+            const excluded = String(options.excludeRole).trim().toLowerCase();
+            // In Prisma/SQL, "not" excludes nulls. We want to include old projects where creatorRole is null.
+            where.AND = where.AND || [];
+            where.AND.push({
+                OR: [
+                    { creatorRole: { not: excluded } },
+                    { creatorRole: null }
+                ]
+            });
+        }
         if (categoryName)
             where.category = categoryName;
         if (search) {

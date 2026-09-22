@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ABOUT_SECTION_TYPES } from './about.constants';
+import { ABOUT_SECTION_TYPES } from './about.constants.js';
 
 export const AboutMediaSchema = z.object({
   mediaId: z.string(),

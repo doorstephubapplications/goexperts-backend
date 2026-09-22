@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { AboutController } from '../../controllers/about.controller.js';
 
 import { authMiddleware } from '../../middlewares/auth.middleware.js'; 
-import { requireRole } from '../../middlewares/auth.middleware.js'; // Assuming this exists or similar
 
 const router = Router();
 const controller = new AboutController();
