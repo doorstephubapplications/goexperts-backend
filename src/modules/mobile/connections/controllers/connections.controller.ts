@@ -9,14 +9,17 @@ export const getConnections = async (req: AuthRequest, res: Response, next: Next
     const userId = req.user.id;
     const connections = await prisma.connection.findMany({
       where: { OR: [{ userOneId: userId }, { userTwoId: userId }], status: 'ACTIVE' },
-      include: {
-        userOne: { select: { id: true, fullName: true, avatarUrl: true, role: true } },
-        userTwo: { select: { id: true, fullName: true, avatarUrl: true, role: true } },
-      },
       orderBy: { updatedAt: 'desc' },
     });
-    const formatted = await Promise.all(connections.map(async (connection) => {
-      const peer = connection.userOneId === userId ? connection.userTwo : connection.userOne;
+    const formatted = (await Promise.all(connections.map(async (connection) => {
+      const peerId = connection.userOneId === userId
+        ? connection.userTwoId
+        : connection.userOneId;
+      const peer = await prisma.user.findUnique({
+        where: { id: peerId },
+        select: { id: true, fullName: true, avatarUrl: true, role: true },
+      });
+      if (!peer) return null;
       const conversation = await prisma.conversation.findFirst({
         where: { OR: [
           { userA: connection.userOneId, userB: connection.userTwoId },
@@ -34,7 +37,7 @@ export const getConnections = async (req: AuthRequest, res: Response, next: Next
         avatar: peer.avatarUrl,
         conversationId: conversation?.id,
       };
-    }));
+    }))).filter((connection): connection is NonNullable<typeof connection> => connection !== null);
     return res.json(successResponse('Connections fetched successfully', formatted));
   } catch (error) { next(error); }
 };
@@ -49,14 +52,43 @@ const profileIds = async (userId: string) => {
   return [userId, ...profiles.filter(Boolean).map(profile => profile!.id)];
 };
 
+const resolveInvitationUser = async (id: string) => {
+  const select = { id: true, fullName: true, avatarUrl: true, role: true } as const;
+  const direct = await prisma.user.findUnique({ where: { id }, select }).catch(() => null);
+  if (direct) return direct;
+
+  const profiles = await Promise.all([
+    prisma.clientProfile.findUnique({ where: { id }, select: { userId: true } }),
+    prisma.freelancerProfile.findUnique({ where: { id }, select: { userId: true } }),
+    prisma.investorProfile.findUnique({ where: { id }, select: { userId: true } }),
+    prisma.founderProfile.findUnique({ where: { id }, select: { userId: true } }),
+  ]);
+  const userId = profiles.find(Boolean)?.userId;
+  return userId
+    ? prisma.user.findUnique({ where: { id: userId }, select }).catch(() => null)
+    : null;
+};
+
+const shapeInvitation = async (invitation: any, peerKey: 'senderId' | 'receiverId') => {
+  const peer = await resolveInvitationUser(invitation[peerKey]);
+  if (!peer) return null;
+  return {
+    ...invitation,
+    sender: peerKey === 'senderId' ? peer : undefined,
+    receiver: peerKey === 'receiverId' ? peer : undefined,
+  };
+};
+
 export const getReceivedInvitations = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const invitations = await prisma.connectionInvitation.findMany({
       where: { receiverId: { in: await profileIds(req.user.id) } },
-      include: { sender: { select: { id: true, fullName: true, avatarUrl: true, role: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json(successResponse('Received invitations retrieved', invitations));
+    const shaped = (await Promise.all(
+      invitations.map((invitation) => shapeInvitation(invitation, 'senderId')),
+    )).filter(Boolean);
+    return res.json(successResponse('Received invitations retrieved', shaped));
   } catch (error) { next(error); }
 };
 
@@ -64,10 +96,12 @@ export const getSentInvitations = async (req: AuthRequest, res: Response, next: 
   try {
     const invitations = await prisma.connectionInvitation.findMany({
       where: { senderId: { in: await profileIds(req.user.id) } },
-      include: { receiver: { select: { id: true, fullName: true, avatarUrl: true, role: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json(successResponse('Sent invitations retrieved', invitations));
+    const shaped = (await Promise.all(
+      invitations.map((invitation) => shapeInvitation(invitation, 'receiverId')),
+    )).filter(Boolean);
+    return res.json(successResponse('Sent invitations retrieved', shaped));
   } catch (error) { next(error); }
 };
 
