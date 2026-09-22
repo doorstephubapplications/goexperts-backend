@@ -172,6 +172,14 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
         name: otherUser ? otherUser.fullName : fallbackName,
         avatar: otherUser ? otherUser.avatarUrl : (c.avatar || null),
         role: otherUser ? otherUser.role : c.role,
+        participant: otherUser
+          ? {
+              id: otherUser.id,
+              fullName: otherUser.fullName,
+              avatarUrl: otherUser.avatarUrl,
+              role: otherUser.role,
+            }
+          : null,
         msg: lastText,
         lastMessage: lastText,
         time: lastTime,
