@@ -110,7 +110,8 @@ function evaluateFreelancer(user: any, fp: any) {
 
   const capabilities: Record<string, any> = {
     browseProjects: { allowed: true },
-    submitProposal: { allowed: true, missing: [] }
+    submitProposal: { allowed: true, missing: [] },
+    publishProject: { allowed: true, missing: [] }
   };
 
   const proposalMissing = [];

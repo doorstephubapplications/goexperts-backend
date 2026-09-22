@@ -87,6 +87,7 @@ export function buildVerificationItems(user: any, stored: Record<string, Partial
         let value = String(fromStore.value || "").trim();
         const documentUrl = fromStore.documentUrl || null;
         const rejectReason = fromStore.rejectReason || null;
+        const unlockRequested = Boolean(fromStore.unlockRequested);
 
         if (key === "email") {
             value = user.email || value || "Not set";
@@ -105,7 +106,7 @@ export function buildVerificationItems(user: any, stored: Record<string, Partial
             value = status === "missing" ? "Not submitted" : value || "Submitted";
         }
 
-            return { key, label, value, status, documentUrl, rejectReason, required: Boolean(required) };
+            return { key, label, value, status, documentUrl, rejectReason, required: Boolean(required), unlockRequested };
         });
 }
 
@@ -243,6 +244,7 @@ export async function applyVerificationUpdate(userId: string, body: any, isAdmin
             : nextStatus === "rejected"
                 ? stored[key]?.rejectReason || null
                 : null,
+        unlockRequested: body.unlockRequested !== undefined ? Boolean(body.unlockRequested) : stored[key]?.unlockRequested || false,
     };
 
     if (key === "phone" && body.value) {
