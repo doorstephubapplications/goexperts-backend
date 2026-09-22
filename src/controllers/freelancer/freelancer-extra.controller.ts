@@ -598,6 +598,12 @@ const populateSkillsUsed = async (items: any | any[]) => {
   return isArray ? populated : populated[0];
 };
 
+const serializeExperienceSkills = (item: any) => {
+  const rawSkills = item.skillIds ?? item.skillsUsed ?? item.skills;
+  if (Array.isArray(rawSkills)) return rawSkills.join(", ");
+  return rawSkills ? String(rawSkills) : null;
+};
+
 export const getFreelancerExperience = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const userId = requireUser(req, res);
@@ -636,7 +642,7 @@ export const putFreelancerExperience = async (req: AuthenticatedRequest, res: Re
           endDate: item.endDate ? String(item.endDate) : null,
           isCurrent: Boolean(item.isCurrent),
           description: item.description ? String(item.description) : null,
-          skillsUsed: Array.isArray(item.skillsUsed) ? item.skillsUsed.join(", ") : (item.skillsUsed ? String(item.skillsUsed) : null),
+          skillsUsed: serializeExperienceSkills(item),
         })),
       }),
     ]);
@@ -670,7 +676,7 @@ export const postFreelancerExperience = async (req: AuthenticatedRequest, res: R
         endDate: item.endDate ? String(item.endDate) : null,
         isCurrent: Boolean(item.isCurrent),
         description: item.description ? String(item.description) : null,
-        skillsUsed: Array.isArray(item.skillsUsed) ? item.skillsUsed.join(", ") : (item.skillsUsed ? String(item.skillsUsed) : null),
+        skillsUsed: serializeExperienceSkills(item),
       }
     });
 
@@ -723,7 +729,12 @@ export const putFreelancerExperienceById = async (req: AuthenticatedRequest, res
         endDate: item.endDate !== undefined ? (item.endDate ? String(item.endDate) : null) : undefined,
         isCurrent: item.isCurrent !== undefined ? Boolean(item.isCurrent) : undefined,
         description: item.description !== undefined ? (item.description ? String(item.description) : null) : undefined,
-        skillsUsed: item.skillsUsed !== undefined ? (Array.isArray(item.skillsUsed) ? item.skillsUsed.join(", ") : (item.skillsUsed ? String(item.skillsUsed) : null)) : undefined,
+        skillsUsed:
+          item.skillIds !== undefined ||
+          item.skillsUsed !== undefined ||
+          item.skills !== undefined
+            ? serializeExperienceSkills(item)
+            : undefined,
       }
     });
 
