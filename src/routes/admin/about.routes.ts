@@ -1,20 +1,22 @@
-import { Router } from "express";
-import {
-  getAdminAboutPage,
-  saveAboutDraft,
-  publishAboutChanges,
-  getAboutRevisions,
-  getAboutRevisionById,
-  restoreAboutRevision,
-} from "../../controllers/admin/about.controller.js";
+import { Router } from 'express';
+import { AboutController } from '../../controllers/about.controller.js';
+
+import { authMiddleware } from '../../middlewares/auth.middleware.js'; 
+import { requireRole } from '../../middlewares/auth.middleware.js'; // Assuming this exists or similar
 
 const router = Router();
+const controller = new AboutController();
 
-router.get("/", getAdminAboutPage);
-router.put("/draft", saveAboutDraft);
-router.post("/publish", publishAboutChanges);
-router.get("/revisions", getAboutRevisions);
-router.get("/revisions/:revisionId", getAboutRevisionById);
-router.post("/revisions/:revisionId/restore", restoreAboutRevision);
+// For now, protecting with authMiddleware, adjust roles as needed
+router.get('/', authMiddleware as any, controller.getAdminAbout.bind(controller));
+router.put('/sections/:sectionId', authMiddleware as any, controller.updateSection.bind(controller));
+router.put('/seo', authMiddleware as any, controller.updateSeo.bind(controller));
+
+// Publish
+router.post('/publish', authMiddleware as any, controller.publishDraft.bind(controller));
+
+// Revisions
+router.get('/revisions', authMiddleware as any, controller.listRevisions.bind(controller));
+router.post('/revisions/:id/restore', authMiddleware as any, controller.restoreRevision.bind(controller));
 
 export default router;

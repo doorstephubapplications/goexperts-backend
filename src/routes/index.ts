@@ -47,7 +47,10 @@ import investorRoutes from "./investor/investor.routes.js";
 import founderRoutes from "./founder/founder.routes.js";
 import paymentsRoutes from "./payments/payments.routes.js";
 import messagesRoutes from "./messages/messages.routes.js";
-import aboutRouter from "./admin/about.routes.js"; import adminReferralsRouter from "./admin/referrals.routes.js";
+import aboutRouter from "./admin/about.routes.js";
+import { faqAdminRouter } from "./admin/faq.routes.js";
+import footerAdminRouter from "./admin/footer.admin.routes.js";
+import adminReferralsRouter from "./admin/referrals.routes.js";
 import rolesRoutes, { permissionsRouter } from "./admin/roles.routes.js";
 import resumeTemplateRouter from "./admin/resume-template.routes.js";
 import kycRouter from "./admin/kyc.routes.js";
@@ -174,7 +177,9 @@ router.use("/admin/marketing", marketingRouter);
 router.use("/admin/system", systemRouter);
 router.use("/admin/settings", settingsRouter);
 router.use("/admin/developer", developerRouter);
-router.use("/admin/kyc", authMiddleware as any, kycRouter); router.use("/admin", adminReferralsRouter);
+router.use("/admin/kyc", authMiddleware as any, kycRouter); 
+router.use("/admin", adminReferralsRouter);
+router.use("/admin/about", aboutRouter);
 router.use("/admin/support", adminSupportDeskRouter);
 router.use("/admin/withdrawals", adminWithdrawalsRouter);
 router.use("/admin", workflowsRoutes);
@@ -2297,6 +2302,8 @@ router.use(
 );
 
 router.use("/admin/about-page", authMiddleware as any, aboutRouter);
+router.use("/admin/faqs", authMiddleware as any, faqAdminRouter);
+router.use("/admin/content/footer", authMiddleware as any, footerAdminRouter);
 
 // 4. Dynamic Whitelisted CRUD Routers
 Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {

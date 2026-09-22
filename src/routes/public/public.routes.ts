@@ -763,11 +763,16 @@ router.get("/cms_pages", async (req: Request, res: Response, next: NextFunction)
   }
 });
 
-import { getPublicAboutPage } from "../../controllers/admin/about.controller.js";
+import { AboutController } from "../../controllers/about.controller.js";
+const newAboutController = new AboutController();
 import { getPublicContactPage, submitContactEnquiry } from "../../controllers/admin/contact.controller.js";
 import { getPublicCareersPage, listPublicJobs, getPublicJobBySlug, submitCareerApplication } from "../../controllers/admin/careers.controller.js";
+import { faqPublicRouter } from "./faq.routes.js";
+import footerPublicRouter from "./footer.routes.js";
 
-router.get("/about", getPublicAboutPage);
+router.get("/about", newAboutController.getPublicAbout.bind(newAboutController));
+router.use("/faqs", faqPublicRouter);
+router.use("/footer", footerPublicRouter);
 router.get("/contact-page", getPublicContactPage);
 router.get("/contact", getPublicContactPage);
 router.post("/contact", submitContactEnquiry);
@@ -1291,6 +1296,7 @@ router.post("/projects", authenticateOptional, async (req: any, res: Response, n
       category,
       categoryId,
       excludeClientId: req.user?.id,
+      excludeRole: req.query.excludeRole || req.body.excludeRole,
     });
 
     const userId = req.user?.id;

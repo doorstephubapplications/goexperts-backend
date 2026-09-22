@@ -47,15 +47,35 @@ export const listConversations = async (req: AuthenticatedRequest, res: Response
     const formatted = await Promise.all(convs.map(async (c: any) => {
       const state = stateMap[c.id] || { isPinned: false, isMuted: false, isArchived: false };
       const otherId = c.userA === userId ? c.userB : c.userA;
-      let otherUser = { fullName: "Unknown User", avatarUrl: null, headline: "User" };
+      let otherUser: any = { fullName: "Unknown User", avatarUrl: null, headline: "User", isBlockedByMe: false, isBlockedByThem: false };
       
       if (otherId) {
-        const u = await prisma.user.findUnique({ where: { id: otherId } });
+        const [u, blockedByMe, blockedByThem, connectionInvitation] = await Promise.all([
+          prisma.user.findUnique({ where: { id: otherId } }),
+          prisma.blockedUser.findFirst({ where: { blockerId: userId, blockedId: otherId } }),
+          prisma.blockedUser.findFirst({ where: { blockerId: otherId, blockedId: userId } }),
+          (prisma as any).connectionInvitation.findFirst({
+            where: {
+              OR: [
+                { senderId: userId, receiverId: otherId },
+                { senderId: otherId, receiverId: userId }
+              ]
+            },
+            orderBy: { createdAt: 'desc' }
+          }).catch(() => null)
+        ]);
         if (u) {
           otherUser = {
+            id: u.id,
+            role: u.role,
             fullName: u.fullName || u.email || "Unknown",
             avatarUrl: u.avatarUrl,
             headline: u.role || "User",
+            isBlockedByMe: !!blockedByMe,
+            isBlockedByThem: !!blockedByThem,
+            connectionStatus: connectionInvitation?.status || "NONE",
+            connectionInvitationId: connectionInvitation?.id || null,
+            iamSender: connectionInvitation?.senderId === userId
           };
         }
       }
@@ -438,6 +458,147 @@ export const updateConversationState = async (req: AuthenticatedRequest, res: Re
     });
 
     res.json({ success: true, state });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const blockUser = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+    const blockedId = req.params.id;
+
+    await prisma.blockedUser.upsert({
+      where: { blockerId_blockedId: { blockerId: userId, blockedId } },
+      update: {},
+      create: { blockerId: userId, blockedId }
+    });
+
+    res.json({ success: true, message: "User blocked successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const unblockUser = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+    const blockedId = req.params.id;
+
+    await prisma.blockedUser.deleteMany({
+      where: { blockerId: userId, blockedId }
+    });
+
+    res.json({ success: true, message: "User unblocked successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const acceptConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const { invitationId } = req.params;
+
+    const invitation = await (prisma as any).connectionInvitation.findUnique({
+      where: { id: invitationId },
+      include: { sender: true }
+    });
+
+    if (!invitation) return res.status(404).json({ success: false, message: "Invitation not found" });
+    if (invitation.receiverId !== userId) return res.status(403).json({ success: false, message: "Access denied" });
+    if (invitation.status !== "PENDING") return res.status(400).json({ success: false, message: "Invitation already resolved" });
+
+    // Update invitation status
+    await (prisma as any).connectionInvitation.update({
+      where: { id: invitationId },
+      data: { status: "ACCEPTED", acceptedAt: new Date() }
+    });
+
+    // Create the actual conversation
+    const existingConv = await prisma.conversation.findFirst({
+      where: {
+        OR: [
+          { userA: invitation.senderId, userB: userId },
+          { userA: userId, userB: invitation.senderId }
+        ]
+      }
+    });
+
+    let conv = existingConv;
+    if (!conv) {
+      conv = await prisma.conversation.create({
+        data: {
+          name: invitation.sender.fullName || "Conversation",
+          role: "CONNECTION",
+          userA: invitation.senderId,
+          userB: userId,
+          contextType: "CONNECTION",
+          msg: invitation.firstMessage || null
+        }
+      });
+    }
+
+    // Create the first message from sender if it exists
+    if (invitation.firstMessage) {
+      const exists = await prisma.message.findFirst({
+        where: { conversationId: conv.id }
+      });
+      if (!exists) {
+        await prisma.message.create({
+          data: {
+            conversationId: conv.id,
+            senderId: invitation.senderId,
+            from: invitation.senderId,
+            text: invitation.firstMessage,
+            time: invitation.createdAt.toISOString()
+          }
+        });
+      }
+    }
+
+    // Notify the sender
+    try {
+      await emitNotification({
+        userId: invitation.senderId,
+        type: "CONNECTION_ACCEPTED",
+        title: "Connection Accepted",
+        message: `Your connection request was accepted.`,
+        contextType: "CONNECTION",
+        contextId: conv.id
+      });
+    } catch (e) {}
+
+    res.json({ success: true, message: "Connection accepted", conversationId: conv.id });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const rejectConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const { invitationId } = req.params;
+
+    const invitation = await (prisma as any).connectionInvitation.findUnique({
+      where: { id: invitationId }
+    });
+
+    if (!invitation) return res.status(404).json({ success: false, message: "Invitation not found" });
+    if (invitation.receiverId !== userId) return res.status(403).json({ success: false, message: "Access denied" });
+
+    await (prisma as any).connectionInvitation.update({
+      where: { id: invitationId },
+      data: { status: "REJECTED", rejectedAt: new Date() }
+    });
+
+    res.json({ success: true, message: "Connection rejected" });
   } catch (err) {
     next(err);
   }

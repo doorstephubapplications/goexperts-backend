@@ -7,7 +7,11 @@ import {
   createOrFindConversation,
   updateConversationStatus,
   addAdminNote,
-  updateConversationState
+  updateConversationState,
+  blockUser,
+  unblockUser,
+  acceptConnection,
+  rejectConnection
 } from "../../controllers/messages/messages.controller.js";
 
 const router = Router();
@@ -21,6 +25,12 @@ router.get("/conversations/:id/messages", getConversationMessages as any);
 router.patch("/conversations/:id/status", updateConversationStatus as any);
 router.post("/conversations/:id/admin-note", addAdminNote as any);
 router.put("/conversations/:id/state", updateConversationState as any);
+
+router.post("/users/:id/block", blockUser as any);
+router.post("/users/:id/unblock", unblockUser as any);
+
+router.post("/invitations/:invitationId/accept", acceptConnection as any);
+router.post("/invitations/:invitationId/reject", rejectConnection as any);
 
 export default router;
 

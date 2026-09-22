@@ -325,6 +325,7 @@ model Project {
   updatedAt       DateTime       @updatedAt @map("updated_at")
   deletedAt       DateTime?      @map("deleted_at")
   industryId      String?        @map("industry_id")
+  creatorRole     String?        @map("creator_role")
   contracts       Contract[]
   conversations   Conversation[]
   invitations     Invitation[]
@@ -1121,19 +1122,19 @@ model CmsPageRevision {
 }
 
 model Blog {
-  id              String    @id @default(uuid())
-  title           String
-  description     String?   @db.Text
-  bannerUrl       String?   @map("banner_url")
-  publishDate     DateTime? @map("publish_date")
-  publishTime     String?   @map("publish_time")
-  category        String
-  author          String
-  views           Int       @default(0)
-  status          String    @default("active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
+  id          String    @id @default(uuid())
+  title       String
+  description String?   @db.Text
+  bannerUrl   String?   @map("banner_url")
+  publishDate DateTime? @map("publish_date")
+  publishTime String?   @map("publish_time")
+  category    String
+  author      String
+  views       Int       @default(0)
+  status      String    @default("active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
   @@map("blogs")
 }
@@ -2119,41 +2120,41 @@ model JobOpening {
 }
 
 model CareerApplication {
-  id                  String          @id @default(uuid())
-  applicationNumber   String          @unique @map("application_number")
-  jobId               String          @map("job_id")
-  userId              String?         @map("user_id")
-  jobTitle            String          @map("job_title")
-  firstName           String          @map("first_name")
-  lastName            String          @map("last_name")
+  id                  String                @id @default(uuid())
+  applicationNumber   String                @unique @map("application_number")
+  jobId               String                @map("job_id")
+  userId              String?               @map("user_id")
+  jobTitle            String                @map("job_title")
+  firstName           String                @map("first_name")
+  lastName            String                @map("last_name")
   email               String
   phone               String
-  currentLocation     String?         @map("current_location")
-  linkedinUrl         String?         @map("linkedin_url")
-  portfolioUrl        String?         @map("portfolio_url")
-  githubUrl           String?         @map("github_url")
-  experienceYears     Float?          @map("experience_years")
-  currentCompany      String?         @map("current_company")
-  currentDesignation  String?         @map("current_designation")
-  currentCtc          String?         @map("current_ctc")
-  expectedCtc         String?         @map("expected_ctc")
-  noticePeriod        String?         @map("notice_period")
-  preferredLocation   String?         @map("preferred_location")
-  coverLetter         String?         @map("cover_letter") @db.Text
-  resumeUrl           String          @map("resume_url") @db.Text
-  resumeFileName      String?         @map("resume_file_name")
-  source              String?         @map("source")
-  atsStage            String          @default("APPLIED") @map("ats_stage")
-  status              String          @default("new")
-  rating              Int             @default(0)
-  assignedRecruiterId String?         @map("assigned_recruiter_id")
-  assignedRecruiter   String?         @map("assigned_recruiter")
-  internalNotes       String?         @map("internal_notes") @db.Text
-  createdAt           DateTime        @default(now()) @map("created_at")
-  updatedAt           DateTime        @updatedAt @map("updated_at")
-  deletedAt           DateTime?       @map("deleted_at")
-  job                 JobOpening      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  user                User?           @relation(fields: [userId], references: [id])
+  currentLocation     String?               @map("current_location")
+  linkedinUrl         String?               @map("linkedin_url")
+  portfolioUrl        String?               @map("portfolio_url")
+  githubUrl           String?               @map("github_url")
+  experienceYears     Float?                @map("experience_years")
+  currentCompany      String?               @map("current_company")
+  currentDesignation  String?               @map("current_designation")
+  currentCtc          String?               @map("current_ctc")
+  expectedCtc         String?               @map("expected_ctc")
+  noticePeriod        String?               @map("notice_period")
+  preferredLocation   String?               @map("preferred_location")
+  coverLetter         String?               @map("cover_letter") @db.Text
+  resumeUrl           String                @map("resume_url") @db.Text
+  resumeFileName      String?               @map("resume_file_name")
+  source              String?               @map("source")
+  atsStage            String                @default("APPLIED") @map("ats_stage")
+  status              String                @default("new")
+  rating              Int                   @default(0)
+  assignedRecruiterId String?               @map("assigned_recruiter_id")
+  assignedRecruiter   String?               @map("assigned_recruiter")
+  internalNotes       String?               @map("internal_notes") @db.Text
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  deletedAt           DateTime?             @map("deleted_at")
+  job                 JobOpening            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user                User?                 @relation(fields: [userId], references: [id])
   notes               RecruiterNote[]
   activities          ApplicationActivity[]
   emailLogs           EmailLog[]
@@ -2599,7 +2600,7 @@ model CmsEmailTemplate {
   name         String   @unique
   subject      String
   bodyHtml     String   @map("body_html") @db.LongText
-  triggerEvent String   @map("trigger_event") @unique // e.g. APPLIED, REVIEWING, INTERVIEWING, OFFER, REJECTED
+  triggerEvent String   @unique @map("trigger_event") // e.g. APPLIED, REVIEWING, INTERVIEWING, OFFER, REJECTED
   status       String   @default("active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -2610,7 +2611,7 @@ model CmsEmailTemplate {
 model ApplicationActivity {
   id            String            @id @default(uuid())
   applicationId String            @map("application_id")
-  action        String            // e.g. "Moved to Reviewing"
+  action        String // e.g. "Moved to Reviewing"
   notes         String?           @db.Text
   createdBy     String?           @map("created_by") // admin ID if done by admin, else system
   createdAt     DateTime          @default(now()) @map("created_at")
@@ -2626,7 +2627,7 @@ model EmailLog {
   applicationId String            @map("application_id")
   emailType     String            @map("email_type") // e.g. "CandidateConfirmation", "AdminAlert"
   recipient     String
-  status        String            // "sent", "failed"
+  status        String // "sent", "failed"
   errorMessage  String?           @map("error_message") @db.Text
   sentAt        DateTime          @default(now()) @map("sent_at")
   application   CareerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -2635,3 +2636,281 @@ model EmailLog {
   @@index([sentAt])
   @@map("email_logs")
 }
+
+model BlockedUser {
+  id        String   @id @default(uuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([blockerId, blockedId])
+  @@map("blocked_users")
+}
+
+model AboutPage {
+  id               String          @id @default(uuid())
+  slug             String          @unique
+  status           String          @default("draft") // draft, published, archived
+  draftVersion     Int             @default(1) @map("draft_version")
+  publishedVersion Int?            @map("published_version")
+  publishedAt      DateTime?       @map("published_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  updatedBy        String?         @map("updated_by")
+  sections         AboutSection[]
+  revisions        AboutRevision[]
+  seo              AboutSeo?
+
+  @@map("about_pages")
+}
+
+model AboutSection {
+  id          String    @id @default(uuid())
+  pageId      String    @map("page_id")
+  sectionKey  String    @map("section_key")
+  sectionType String    @map("section_type")
+  content     Json
+  sortOrder   Int       @default(0) @map("sort_order")
+  enabled     Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  updatedBy   String?   @map("updated_by")
+  page        AboutPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, sectionKey])
+  @@index([pageId])
+  @@map("about_sections")
+}
+
+model AboutRevision {
+  id              String    @id @default(uuid())
+  pageId          String    @map("page_id")
+  versionNumber   Int       @map("version_number")
+  contentSnapshot Json      @map("content_snapshot")
+  seoSnapshot     Json      @map("seo_snapshot")
+  changeSummary   String?   @map("change_summary") @db.Text
+  createdBy       String?   @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  page            AboutPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, versionNumber])
+  @@index([pageId])
+  @@map("about_revisions")
+}
+
+model AboutSeo {
+  id                 String    @id @default(uuid())
+  pageId             String    @unique @map("page_id")
+  title              String?
+  description        String?   @db.Text
+  canonicalUrl       String?   @map("canonical_url")
+  robots             String?
+  ogTitle            String?   @map("og_title")
+  ogDescription      String?   @map("og_description") @db.Text
+  ogImageId          String?   @map("og_image_id")
+  twitterTitle       String?   @map("twitter_title")
+  twitterDescription String?   @map("twitter_description") @db.Text
+  twitterImageId     String?   @map("twitter_image_id")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  page               AboutPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("about_seo")
+}
+
+// --- NEW ROLE-BASED FAQ CMS ---
+
+enum FAQRole {
+  GENERAL
+  FREELANCER
+  CLIENT
+  INVESTOR
+  FOUNDER
+}
+
+model FAQCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  icon        String?
+  role        FAQRole?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  faqs FAQ[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role, isActive, sortOrder])
+}
+
+model FAQ {
+  id String @id @default(cuid())
+
+  categoryId String
+  category   FAQCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  role     FAQRole
+  question String  @db.Text
+  answer   String  @db.Text
+
+  slug String @unique
+
+  shortAnswer String? @db.Text
+
+  sortOrder Int @default(0)
+
+  isFeatured Boolean @default(false)
+
+  status      String  @default("DRAFT") // DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED
+  isPublished Boolean @default(false)
+
+  publishedAt DateTime?
+
+  seoTitle       String?
+  seoDescription String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role, isPublished, sortOrder])
+  @@index([categoryId, isPublished, sortOrder])
+  @@index([isFeatured, isPublished])
+  @@index([slug])
+}
+
+model FAQPageSeo {
+  id                 String  @id @default(cuid())
+  slug               String  @unique @default("faqs")
+  title              String
+  description        String? @db.Text
+  canonicalUrl       String?
+  robots             String? @default("index, follow")
+  ogTitle            String?
+  ogDescription      String? @db.Text
+  ogImage            String?
+  twitterTitle       String?
+  twitterDescription String? @db.Text
+  twitterImage       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ================================================================
+// FOOTER CMS MODELS
+// Publishing is atomic at the FooterConfig level:
+//   DRAFT -> PUBLISHED
+// Children (columns, links, etc.) do NOT have their own status.
+// Only the published FooterConfig snapshot is served publicly.
+// ================================================================
+
+model FooterConfig {
+  id String @id @default(cuid())
+
+  // Brand
+  tagline     String?
+  description String? @db.Text
+
+  // Newsletter (only shown if enabled + functional endpoint exists)
+  newsletterEnabled     Boolean @default(false)
+  newsletterTitle       String? @default("Stay ahead of opportunities")
+  newsletterDescription String? @default("Get useful updates, opportunities and product news from Go Experts.")
+  newsletterPlaceholder String? @default("your@email.com")
+  newsletterButtonText  String? @default("Subscribe")
+
+  // Copyright
+  copyrightText String? @default("All rights reserved.")
+
+  // Publishing — ATOMIC boundary. Children share this status.
+  status      String  @default("DRAFT") // DRAFT | PUBLISHED
+  publishedAt DateTime?
+  publishedBy String? // AdminUser id
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  columns    FooterColumn[]
+  socialLinks FooterSocialLink[]
+  appLinks   FooterAppLink[]
+  legalLinks FooterLegalLink[]
+
+  @@map("footer_configs")
+}
+
+model FooterColumn {
+  id           String @id @default(cuid())
+  footerConfigId String @map("footer_config_id")
+  title        String
+  key          String // e.g., "freelancers", "clients"
+  sortOrder    Int    @default(0)
+  isEnabled    Boolean @default(true)
+
+  config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
+  links  FooterLink[]
+
+  @@index([footerConfigId, sortOrder])
+  @@map("footer_columns")
+}
+
+model FooterLink {
+  id       String @id @default(cuid())
+  columnId String @map("column_id")
+  label    String
+  href     String // validated against allowlist: internal /path or https://
+  routeType String @default("INTERNAL") // INTERNAL | EXTERNAL
+  external  Boolean @default(false)
+  openInNewTab Boolean @default(false)
+  sortOrder Int    @default(0)
+  isEnabled Boolean @default(true)
+
+  column FooterColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@index([columnId, sortOrder])
+  @@map("footer_links")
+}
+
+model FooterSocialLink {
+  id           String @id @default(cuid())
+  footerConfigId String @map("footer_config_id")
+  platform     String // LINKEDIN | TWITTER | INSTAGRAM | FACEBOOK | YOUTUBE | GITHUB
+  url          String // must be https://
+  label        String // "Follow Go Experts on LinkedIn"
+  sortOrder    Int    @default(0)
+  isEnabled    Boolean @default(true)
+
+  config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
+
+  @@index([footerConfigId])
+  @@map("footer_social_links")
+}
+
+model FooterAppLink {
+  id           String @id @default(cuid())
+  footerConfigId String @map("footer_config_id")
+  platform     String // APP_STORE | GOOGLE_PLAY
+  url          String // must be https://
+  label        String
+  isEnabled    Boolean @default(true)
+
+  config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
+
+  @@index([footerConfigId])
+  @@map("footer_app_links")
+}
+
+model FooterLegalLink {
+  id           String @id @default(cuid())
+  footerConfigId String @map("footer_config_id")
+  label        String
+  href         String // internal /path only
+  sortOrder    Int    @default(0)
+  isEnabled    Boolean @default(true)
+
+  config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
+
+  @@index([footerConfigId])
+  @@map("footer_legal_links")
+}
+

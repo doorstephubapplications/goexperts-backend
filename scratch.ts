@@ -1,0 +1,1 @@
+import { PrismaClient } from "@prisma/client"; const prisma = new PrismaClient(); async function main() { console.log(await prisma.project.findMany({ select: { id: true, title: true, creatorRole: true }, take: 10, orderBy: { createdAt: "desc" } })); } main().catch(console.error).finally(() => prisma.$disconnect());
