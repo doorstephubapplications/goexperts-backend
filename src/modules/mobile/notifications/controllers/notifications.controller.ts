@@ -63,6 +63,8 @@ export const getNotifications = async (req: AuthRequest, res: Response, next: Ne
         category: n.type || 'system',
         contextId,
         entityId: contextId,
+        conversationId: metadata.conversationId ?? metadata.conversation_id ?? null,
+        invitationId: metadata.invitationId ?? metadata.invitation_id ?? null,
         projectId: metadata.projectId ?? metadata.project_id ?? null,
         role: metadata.role ?? metadata.userRole ?? metadata.inviterRole ?? null,
       };

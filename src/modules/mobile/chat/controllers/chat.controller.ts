@@ -388,7 +388,10 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
           title: 'New Connection Request',
           message: `${newInvite.sender.fullName} sent you a connection request.`,
           channel: 'all',
-          payload: { invitationId: newInvite.id }
+          payload: {
+            invitationId: newInvite.id,
+            conversationId: pendingConversation.id,
+          }
         });
 
         const { getIO } = await import('../../../../modules/realtime/socket.js');
