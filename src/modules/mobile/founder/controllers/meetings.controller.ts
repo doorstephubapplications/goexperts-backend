@@ -3,6 +3,7 @@ import { prisma } from '../../../../config/database.js';
 import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
+import { buildMeetingListWhere } from '../../meeting-search.js';
 
 const generateMeetingLink = (meetingId: string) => {
   const short = meetingId.replace(/-/g, '').substring(0, 12);
@@ -85,23 +86,32 @@ export const listMeetings = async (req: AuthRequest, res: Response, next: NextFu
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
+    const search = String(req.query.search || req.query.q || '').trim();
+    const matchedUserIds = search
+      ? (await prisma.user.findMany({
+          where: {
+            deletedAt: null,
+            fullName: { contains: search },
+          },
+          select: { id: true },
+        })).map((user) => user.id)
+      : [];
+
+    const where = buildMeetingListWhere({
+      userId: req.user.id,
+      search,
+      matchedUserIds,
+      includeCreatedBy: true,
+    });
 
     const [meetings, total] = await Promise.all([
       prisma.meeting.findMany({
-        where: {
-          deletedAt: null,
-          OR: [{ founder: req.user.id }, { createdBy: req.user.id }],
-        },
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.meeting.count({
-        where: {
-          deletedAt: null,
-          OR: [{ founder: req.user.id }, { createdBy: req.user.id }],
-        },
-      }),
+      prisma.meeting.count({ where }),
     ]);
 
     const userIds = [...new Set(meetings.flatMap((meeting) => [meeting.founder, meeting.investor, meeting.createdBy].filter(Boolean) as string[]))];

@@ -105,6 +105,7 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
 
     let where: any = {
       deletedAt: null,
+      status: 'active',
       OR: [{ userA: req.user.id }, { userB: req.user.id }],
     };
 

@@ -3,6 +3,7 @@ import { prisma } from '../../../../config/database.js';
 import { successResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
+import { buildMeetingListWhere } from '../../meeting-search.js';
 
 const roleLabel = (role?: string | null) => {
   if (!role) return 'Participant';
@@ -47,7 +48,24 @@ const shapeMeeting = async (meeting: any, viewerId?: string) => {
 
 export const listMeetings = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const meetings = await prisma.meeting.findMany({ where: { OR: [{ founder: req.user.id }, { investor: req.user.id }] } });
+    const search = String(req.query.search || req.query.q || '').trim();
+    const matchedUserIds = search
+      ? (await prisma.user.findMany({
+          where: {
+            deletedAt: null,
+            fullName: { contains: search },
+          },
+          select: { id: true },
+        })).map((user) => user.id)
+      : [];
+
+    const where = buildMeetingListWhere({
+      userId: req.user.id,
+      search,
+      matchedUserIds,
+    });
+
+    const meetings = await prisma.meeting.findMany({ where });
     const shaped = await Promise.all(meetings.map((meeting) => shapeMeeting(meeting, req.user.id)));
     return res.json(successResponse('Meetings retrieved', shaped));
   } catch (error) { next(error); }

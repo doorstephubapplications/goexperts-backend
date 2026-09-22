@@ -119,13 +119,33 @@ export const acceptInvitation = async (req: AuthRequest, res: Response, next: Ne
       where: { userOneId_userTwoId: { userOneId, userTwoId } },
       update: { status: 'ACTIVE' }, create: { userOneId, userTwoId, status: 'ACTIVE' },
     });
+
     await prisma.conversation.updateMany({
-      where: { userA: userOneId, userB: userTwoId, status: 'PENDING', deletedAt: null },
+      where: {
+        deletedAt: null,
+        status: 'PENDING',
+        OR: [
+          { userA: invitation.senderId, userB: invitation.receiverId },
+          { userA: invitation.receiverId, userB: invitation.senderId },
+          { userA: userOneId, userB: userTwoId },
+          { userA: userTwoId, userB: userOneId },
+        ],
+      },
       data: { status: 'active', updatedAt: new Date() },
     });
+
     const conversation = await prisma.conversation.findFirst({
-      where: { userA: userOneId, userB: userTwoId, deletedAt: null },
-      orderBy: { updatedAt: 'desc' }, select: { id: true },
+      where: {
+        deletedAt: null,
+        OR: [
+          { userA: invitation.senderId, userB: invitation.receiverId },
+          { userA: invitation.receiverId, userB: invitation.senderId },
+          { userA: userOneId, userB: userTwoId },
+          { userA: userTwoId, userB: userOneId },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
     });
     await NotificationEngine.queueNotification({
       userId: invitation.senderId, type: 'connection_accepted', title: 'Connection Accepted',

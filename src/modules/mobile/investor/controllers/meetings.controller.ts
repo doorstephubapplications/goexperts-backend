@@ -3,6 +3,7 @@ import { prisma } from '../../../../config/database.js';
 import { successResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
+import { buildMeetingListWhere } from '../../meeting-search.js';
 
 const roleLabel = (role?: string | null) => {
   if (!role) return 'Participant';
@@ -48,13 +49,30 @@ export const listMeetings = async (req: AuthRequest, res: Response, next: NextFu
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
+    const search = String(req.query.search || req.query.q || '').trim();
+    const matchedUserIds = search
+      ? (await prisma.user.findMany({
+          where: {
+            deletedAt: null,
+            fullName: { contains: search },
+          },
+          select: { id: true },
+        })).map((user) => user.id)
+      : [];
+
+    const where = buildMeetingListWhere({
+      userId: req.user.id,
+      search,
+      matchedUserIds,
+      includeCreatedBy: true,
+    });
 
     let meetings: any[] = [];
     let total = 0;
     try {
       [meetings, total] = await Promise.all([
         prisma.meeting.findMany({
-          where: { investor: req.user.id },
+          where,
           skip,
           take: limit,
           orderBy: { createdAt: 'desc' },
@@ -73,7 +91,7 @@ export const listMeetings = async (req: AuthRequest, res: Response, next: NextFu
             meetingLink: true,
           },
         }),
-        prisma.meeting.count({ where: { investor: req.user.id } }),
+        prisma.meeting.count({ where }),
       ]);
     } catch {
       meetings = [];
