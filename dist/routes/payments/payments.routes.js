@@ -109,6 +109,28 @@ router.get("/public/payment_gateways", async (req, res) => {
         return res.status(500).json({ success: false, message: err.message });
     }
 });
+// GET /checkout/readiness — check if the user is ready to make a payment
+router.get("/checkout/readiness", authMiddleware, async (req, res) => {
+    try {
+        await requirePaymentReadiness(req.user.id);
+        return res.json({ success: true, ready: true });
+    }
+    catch (error) {
+        if (error instanceof PaymentReadinessError) {
+            return res.status(403).json({
+                success: false,
+                code: error.code,
+                message: error.message,
+                data: {
+                    profileCompletion: error.profileCompletion,
+                    kycStatus: error.kycStatus,
+                    missing: error.missing,
+                },
+            });
+        }
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
 // POST /checkout — supports authenticated users & guest signup checkout
 router.post("/checkout", async (req, res) => {
     try {

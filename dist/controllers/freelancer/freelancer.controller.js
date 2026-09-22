@@ -969,6 +969,7 @@ export const getFreelancerProfile = async (req, res, next) => {
                 email: user.email,
                 phone: user.phone || "",
                 avatarUrl: user.avatarUrl || "",
+                coverUrl: user.coverImageUrl || "",
                 bio: user.bio || "",
                 headline,
                 title,
@@ -1045,7 +1046,8 @@ export const updateFreelancerProfile = async (req, res, next) => {
             bio = String(body.bio);
         else if (body.headline != null)
             bio = String(body.headline);
-        const avatarUrl = body.avatarUrl != null ? String(body.avatarUrl).trim() || null : existing.avatarUrl;
+        const avatarUrl = body.avatarUrl != null ? String(body.avatarUrl).trim() || null : (body.logo != null ? String(body.logo).trim() || null : existing.avatarUrl);
+        const coverImageUrl = body.coverUrl != null ? String(body.coverUrl).trim() || null : (body.bannerUrl != null ? String(body.bannerUrl).trim() || null : existing.coverImageUrl);
         const phone = body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone;
         let status = existing.status;
         if (body.status != null) {
@@ -1065,6 +1067,7 @@ export const updateFreelancerProfile = async (req, res, next) => {
                 phone,
                 bio,
                 avatarUrl,
+                coverImageUrl,
                 city: loc.city,
                 country: loc.country,
                 status,
@@ -1109,12 +1112,18 @@ export const updateFreelancerProfile = async (req, res, next) => {
                 skillsArr = skillsArr.map((s) => skillMap.get(s) || moMap.get(s) || SKILL_NAME_MAP[s] || s);
             }
         }
-        const hourlyRateRaw = body.hourlyRate;
+        const hourlyRateRaw = body.hourlyRate ?? body.monthlyRate;
         let hourlyRate = existing.freelancerProfile?.hourlyRate ?? null;
+        console.log("[DEBUG] updateFreelancerProfile - body:", JSON.stringify(body));
+        console.log("[DEBUG] updateFreelancerProfile - hourlyRateRaw:", hourlyRateRaw);
         if (hourlyRateRaw != null && hourlyRateRaw !== "") {
             const n = Number(String(hourlyRateRaw).replace(/[^0-9.]/g, ""));
             hourlyRate = Number.isFinite(n) ? n : null;
         }
+        else if (hourlyRateRaw === "" || hourlyRateRaw === 0) {
+            hourlyRate = null;
+        }
+        console.log("[DEBUG] updateFreelancerProfile - parsed hourlyRate:", hourlyRate);
         const currency = body.currency != null ? String(body.currency).trim() : existing.freelancerProfile?.currency ?? null;
         const monthlyRateRaw = body.monthlyRate;
         let monthlyRetainer = existing.freelancerProfile?.monthlyRetainer ?? null;

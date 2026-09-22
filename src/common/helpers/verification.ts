@@ -8,6 +8,7 @@ export type VerificationItem = {
     documentUrl?: string | null;
     rejectReason?: string | null;
     required?: boolean;
+    unlockRequested?: boolean;
 };
 
 // Canonical map of all accepted verification keys → label

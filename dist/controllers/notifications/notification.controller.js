@@ -428,6 +428,55 @@ export const createCampaign = async (req, res, next) => {
         next(err);
     }
 };
+export const updateCampaign = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { title, message, targetFilter, channels, scheduledAt, status } = req.body;
+        const actorId = req.user?.id || "system";
+        const existing = await prisma.notificationCampaign.findUnique({ where: { id } });
+        if (!existing)
+            return res.status(404).json({ success: false, message: "Campaign not found" });
+        const updated = await prisma.notificationCampaign.update({
+            where: { id },
+            data: {
+                ...(title && { title }),
+                ...(message && { message }),
+                ...(targetFilter && { targetFilter: JSON.stringify(targetFilter) }),
+                ...(channels && { channels: JSON.stringify(channels) }),
+                ...(scheduledAt !== undefined && { scheduledAt: scheduledAt ? new Date(scheduledAt) : null }),
+                ...(status && { status }),
+            },
+        });
+        await logNotificationAction({
+            actorId, action: "update", entity: "NotificationCampaign", entityId: id,
+            description: `Updated campaign: "${title || existing.title}"`,
+            oldValue: existing, newValue: updated,
+        });
+        res.json({ success: true, data: updated });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const deleteCampaign = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const actorId = req.user?.id || "system";
+        const existing = await prisma.notificationCampaign.findUnique({ where: { id } });
+        if (!existing)
+            return res.status(404).json({ success: false, message: "Campaign not found" });
+        await prisma.notificationCampaign.delete({ where: { id } });
+        await logNotificationAction({
+            actorId, action: "delete", entity: "NotificationCampaign", entityId: id,
+            description: `Deleted campaign "${existing.title}"`,
+            oldValue: existing,
+        });
+        res.json({ success: true, message: "Campaign deleted successfully" });
+    }
+    catch (err) {
+        next(err);
+    }
+};
 export const sendCampaign = async (req, res, next) => {
     try {
         const { id } = req.params;

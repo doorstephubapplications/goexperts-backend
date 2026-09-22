@@ -9,7 +9,7 @@ getPreferences, updatePreferences,
 // Templates
 listTemplates, createTemplate, updateTemplate, deleteTemplate, 
 // Campaigns
-listCampaigns, createCampaign, sendCampaign, cancelCampaign, 
+listCampaigns, createCampaign, sendCampaign, cancelCampaign, updateCampaign, deleteCampaign, 
 // Channels
 listChannels, updateChannelConfig, 
 // Stats & Logs
@@ -33,9 +33,6 @@ router.get("/", listNotifications);
 router.post("/", createNotification);
 router.patch("/mark-all-read", markAllRead);
 router.get("/dashboard-stats", getNotificationDashboardStats);
-router.get("/:id", getNotificationDetails);
-router.patch("/:id/read", markRead);
-router.delete("/:id", deleteNotification);
 // ── User Preferences ──
 router.get("/preferences/:userId", getPreferences);
 router.put("/preferences/:userId", updatePreferences);
@@ -47,11 +44,17 @@ router.delete("/templates/:id", deleteTemplate);
 // ── Campaigns ──
 router.get("/campaigns", listCampaigns);
 router.post("/campaigns", createCampaign);
+router.put("/campaigns/:id", updateCampaign);
+router.delete("/campaigns/:id", deleteCampaign);
 router.post("/campaigns/:id/send", sendCampaign);
 router.post("/campaigns/:id/cancel", cancelCampaign);
 // ── Channels Config ──
 router.get("/channels", listChannels);
 router.put("/channels/:id", updateChannelConfig);
+// ── ID-Based Notification Routes (must be last) ──
+router.get("/:id", getNotificationDetails);
+router.patch("/:id/read", markRead);
+router.delete("/:id", deleteNotification);
 // ── Log and Queue exports for mounting at custom routes ──
 export const queueRouter = Router();
 queueRouter.use(authMiddleware);
