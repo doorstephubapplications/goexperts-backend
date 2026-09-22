@@ -1081,6 +1081,7 @@ export const getFreelancerProfile = async (
         email: user.email,
         phone: user.phone || "",
         avatarUrl: user.avatarUrl || "",
+        coverUrl: user.coverImageUrl || "",
         bio: user.bio || "",
         headline,
         title,
@@ -1165,7 +1166,9 @@ export const updateFreelancerProfile = async (
     else if (body.headline != null) bio = String(body.headline);
 
     const avatarUrl =
-      body.avatarUrl != null ? String(body.avatarUrl).trim() || null : existing.avatarUrl;
+      body.avatarUrl != null ? String(body.avatarUrl).trim() || null : (body.logo != null ? String(body.logo).trim() || null : existing.avatarUrl);
+    const coverImageUrl =
+      body.coverUrl != null ? String(body.coverUrl).trim() || null : (body.bannerUrl != null ? String(body.bannerUrl).trim() || null : existing.coverImageUrl);
     const phone = body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone;
 
     let status = existing.status;
@@ -1184,6 +1187,7 @@ export const updateFreelancerProfile = async (
         phone,
         bio,
         avatarUrl,
+        coverImageUrl,
         city: loc.city,
         country: loc.country,
         status,
