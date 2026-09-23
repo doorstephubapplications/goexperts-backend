@@ -38,7 +38,7 @@ async function main() {
   // 2. Clear old data to prevent conflicts
   await prisma.helpVideoGuide.deleteMany({});
   await prisma.helpArticle.deleteMany({});
-  await prisma.faq.deleteMany({ where: { categoryId: { not: null } } });
+  
   await prisma.helpCategory.deleteMany({});
 
   // 3. Create Categories
@@ -177,35 +177,11 @@ async function main() {
   });
 
   // 6. Create FAQs
-  await prisma.faq.create({
-    data: {
-      categoryId: cat1.id,
-      question: "How do I update my profile details?",
-      answer: "Go to your Account Settings page, update your profile inputs, and click Save Changes. Verified badges may take 24 hours to re-approve.",
-      category: "Account & Profile",
-      status: "active"
-    }
-  });
+  
 
-  await prisma.faq.create({
-    data: {
-      categoryId: cat2.id,
-      question: "How are platform processing fees calculated?",
-      answer: "We charge a standard 5% platform fee on all successfully funded contracts. There are no hidden setup fees.",
-      category: "Billing & Payments",
-      status: "active"
-    }
-  });
+  
 
-  await prisma.faq.create({
-    data: {
-      categoryId: cat4.id,
-      question: "How does escrow protection protect my payments?",
-      answer: "Escrow secures the client's money before the milestone work starts, assuring the freelancer that they will get paid upon successful completion of the milestones.",
-      category: "Trust & Safety",
-      status: "active"
-    }
-  });
+  
 
   console.log("Help Center Seeded Successfully!");
 }
@@ -218,3 +194,5 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+

@@ -24,13 +24,7 @@ export const getHowItWorksPage = async (req: Request, res: Response, next: NextF
       orderBy: { createdAt: "desc" },
     });
 
-    const faqs = await prisma.faq.findMany({
-      where: { 
-        status: { in: ["PUBLISHED", "published", "active", "ACTIVE"] }, 
-        pageKey: "how-it-works"
-      },
-      orderBy: { sortOrder: "asc" },
-    });
+    const faqs: any[] = [];
 
     // Structure response
     const response = {
@@ -118,3 +112,4 @@ export const getHowItWorksPage = async (req: Request, res: Response, next: NextF
     next(error);
   }
 };
+

@@ -293,7 +293,6 @@ const tableModelMapping: Record<string, string> = {
   cms_how_it_works: "CmsHowItWorks",
   workflow_steps: "WorkflowStep",
   blogs: "Blog",
-  faqs: "Faq",
   testimonials: "Testimonial",
   email_templates: "EmailTemplate",
   support_tickets: "SupportTicket",
@@ -378,7 +377,6 @@ const searchColumnsMapping: Record<string, string[]> = {
   Blog: ["title", "category", "author"],
   CmsHowItWorks: ["sectionName", "roleType", "title"],
   WorkflowStep: ["roleType", "title"],
-  Faq: ["question", "answer", "category"],
   Testimonial: ["name", "role", "company", "content"],
   SupportTicket: ["subject", "user", "category"],
   Campaign: ["name", "channel", "audience", "category"],
@@ -2537,6 +2535,7 @@ router.post("/admin/users/:id/mark-viewed", authMiddleware as any, (req, res) =>
 });
 
 export default router;
+
 
 
 

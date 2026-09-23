@@ -1,4 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { env } from '../../../config/env.js';
+import { FaqService } from '../../faq/faq.service.js';
+
 import { AuthRequest } from '../../../middlewares/auth.js';
 import { prisma } from '../../../config/database.js';
 import { successResponse, errorResponse } from '../../../core/response.js';
@@ -1872,15 +1876,15 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
     const visibleBlogs = allBlogs.filter((blog) => {
       if (!blog.publishDate) return true;
       
-      const pDate = new Date(blog.publishDate);
+      let pDate = new Date(blog.publishDate);
       if (blog.publishTime) {
         const parts = blog.publishTime.split(':');
         if (parts.length >= 2) {
-          const hours = parseInt(parts[0], 10);
-          const minutes = parseInt(parts[1], 10);
-          if (!isNaN(hours) && !isNaN(minutes)) {
-            pDate.setHours(hours, minutes, 0, 0);
-          }
+          const hh = parts[0].padStart(2, '0');
+          const mm = parts[1].padStart(2, '0');
+          const dateStr = pDate.toISOString().split('T')[0];
+          // Treat the admin's publish time as IST (+05:30)
+          pDate = new Date(`${dateStr}T${hh}:${mm}:00.000+05:30`);
         }
       }
       
@@ -1889,7 +1893,12 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
 
     const total = visibleBlogs.length;
     const skip = (page - 1) * limit;
-    const paginatedBlogs = visibleBlogs.slice(skip, skip + limit);
+    const paginatedBlogs = visibleBlogs.slice(skip, skip + limit).map(blog => ({
+      ...blog,
+      author: (blog.author && blog.author.toLowerCase().includes('admin')) 
+          ? 'Go Experts' 
+          : blog.author
+    }));
 
     return res.json(successResponse('Blogs retrieved', paginatedBlogs, {
       pagination: {
@@ -1904,11 +1913,28 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
 
 export const getFaqs = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const faqs = await prisma.faq.findMany({
-      where: { status: 'PUBLISHED' },
-      orderBy: { sortOrder: 'asc' }
-    });
-    return res.json(successResponse('FAQs retrieved', faqs));
+    let userRole = 'GENERAL';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const decoded: any = jwt.verify(token, env.JWT_SECRET as string);
+        if (decoded && decoded.role) {
+          userRole = decoded.role;
+        }
+      } catch (e) {
+        // Ignore token errors
+      }
+    }
+
+    try {
+      const faqService = new FaqService();
+      const result = await faqService.getPublicFaqs({ role: userRole.toUpperCase() as any });
+      return res.json(successResponse('FAQs retrieved', result.faqs || []));
+    } catch (e) {
+      console.error('Error fetching from FaqService', e);
+      return res.json(successResponse('FAQs retrieved', []));
+    }
   } catch (error) { next(error); }
 };
 
@@ -1935,7 +1961,14 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         return res.status(404).json({ success: false, message: 'Blog not found' });
       }
 
-      return res.json(successResponse('Blog details', blog));
+      const formattedBlog = {
+        ...blog,
+        author: (blog.author && blog.author.toLowerCase().includes('admin'))
+            ? 'Go Experts'
+            : blog.author
+      };
+
+      return res.json(successResponse('Blog details', formattedBlog));
     }
 
     if (modelName === 'project') {
@@ -2825,5 +2858,7 @@ export const getRoleColor = async (req: Request, res: Response, next: NextFuncti
     });
   }
 };
+
+
 
 

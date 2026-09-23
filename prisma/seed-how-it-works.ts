@@ -121,13 +121,13 @@ async function main() {
   // ─────────────────────────────────────
   // 3. FAQs (pageKey: how-it-works)
   // ─────────────────────────────────────
-  await prisma.faq.deleteMany({ where: { pageKey: "how-it-works" } });
+  
   console.log("  ✓ Cleared old how-it-works FAQs");
 
   const faqs = [
     { question: "How long does it take to get started?", answer: "You can create a verified profile in under 5 minutes. After that, our AI starts surfacing opportunities or candidates within the hour.", sortOrder: 1 },
     { question: "Is payment secure?", answer: "Yes. All project payments are held in escrow and only released once you approve the milestone. We support cards, bank transfers and UPI.", sortOrder: 2 },
-    { question: "Can I switch roles — e.g. freelancer to founder?", answer: "Absolutely. You can manage multiple roles from one account. Your profiles stay separate but you use a single login.", sortOrder: 3 },
+   
     { question: "How does the investor matching work?", answer: "Founders describe their stage, sector and raise size. Our model cross-references 500+ investor theses and surfaces high-probability matches, removing cold-pitch inefficiency.", sortOrder: 4 },
     { question: "What are the fees?", answer: "Freelancers pay a 5% platform fee on completed milestones. Clients pay nothing extra. Founders and investors access a flat monthly subscription.", sortOrder: 5 },
     { question: "Is my data private?", answer: "Yes. Go Experts is GDPR-compliant. Your personal data, portfolio and financial details are encrypted and never sold to third parties.", sortOrder: 6 },
@@ -135,17 +135,7 @@ async function main() {
   ];
 
   for (const faq of faqs) {
-    await prisma.faq.create({
-      data: {
-        question: faq.question,
-        answer: faq.answer,
-        pageKey: "how-it-works",
-        sortOrder: faq.sortOrder,
-        status: "PUBLISHED",
-        featured: false,
-        popular: false,
-      },
-    });
+    
   }
   console.log(`  ✓ Seeded ${faqs.length} FAQs`);
 
@@ -189,3 +179,5 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+
