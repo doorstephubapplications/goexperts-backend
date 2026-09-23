@@ -1872,15 +1872,15 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
     const visibleBlogs = allBlogs.filter((blog) => {
       if (!blog.publishDate) return true;
       
-      const pDate = new Date(blog.publishDate);
+      let pDate = new Date(blog.publishDate);
       if (blog.publishTime) {
         const parts = blog.publishTime.split(':');
         if (parts.length >= 2) {
-          const hours = parseInt(parts[0], 10);
-          const minutes = parseInt(parts[1], 10);
-          if (!isNaN(hours) && !isNaN(minutes)) {
-            pDate.setHours(hours, minutes, 0, 0);
-          }
+          const hh = parts[0].padStart(2, '0');
+          const mm = parts[1].padStart(2, '0');
+          const dateStr = pDate.toISOString().split('T')[0];
+          // Treat the admin's publish time as IST (+05:30)
+          pDate = new Date(`${dateStr}T${hh}:${mm}:00.000+05:30`);
         }
       }
       
@@ -1904,11 +1904,31 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
 
 export const getFaqs = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const faqs = await prisma.faq.findMany({
-      where: { status: 'PUBLISHED' },
-      orderBy: { sortOrder: 'asc' }
-    });
-    return res.json(successResponse('FAQs retrieved', faqs));
+    let userRole = 'GENERAL';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const jwt = require('jsonwebtoken');
+        const { env } = require('../../../config/env.js');
+        const decoded: any = jwt.verify(token, env.JWT_SECRET);
+        if (decoded && decoded.role) {
+          userRole = decoded.role;
+        }
+      } catch (e) {
+        // Ignore token errors
+      }
+    }
+
+    try {
+      const { FaqService } = require('../../faq/faq.service.js');
+      const faqService = new FaqService();
+      const faqs = await faqService.getPublicFaqs({ role: userRole.toUpperCase() });
+      return res.json(successResponse('FAQs retrieved', faqs || []));
+    } catch (e) {
+      console.error('Error fetching from FaqService', e);
+      return res.json(successResponse('FAQs retrieved', []));
+    }
   } catch (error) { next(error); }
 };
 
@@ -2825,5 +2845,6 @@ export const getRoleColor = async (req: Request, res: Response, next: NextFuncti
     });
   }
 };
+
 
 

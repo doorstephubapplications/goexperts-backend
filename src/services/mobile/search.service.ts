@@ -137,7 +137,7 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
   }
 
   if (all || type === 'faq') {
-    results.faqs = await prisma.faq.findMany({
+    results.faqs = await prisma.fAQ.findMany({
       where: {
         OR: [
           { question: { contains: q } },
@@ -166,3 +166,4 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
 
   return results;
 };
+

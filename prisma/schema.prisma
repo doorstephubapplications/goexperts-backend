@@ -1139,46 +1139,20 @@ model Blog {
   @@map("blogs")
 }
 
-model Faq {
-  id           String        @id @default(uuid())
-  question     String        @db.Text
-  answer       String        @db.Text
-  category     String?
-  pageKey      String?       @map("page_key")
-  categoryId   String?       @map("help_category_id")
-  status       String        @default("PUBLISHED")
-  featured     Boolean       @default(false)
-  popular      Boolean       @default(false)
-  sortOrder    Int           @default(0) @map("sort_order")
-  views        Int           @default(0)
-  helpfulYes   Int           @default(0) @map("helpful_yes")
-  helpfulNo    Int           @default(0) @map("helpful_no")
-  publishedAt  DateTime?     @map("published_at")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  deletedAt    DateTime?     @map("deleted_at")
-  helpCategory HelpCategory? @relation(fields: [categoryId], references: [id])
-
-  @@index([categoryId], map: "faqs_help_category_id_fkey")
-  @@index([status])
-  @@index([popular])
-  @@map("faqs")
-}
-
 model HelpCategory {
-  id               String           @id @default(uuid())
+  id               String   @id @default(uuid())
   name             String
-  slug             String           @unique
-  icon             String           @default("BookOpen")
-  shortDescription String?          @map("short_description")
-  order            Int              @default(0) @map("sort_order")
-  featured         Boolean          @default(false)
-  enabled          Boolean          @default(true)
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  faqs             Faq[]
-  articles         HelpArticle[]
-  videoGuides      HelpVideoGuide[]
+  slug             String   @unique
+  icon             String   @default("BookOpen")
+  shortDescription String?  @map("short_description")
+  order            Int      @default(0) @map("sort_order")
+  featured         Boolean  @default(false)
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  articles    HelpArticle[]
+  videoGuides HelpVideoGuide[]
 
   @@map("help_categories")
 }
@@ -2736,8 +2710,7 @@ model FAQCategory {
   role        FAQRole?
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
-
-  faqs FAQ[]
+  faqs        FAQ[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2824,28 +2797,28 @@ model FooterConfig {
   copyrightText String? @default("All rights reserved.")
 
   // Publishing — ATOMIC boundary. Children share this status.
-  status      String  @default("DRAFT") // DRAFT | PUBLISHED
+  status      String    @default("DRAFT") // DRAFT | PUBLISHED
   publishedAt DateTime?
   publishedBy String? // AdminUser id
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  columns    FooterColumn[]
+  columns     FooterColumn[]
   socialLinks FooterSocialLink[]
-  appLinks   FooterAppLink[]
-  legalLinks FooterLegalLink[]
+  appLinks    FooterAppLink[]
+  legalLinks  FooterLegalLink[]
 
   @@map("footer_configs")
 }
 
 model FooterColumn {
-  id           String @id @default(cuid())
-  footerConfigId String @map("footer_config_id")
-  title        String
-  key          String // e.g., "freelancers", "clients"
-  sortOrder    Int    @default(0)
-  isEnabled    Boolean @default(true)
+  id             String  @id @default(cuid())
+  footerConfigId String  @map("footer_config_id")
+  title          String
+  key            String // e.g., "freelancers", "clients"
+  sortOrder      Int     @default(0)
+  isEnabled      Boolean @default(true)
 
   config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
   links  FooterLink[]
@@ -2855,15 +2828,15 @@ model FooterColumn {
 }
 
 model FooterLink {
-  id       String @id @default(cuid())
-  columnId String @map("column_id")
-  label    String
-  href     String // validated against allowlist: internal /path or https://
-  routeType String @default("INTERNAL") // INTERNAL | EXTERNAL
-  external  Boolean @default(false)
+  id           String  @id @default(cuid())
+  columnId     String  @map("column_id")
+  label        String
+  href         String // validated against allowlist: internal /path or https://
+  routeType    String  @default("INTERNAL") // INTERNAL | EXTERNAL
+  external     Boolean @default(false)
   openInNewTab Boolean @default(false)
-  sortOrder Int    @default(0)
-  isEnabled Boolean @default(true)
+  sortOrder    Int     @default(0)
+  isEnabled    Boolean @default(true)
 
   column FooterColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
 
@@ -2872,13 +2845,13 @@ model FooterLink {
 }
 
 model FooterSocialLink {
-  id           String @id @default(cuid())
-  footerConfigId String @map("footer_config_id")
-  platform     String // LINKEDIN | TWITTER | INSTAGRAM | FACEBOOK | YOUTUBE | GITHUB
-  url          String // must be https://
-  label        String // "Follow Go Experts on LinkedIn"
-  sortOrder    Int    @default(0)
-  isEnabled    Boolean @default(true)
+  id             String  @id @default(cuid())
+  footerConfigId String  @map("footer_config_id")
+  platform       String // LINKEDIN | TWITTER | INSTAGRAM | FACEBOOK | YOUTUBE | GITHUB
+  url            String // must be https://
+  label          String // "Follow Go Experts on LinkedIn"
+  sortOrder      Int     @default(0)
+  isEnabled      Boolean @default(true)
 
   config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
 
@@ -2887,12 +2860,12 @@ model FooterSocialLink {
 }
 
 model FooterAppLink {
-  id           String @id @default(cuid())
-  footerConfigId String @map("footer_config_id")
-  platform     String // APP_STORE | GOOGLE_PLAY
-  url          String // must be https://
-  label        String
-  isEnabled    Boolean @default(true)
+  id             String  @id @default(cuid())
+  footerConfigId String  @map("footer_config_id")
+  platform       String // APP_STORE | GOOGLE_PLAY
+  url            String // must be https://
+  label          String
+  isEnabled      Boolean @default(true)
 
   config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
 
@@ -2901,16 +2874,15 @@ model FooterAppLink {
 }
 
 model FooterLegalLink {
-  id           String @id @default(cuid())
-  footerConfigId String @map("footer_config_id")
-  label        String
-  href         String // internal /path only
-  sortOrder    Int    @default(0)
-  isEnabled    Boolean @default(true)
+  id             String  @id @default(cuid())
+  footerConfigId String  @map("footer_config_id")
+  label          String
+  href           String // internal /path only
+  sortOrder      Int     @default(0)
+  isEnabled      Boolean @default(true)
 
   config FooterConfig @relation(fields: [footerConfigId], references: [id], onDelete: Cascade)
 
   @@index([footerConfigId])
   @@map("footer_legal_links")
 }
-
