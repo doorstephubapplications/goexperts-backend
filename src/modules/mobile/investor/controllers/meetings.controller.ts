@@ -145,7 +145,7 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response, next: Nex
 
 export const getMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, investor: req.user.id } });
+    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null, OR: [{ founder: req.user.id }, { investor: req.user.id }, { createdBy: req.user.id }] } });
     return res.json(successResponse('Meeting details', await shapeMeeting(meeting, req.user.id)));
   } catch (error) { next(error); }
 };
@@ -153,7 +153,7 @@ export const getMeeting = async (req: AuthRequest, res: Response, next: NextFunc
 export const rescheduleMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { date, time } = req.body;
-    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, investor: req.user.id } });
+    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null, OR: [{ founder: req.user.id }, { investor: req.user.id }, { createdBy: req.user.id }] } });
     if (!meeting) return res.status(404).json(successResponse('Meeting not found'));
 
     await prisma.meeting.update({ where: { id: meeting.id }, data: { date, time } });
@@ -172,7 +172,7 @@ export const rescheduleMeeting = async (req: AuthRequest, res: Response, next: N
 
 export const cancelMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, investor: req.user.id } });
+    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null, OR: [{ founder: req.user.id }, { investor: req.user.id }, { createdBy: req.user.id }] } });
     if (!meeting) return res.status(404).json(successResponse('Meeting not found'));
 
     await prisma.meeting.update({ where: { id: meeting.id }, data: { status: 'Cancelled' } });

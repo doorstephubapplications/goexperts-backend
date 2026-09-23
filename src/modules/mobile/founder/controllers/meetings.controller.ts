@@ -33,11 +33,11 @@ const roleLabel = (role?: string | null) => {
     .join(' ');
 };
 
-const shapeMeeting = (meeting: any, userMap: Record<string, any>, viewerRole: string) => {
+const shapeMeeting = (meeting: any, userMap: Record<string, any>, currentUserId: string) => {
   const founderUser = shapeUser(userMap[meeting.founder], 'founder');
   const investorUser = shapeUser(userMap[meeting.investor], 'investor');
-  const hostUser = shapeUser(userMap[meeting.createdBy], userMap[meeting.createdBy]?.role || viewerRole) || (viewerRole === 'founder' ? founderUser : investorUser);
-  const withProfile = viewerRole === 'founder' ? investorUser : founderUser;
+  const hostUser = shapeUser(userMap[meeting.createdBy], userMap[meeting.createdBy]?.role) || (meeting.founder === currentUserId ? founderUser : investorUser);
+  const withProfile = meeting.founder === currentUserId ? investorUser : founderUser;
   const participants = [founderUser, investorUser].filter(Boolean).map((participant) => ({
     ...participant,
     role: participant?.id === hostUser?.id ? 'Host' : roleLabel(participant?.role),
@@ -116,7 +116,7 @@ export const listMeetings = async (req: AuthRequest, res: Response, next: NextFu
 
     const userIds = [...new Set(meetings.flatMap((meeting) => [meeting.founder, meeting.investor, meeting.createdBy].filter(Boolean) as string[]))];
     const userMap = await getUserMap(userIds);
-    const shaped = meetings.map((meeting) => shapeMeeting(meeting, userMap, 'founder'));
+    const shaped = meetings.map((meeting) => shapeMeeting(meeting, userMap, req.user.id));
 
     return res.json(successResponse('Meetings retrieved', shaped, {
       page,
@@ -140,7 +140,7 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response, next: Nex
       req.body.freelancerId ||
       ''
     ).trim();
-    const investor = await prisma.user.findFirst({ where: { id: investorId, role: 'investor', deletedAt: null } });
+    const investor = await prisma.user.findFirst({ where: { id: investorId, deletedAt: null } });
 
     if (!investor) {
       return res.status(404).json(errorResponse('Investor not found', 'NOT_FOUND'));
@@ -176,7 +176,7 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response, next: Nex
     });
 
     const userMap = await getUserMap([req.user.id, investorId]);
-    return res.status(201).json(successResponse('Meeting scheduled', shapeMeeting(meetingWithLink, userMap, 'founder')));
+    return res.status(201).json(successResponse('Meeting scheduled', shapeMeeting(meetingWithLink, userMap, req.user.id)));
   } catch (error) {
     next(error);
   }
@@ -185,7 +185,15 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response, next: Nex
 export const getMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const meeting = await prisma.meeting.findFirst({
-      where: { id: req.params.id, founder: req.user.id, deletedAt: null },
+      where: { 
+        id: req.params.id, 
+        deletedAt: null,
+        OR: [
+          { founder: req.user.id },
+          { investor: req.user.id },
+          { createdBy: req.user.id }
+        ]
+      },
     });
 
     if (!meeting) {
@@ -193,7 +201,7 @@ export const getMeeting = async (req: AuthRequest, res: Response, next: NextFunc
     }
 
     const userMap = await getUserMap([meeting.founder, meeting.investor, meeting.createdBy].filter(Boolean) as string[]);
-    return res.json(successResponse('Meeting details', shapeMeeting(meeting, userMap, 'founder')));
+    return res.json(successResponse('Meeting details', shapeMeeting(meeting, userMap, req.user.id)));
   } catch (error) {
     next(error);
   }
@@ -202,7 +210,7 @@ export const getMeeting = async (req: AuthRequest, res: Response, next: NextFunc
 export const rescheduleMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { date, time, duration } = req.body;
-    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, founder: req.user.id, deletedAt: null } });
+    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null, OR: [{ founder: req.user.id }, { investor: req.user.id }, { createdBy: req.user.id }] } });
 
     if (!meeting) {
       return res.status(404).json(errorResponse('Meeting not found', 'NOT_FOUND'));
@@ -226,7 +234,7 @@ export const rescheduleMeeting = async (req: AuthRequest, res: Response, next: N
     });
 
     const userMap = await getUserMap([updated.founder, updated.investor, updated.createdBy].filter(Boolean) as string[]);
-    return res.json(successResponse('Meeting rescheduled', shapeMeeting(updated, userMap, 'founder')));
+    return res.json(successResponse('Meeting rescheduled', shapeMeeting(updated, userMap, req.user.id)));
   } catch (error) {
     next(error);
   }
@@ -234,7 +242,7 @@ export const rescheduleMeeting = async (req: AuthRequest, res: Response, next: N
 
 export const cancelMeeting = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, founder: req.user.id, deletedAt: null } });
+    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null, OR: [{ founder: req.user.id }, { investor: req.user.id }, { createdBy: req.user.id }] } });
 
     if (!meeting) {
       return res.status(404).json(errorResponse('Meeting not found', 'NOT_FOUND'));
@@ -251,7 +259,7 @@ export const cancelMeeting = async (req: AuthRequest, res: Response, next: NextF
     });
 
     const userMap = await getUserMap([updated.founder, updated.investor, updated.createdBy].filter(Boolean) as string[]);
-    return res.json(successResponse('Meeting cancelled', shapeMeeting(updated, userMap, 'founder')));
+    return res.json(successResponse('Meeting cancelled', shapeMeeting(updated, userMap, req.user.id)));
   } catch (error) {
     next(error);
   }
@@ -259,7 +267,7 @@ export const cancelMeeting = async (req: AuthRequest, res: Response, next: NextF
 
 export const addMeetingNotes = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, founder: req.user.id, deletedAt: null } });
+    const meeting = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null, OR: [{ founder: req.user.id }, { investor: req.user.id }, { createdBy: req.user.id }] } });
     if (!meeting) {
       return res.status(404).json(errorResponse('Meeting not found', 'NOT_FOUND'));
     }
@@ -269,3 +277,4 @@ export const addMeetingNotes = async (req: AuthRequest, res: Response, next: Nex
     next(error);
   }
 };
+
