@@ -276,6 +276,9 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
         if (!nextData.author || String(nextData.author).trim() === "") {
             nextData.author = adminName;
         }
+        if (!nextData.slug && nextData.title) {
+            nextData.slug = String(nextData.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        }
         return nextData;
     }
     // 5. CREATE

@@ -1868,7 +1868,7 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
     const limit = parseInt(req.query.limit as string) || 20;
 
     const allBlogs = await prisma.blog.findMany({
-      where: { status: 'active', deletedAt: null },
+      where: { status: 'PUBLISHED', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -1954,7 +1954,7 @@ export const getById = (modelName: string) => async (req: Request, res: Response
   try {
     if (modelName === 'blog') {
       const blog = await prisma.blog.findFirst({
-        where: { id: req.params.id, status: 'active', deletedAt: null },
+        where: { id: req.params.id, status: 'PUBLISHED', deletedAt: null },
       });
 
       if (!blog) {
@@ -2858,6 +2858,7 @@ export const getRoleColor = async (req: Request, res: Response, next: NextFuncti
     });
   }
 };
+
 
 
 
