@@ -1878,9 +1878,14 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
       
       let pDate = new Date(blog.publishDate);
       if (blog.publishTime) {
-        const parts = blog.publishTime.split(':');
+        const cleanTime = blog.publishTime.replace(/am|pm| /gi, '').trim();
+          const isPM = blog.publishTime.toLowerCase().includes('pm');
+          const parts = cleanTime.split(':');
         if (parts.length >= 2) {
-          const hh = parts[0].padStart(2, '0');
+          let hhInt = parseInt(parts[0], 10);
+            if (isPM && hhInt < 12) hhInt += 12;
+            if (!isPM && hhInt === 12) hhInt = 0;
+            const hh = hhInt.toString().padStart(2, '0');
           const mm = parts[1].padStart(2, '0');
           const dateStr = pDate.toISOString().split('T')[0];
           // Treat the admin's publish time as IST (+05:30)
@@ -2858,6 +2863,7 @@ export const getRoleColor = async (req: Request, res: Response, next: NextFuncti
     });
   }
 };
+
 
 
 

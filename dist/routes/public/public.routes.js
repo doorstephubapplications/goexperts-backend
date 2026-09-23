@@ -726,15 +726,15 @@ const getPublicHelpCenter = async (req, res, next) => {
                 // Fallback to default if JSON parse fails
             }
         }
-        // 2. Load Categories (only active ones) along with active FAQ counts
-        const categories = await prisma.fAQCategory?.findMany({
-            where: { isActive: true, role: "GENERAL" },
-            orderBy: { sortOrder: "asc" },
+        // 2. Load Categories (only active ones) along with active article counts
+        const categories = await prisma.helpCategory?.findMany({
+            where: { enabled: true },
+            orderBy: { order: "asc" },
             include: {
                 _count: {
                     select: {
-                        faqs: {
-                            where: { isPublished: true }
+                        articles: {
+                            where: { status: "published" }
                         }
                     }
                 }
@@ -773,8 +773,8 @@ const getPublicHelpCenter = async (req, res, next) => {
                 settings,
                 categories: (categories || []).map((cat) => ({
                     ...cat,
-                    shortDescription: cat.description,
-                    articleCount: cat._count?.faqs || 0
+                    shortDescription: cat.shortDescription,
+                    articleCount: cat._count?.articles || 0
                 })),
                 popularArticles: popularArticles || [],
                 videoGuides: videoGuides || [],
@@ -1789,13 +1789,7 @@ router.get("/help-center/categories/:slug", async (req, res, next) => {
                     where: { status: "published" },
                     orderBy: { order: "asc" }
                 },
-                videoGuides: {
-                    where: { enabled: true },
-                    orderBy: { order: "asc" }
-                },
-                faqs: {
-                    where: { status: "PUBLISHED" }
-                }
+                videoGuides: { where: { enabled: true }, orderBy: { order: "asc" } }
             }
         }).catch(() => null);
         if (category?.enabled) {
