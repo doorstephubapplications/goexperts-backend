@@ -464,6 +464,7 @@ async function listModel({
   include,
   defaultWhere,
   forceWhere,
+  defaultOrderBy,
 }: {
   req: Request;
   res: Response;
@@ -475,6 +476,7 @@ async function listModel({
   include?: Record<string, any>;
   defaultWhere?: Record<string, any>;
   forceWhere?: Record<string, any>;
+  defaultOrderBy?: any;
 }) {
   try {
     const { page, pageSize, search, orderBy, ascending, filters } = parseListParams(req);
@@ -509,7 +511,7 @@ async function listModel({
       take: pageSize,
       orderBy: orderBy
         ? { [orderBy]: ascending ? "asc" : "desc" }
-        : { createdAt: "desc" },
+        : (defaultOrderBy || { createdAt: "desc" }),
       ...(include ? { include } : {}),
     });
 

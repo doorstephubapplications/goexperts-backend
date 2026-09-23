@@ -1,4 +1,4 @@
-﻿import { Response, Request, NextFunction, Router } from "express";
+import { Response, Request, NextFunction, Router } from "express";
 import { prisma } from "../../config/database.js";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 
@@ -313,6 +313,10 @@ function ensureBlogAdminAuthor(modelName: string, data: any, req: AuthenticatedR
 
   if (!nextData.author || String(nextData.author).trim() === "") {
     nextData.author = adminName;
+  }
+
+  if (!nextData.slug && nextData.title) {
+    nextData.slug = String(nextData.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
   }
 
   return nextData;

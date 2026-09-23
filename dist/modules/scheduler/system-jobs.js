@@ -387,4 +387,42 @@ export function registerSystemJobs() {
         }
         console.log(`[SYSTEM JOB] Retried ${failed.length} failed Push notifications.`);
     });
+    // 21. Blog Scheduled Publishing
+    SchedulerService.registerHandler("Blog Scheduled Publishing", async () => {
+        const now = new Date();
+        // Find scheduled blogs where the schedule time has passed
+        const pendingPublish = await prisma.blog.findMany({
+            where: {
+                status: "SCHEDULED",
+                scheduledAt: { lte: now },
+                deletedAt: null
+            }
+        });
+        if (pendingPublish.length > 0) {
+            let publishedCount = 0;
+            for (const blog of pendingPublish) {
+                // Atomic update to ensure no double-publishing
+                const result = await prisma.blog.updateMany({
+                    where: {
+                        id: blog.id,
+                        status: "SCHEDULED",
+                    },
+                    data: {
+                        status: "PUBLISHED",
+                        publishedAt: now,
+                        publishDate: now, // legacy field sync
+                    }
+                });
+                if (result.count > 0) {
+                    publishedCount++;
+                    console.log(`[SYSTEM JOB] Published blog: ${blog.slug || blog.title}`);
+                }
+            }
+            if (publishedCount > 0) {
+                console.log(`[SYSTEM JOB] Successfully published ${publishedCount} scheduled blogs.`);
+                // Note: Cache invalidation can be triggered here if Redis or similar is used,
+                // currently API directly queries DB.
+            }
+        }
+    });
 }

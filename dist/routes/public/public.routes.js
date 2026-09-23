@@ -403,7 +403,7 @@ function getPrismaDelegate(modelName) {
     const camelCase = modelName.charAt(0).toLowerCase() + modelName.slice(1);
     return prisma[camelCase] ?? prisma[modelName];
 }
-async function listModel({ req, res, next, modelName, searchColumns, include, defaultWhere, forceWhere, }) {
+async function listModel({ req, res, next, modelName, searchColumns, include, defaultWhere, forceWhere, defaultOrderBy, }) {
     try {
         const { page, pageSize, search, orderBy, ascending, filters } = parseListParams(req);
         // Start with filters from client, then apply defaults/overrides.
@@ -433,7 +433,7 @@ async function listModel({ req, res, next, modelName, searchColumns, include, de
             take: pageSize,
             orderBy: orderBy
                 ? { [orderBy]: ascending ? "asc" : "desc" }
-                : { createdAt: "desc" },
+                : (defaultOrderBy || { createdAt: "desc" }),
             ...(include ? { include } : {}),
         });
         res.json({ success: true, rows, total });
@@ -726,15 +726,15 @@ const getPublicHelpCenter = async (req, res, next) => {
                 // Fallback to default if JSON parse fails
             }
         }
-        // 2. Load Categories (only enabled ones) along with active article counts
-        const categories = await prisma.helpCategory?.findMany({
-            where: { enabled: true },
-            orderBy: { order: "asc" },
+        // 2. Load Categories (only active ones) along with active FAQ counts
+        const categories = await prisma.fAQCategory?.findMany({
+            where: { isActive: true, role: "GENERAL" },
+            orderBy: { sortOrder: "asc" },
             include: {
                 _count: {
                     select: {
-                        articles: {
-                            where: { status: "published" }
+                        faqs: {
+                            where: { isPublished: true }
                         }
                     }
                 }
@@ -763,8 +763,8 @@ const getPublicHelpCenter = async (req, res, next) => {
             }
         }).catch(() => []);
         // 5. Load General FAQs
-        const faqs = await prisma.faq?.findMany({
-            where: { status: "PUBLISHED" },
+        const faqs = await prisma.fAQ?.findMany({
+            where: { isPublished: true },
             take: 10
         }).catch(() => []);
         res.json({
@@ -773,7 +773,8 @@ const getPublicHelpCenter = async (req, res, next) => {
                 settings,
                 categories: (categories || []).map((cat) => ({
                     ...cat,
-                    articleCount: cat._count?.articles || 0
+                    shortDescription: cat.description,
+                    articleCount: cat._count?.faqs || 0
                 })),
                 popularArticles: popularArticles || [],
                 videoGuides: videoGuides || [],
@@ -787,17 +788,17 @@ const getPublicHelpCenter = async (req, res, next) => {
 };
 const getPublicFaq = async (req, res, next) => {
     try {
-        const categories = await prisma.helpCategory?.findMany({
-            where: { enabled: true },
-            orderBy: { order: "asc" },
+        const categories = await prisma.fAQCategory?.findMany({
+            where: { isActive: true },
+            orderBy: { sortOrder: "asc" },
             include: {
                 faqs: {
-                    where: { status: "PUBLISHED" }
+                    where: { isPublished: true }
                 }
             }
         }).catch(() => []);
-        const popularFaqs = await prisma.faq?.findMany({
-            where: { status: "PUBLISHED" },
+        const popularFaqs = await prisma.fAQ?.findMany({
+            where: { isPublished: true },
             take: 6
         }).catch(() => []);
         res.json({
@@ -1486,26 +1487,37 @@ router.get("/blogs", async (req, res, next) => {
         next,
         modelName: "Blog",
         searchColumns: ["title", "category", "author"],
-        defaultWhere: { status: "active" },
+        defaultWhere: {
+            status: "PUBLISHED",
+            deletedAt: null,
+            publishedAt: { lte: new Date() }
+        },
+        defaultOrderBy: [
+            { featured: "desc" },
+            { publishedAt: "desc" }
+        ]
     });
 });
 router.get("/blogs/:id", async (req, res, next) => {
     try {
         const key = String(req.params.id || "").trim();
-        const slugify = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        // First try by ID, then by slug
         let row = await prisma.blog.findFirst({
-            where: { id: key, status: "active", deletedAt: null },
+            where: {
+                OR: [{ id: key }, { slug: key }],
+                status: "PUBLISHED",
+                deletedAt: null,
+                publishedAt: { lte: new Date() }
+            },
         });
-        if (!row) {
-            const candidates = await prisma.blog.findMany({
-                where: { status: "active", deletedAt: null },
-                take: 200,
-            });
-            row = candidates.find((b) => slugify(b.title) === key || slugify(b.title) === slugify(key)) || null;
-        }
         if (!row) {
             return res.status(404).json({ success: false, message: "Blog post not found" });
         }
+        // Increment view count safely
+        await prisma.blog.update({
+            where: { id: row.id },
+            data: { views: { increment: 1 } }
+        }).catch(() => { });
         res.json({ success: true, data: row });
     }
     catch (err) {
@@ -1786,10 +1798,29 @@ router.get("/help-center/categories/:slug", async (req, res, next) => {
                 }
             }
         }).catch(() => null);
-        if (!category || !category.enabled) {
+        if (category?.enabled) {
+            return res.json({ success: true, data: category });
+        }
+        const faqCategory = await prisma.fAQCategory?.findUnique({
+            where: { slug },
+            include: {
+                faqs: {
+                    where: { isPublished: true },
+                    orderBy: { sortOrder: "asc" }
+                }
+            }
+        }).catch(() => null);
+        if (!faqCategory || !faqCategory.isActive) {
             return res.status(404).json({ success: false, message: "Category not found" });
         }
-        res.json({ success: true, data: category });
+        res.json({
+            success: true,
+            data: {
+                ...faqCategory,
+                articles: [],
+                categoryType: "faq"
+            }
+        });
     }
     catch (err) {
         next(err);
