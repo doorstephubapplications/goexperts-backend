@@ -1929,8 +1929,8 @@ export const getFaqs = async (req: Request, res: Response, next: NextFunction) =
 
     try {
       const faqService = new FaqService();
-      const faqs = await faqService.getPublicFaqs({ role: userRole.toUpperCase() as any });
-      return res.json(successResponse('FAQs retrieved', faqs || []));
+      const result = await faqService.getPublicFaqs({ role: userRole.toUpperCase() as any });
+      return res.json(successResponse('FAQs retrieved', result.faqs || []));
     } catch (e) {
       console.error('Error fetching from FaqService', e);
       return res.json(successResponse('FAQs retrieved', []));
