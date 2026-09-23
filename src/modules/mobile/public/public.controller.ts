@@ -1,4 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { env } from '../../../config/env.js';
+import { FaqService } from '../../faq/faq.service.js';
+
 import { AuthRequest } from '../../../middlewares/auth.js';
 import { prisma } from '../../../config/database.js';
 import { successResponse, errorResponse } from '../../../core/response.js';
@@ -1889,7 +1893,12 @@ export const getBlogs = async (req: Request, res: Response, next: NextFunction) 
 
     const total = visibleBlogs.length;
     const skip = (page - 1) * limit;
-    const paginatedBlogs = visibleBlogs.slice(skip, skip + limit);
+    const paginatedBlogs = visibleBlogs.slice(skip, skip + limit).map(blog => ({
+      ...blog,
+      author: (blog.author && blog.author.toLowerCase().includes('admin')) 
+          ? 'Go Experts' 
+          : blog.author
+    }));
 
     return res.json(successResponse('Blogs retrieved', paginatedBlogs, {
       pagination: {
@@ -1909,9 +1918,7 @@ export const getFaqs = async (req: Request, res: Response, next: NextFunction) =
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       try {
-        const jwt = require('jsonwebtoken');
-        const { env } = require('../../../config/env.js');
-        const decoded: any = jwt.verify(token, env.JWT_SECRET);
+        const decoded: any = jwt.verify(token, env.JWT_SECRET as string);
         if (decoded && decoded.role) {
           userRole = decoded.role;
         }
@@ -1921,9 +1928,8 @@ export const getFaqs = async (req: Request, res: Response, next: NextFunction) =
     }
 
     try {
-      const { FaqService } = require('../../faq/faq.service.js');
       const faqService = new FaqService();
-      const faqs = await faqService.getPublicFaqs({ role: userRole.toUpperCase() });
+      const faqs = await faqService.getPublicFaqs({ role: userRole.toUpperCase() as any });
       return res.json(successResponse('FAQs retrieved', faqs || []));
     } catch (e) {
       console.error('Error fetching from FaqService', e);
@@ -1955,7 +1961,14 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         return res.status(404).json({ success: false, message: 'Blog not found' });
       }
 
-      return res.json(successResponse('Blog details', blog));
+      const formattedBlog = {
+        ...blog,
+        author: (blog.author && blog.author.toLowerCase().includes('admin'))
+            ? 'Go Experts'
+            : blog.author
+      };
+
+      return res.json(successResponse('Blog details', formattedBlog));
     }
 
     if (modelName === 'project') {
@@ -2845,6 +2858,7 @@ export const getRoleColor = async (req: Request, res: Response, next: NextFuncti
     });
   }
 };
+
 
 
 
