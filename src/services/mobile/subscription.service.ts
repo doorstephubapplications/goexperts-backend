@@ -276,16 +276,37 @@ export const activateUserSubscription = async (
   });
 
   const subscription = await prisma.subscription.create({
-    data: {
-      userId,
-      planId: plan.id,
-      status: 'active',
-      startDate: new Date(),
-      endDate: computeSubscriptionEndDate(billingCycle),
-      autoRenew: plan.amount > 0,
-    },
-    include: { plan: true },
-  });
+      data: {
+        userId,
+        planId: plan.id,
+        status: 'active',
+        startDate: new Date(),
+        endDate: computeSubscriptionEndDate(billingCycle),
+        autoRenew: plan.amount > 0,
+      },
+      include: { plan: true },
+    });
+
+    if (plan.amount > 0) {
+      try {
+        const gst = plan.amount * 0.18;
+        const invoiceNumber = 'INV-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber,
+            userId,
+            subscriptionId: subscription.id,
+            subtotal: plan.amount - gst,
+            gst,
+            discount: 0,
+            total: plan.amount,
+            status: 'paid',
+          }
+        });
+      } catch (err) {
+        console.error('Failed to generate subscription invoice:', err);
+      }
+    }
 
   await reactivateAccountAfterPlanUpgrade(userId);
 
@@ -614,3 +635,5 @@ export const resolveSkillDisplayNames = async (
 
   return parts.map((p) => namesById.get(p) ?? p);
 };
+
+
