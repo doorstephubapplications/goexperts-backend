@@ -838,15 +838,15 @@ const getPublicHelpCenter = async (req: Request, res: Response, next: NextFuncti
       }
     }
 
-    // 2. Load Categories (only active ones) along with active FAQ counts
-    const categories = await (prisma as any).fAQCategory?.findMany({
-      where: { isActive: true, role: "GENERAL" },
-      orderBy: { sortOrder: "asc" },
+    // 2. Load Categories (only active ones) along with active article counts
+    const categories = await (prisma as any).helpCategory?.findMany({
+      where: { enabled: true },
+      orderBy: { order: "asc" },
       include: {
         _count: {
           select: {
-            faqs: {
-              where: { isPublished: true }
+            articles: {
+              where: { status: "published" }
             }
           }
         }
@@ -889,8 +889,8 @@ const getPublicHelpCenter = async (req: Request, res: Response, next: NextFuncti
         settings,
         categories: (categories || []).map((cat: any) => ({
           ...cat,
-          shortDescription: cat.description,
-          articleCount: cat._count?.faqs || 0
+          shortDescription: cat.shortDescription,
+          articleCount: cat._count?.articles || 0
         })),
         popularArticles: popularArticles || [],
         videoGuides: videoGuides || [],
@@ -1992,13 +1992,7 @@ router.get("/help-center/categories/:slug", async (req: Request, res: Response, 
           where: { status: "published" },
           orderBy: { order: "asc" }
         },
-        videoGuides: {
-          where: { enabled: true },
-          orderBy: { order: "asc" }
-        },
-        faqs: {
-          where: { status: "PUBLISHED" }
-        }
+        videoGuides: { where: { enabled: true }, orderBy: { order: "asc" } }
       }
     }).catch(() => null);
 
@@ -2174,3 +2168,5 @@ router.get("/investors/:id", async (req: Request, res: Response, next: NextFunct
 });
 
 export default router;
+
+
