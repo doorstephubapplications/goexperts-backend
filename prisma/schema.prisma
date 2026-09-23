@@ -1124,12 +1124,17 @@ model CmsPageRevision {
 model Blog {
   id          String    @id @default(uuid())
   title       String
+  slug        String    @unique
+  excerpt     String?   @db.Text
   description String?   @db.Text
   bannerUrl   String?   @map("banner_url")
   publishDate DateTime? @map("publish_date")
   publishTime String?   @map("publish_time")
+  publishedAt DateTime? @map("published_at")
+  scheduledAt DateTime? @map("scheduled_at")
   category    String
   author      String
+  featured    Boolean   @default(false)
   views       Int       @default(0)
   status      String    @default("active")
   createdAt   DateTime  @default(now()) @map("created_at")

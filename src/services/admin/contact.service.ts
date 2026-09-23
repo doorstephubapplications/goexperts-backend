@@ -28,6 +28,7 @@ export interface ContactPageContent {
     mainAddress: string;
     registeredAddress?: string;
     websiteUrl: string;
+    mapImage?: string;
   };
   supportChannels: Array<{
     id: string;
@@ -102,6 +103,7 @@ export class ContactCmsService {
     let page = await prisma.cmsPage.findFirst({
       where: {
         OR: [
+          { name: { equals: "Help Center" } },
           { name: { equals: "Contact" } },
           { name: { equals: "Contact Us" } },
         ],

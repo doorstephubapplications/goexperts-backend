@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database.js';
+﻿import { prisma } from '../../config/database.js';
 
 // Route allowlist for internal link validation
 export const INTERNAL_ROUTE_ALLOWLIST = new Set([

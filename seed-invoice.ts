@@ -31,7 +31,7 @@ async function seed() {
                             <strong>Go Experts</strong><br>
                             123 Tech Avenue<br>
                             San Francisco, CA 94107<br>
-                            support@goexperts.in
+                            servicedesk@goexperts.in
                         </td>
                         <td style="text-align: right; padding-bottom: 20px;">
                             <h3 style="margin-top:0; color:#333; font-size: 18px;">Bill To</h3>
@@ -61,7 +61,7 @@ async function seed() {
     
     <div style="margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; font-size: 12px; color: #888; text-align: center;">
         <p>Thank you for your business. Please make payment within 14 days of receiving this invoice.</p>
-        <p>If you have any questions concerning this invoice, contact our support team at support@goexperts.in.</p>
+        <p>If you have any questions concerning this invoice, contact our support team at servicedesk@goexperts.in.</p>
     </div>
 </div>
 `;

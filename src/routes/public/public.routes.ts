@@ -836,15 +836,15 @@ const getPublicHelpCenter = async (req: Request, res: Response, next: NextFuncti
       }
     }
 
-    // 2. Load Categories (only enabled ones) along with active article counts
-    const categories = await (prisma as any).helpCategory?.findMany({
-      where: { enabled: true },
-      orderBy: { order: "asc" },
+    // 2. Load Categories (only active ones) along with active FAQ counts
+    const categories = await (prisma as any).fAQCategory?.findMany({
+      where: { isActive: true, role: "GENERAL" },
+      orderBy: { sortOrder: "asc" },
       include: {
         _count: {
           select: {
-            articles: {
-              where: { status: "published" }
+            faqs: {
+              where: { isPublished: true }
             }
           }
         }
@@ -876,8 +876,8 @@ const getPublicHelpCenter = async (req: Request, res: Response, next: NextFuncti
     }).catch(() => []);
 
     // 5. Load General FAQs
-    const faqs = await (prisma as any).faq?.findMany({
-      where: { status: "PUBLISHED" },
+    const faqs = await (prisma as any).fAQ?.findMany({
+      where: { isPublished: true },
       take: 10
     }).catch(() => []);
 
@@ -887,7 +887,8 @@ const getPublicHelpCenter = async (req: Request, res: Response, next: NextFuncti
         settings,
         categories: (categories || []).map((cat: any) => ({
           ...cat,
-          articleCount: cat._count?.articles || 0
+          shortDescription: cat.description,
+          articleCount: cat._count?.faqs || 0
         })),
         popularArticles: popularArticles || [],
         videoGuides: videoGuides || [],
@@ -901,18 +902,18 @@ const getPublicHelpCenter = async (req: Request, res: Response, next: NextFuncti
 
 const getPublicFaq = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const categories = await (prisma as any).helpCategory?.findMany({
-      where: { enabled: true },
-      orderBy: { order: "asc" },
+    const categories = await (prisma as any).fAQCategory?.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
       include: {
         faqs: {
-          where: { status: "PUBLISHED" }
+          where: { isPublished: true }
         }
       }
     }).catch(() => []);
 
-    const popularFaqs = await (prisma as any).faq?.findMany({
-      where: { status: "PUBLISHED" },
+    const popularFaqs = await (prisma as any).fAQ?.findMany({
+      where: { isPublished: true },
       take: 6
     }).catch(() => []);
 
@@ -1664,31 +1665,41 @@ router.get("/blogs", async (req: Request, res: Response, next: NextFunction) => 
     next,
     modelName: "Blog",
     searchColumns: ["title", "category", "author"],
-    defaultWhere: { status: "active" },
+    defaultWhere: { 
+      status: "PUBLISHED",
+      deletedAt: null,
+      publishedAt: { lte: new Date() }
+    },
+    defaultOrderBy: [
+      { featured: "desc" },
+      { publishedAt: "desc" }
+    ]
   });
 });
 
 router.get("/blogs/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const key = String(req.params.id || "").trim();
-    const slugify = (t: string) =>
-      t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
+    
+    // First try by ID, then by slug
     let row = await prisma.blog.findFirst({
-      where: { id: key, status: "active", deletedAt: null },
+      where: { 
+        OR: [{ id: key }, { slug: key }],
+        status: "PUBLISHED", 
+        deletedAt: null,
+        publishedAt: { lte: new Date() }
+      },
     });
-
-    if (!row) {
-      const candidates = await prisma.blog.findMany({
-        where: { status: "active", deletedAt: null },
-        take: 200,
-      });
-      row = candidates.find((b) => slugify(b.title) === key || slugify(b.title) === slugify(key)) || null;
-    }
 
     if (!row) {
       return res.status(404).json({ success: false, message: "Blog post not found" });
     }
+
+    // Increment view count safely
+    await prisma.blog.update({
+      where: { id: row.id },
+      data: { views: { increment: 1 } }
+    }).catch(() => {});
 
     res.json({ success: true, data: row });
   } catch (err) {
@@ -1989,11 +2000,32 @@ router.get("/help-center/categories/:slug", async (req: Request, res: Response, 
       }
     }).catch(() => null);
 
-    if (!category || !category.enabled) {
+    if (category?.enabled) {
+      return res.json({ success: true, data: category });
+    }
+
+    const faqCategory = await (prisma as any).fAQCategory?.findUnique({
+      where: { slug },
+      include: {
+        faqs: {
+          where: { isPublished: true },
+          orderBy: { sortOrder: "asc" }
+        }
+      }
+    }).catch(() => null);
+
+    if (!faqCategory || !faqCategory.isActive) {
       return res.status(404).json({ success: false, message: "Category not found" });
     }
 
-    res.json({ success: true, data: category });
+    res.json({
+      success: true,
+      data: {
+        ...faqCategory,
+        articles: [],
+        categoryType: "faq"
+      }
+    });
   } catch (err) {
     next(err);
   }
