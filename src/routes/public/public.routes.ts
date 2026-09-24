@@ -1686,10 +1686,15 @@ router.get("/blogs/:id", async (req: Request, res: Response, next: NextFunction)
     // First try by ID, then by slug
     let row = await prisma.blog.findFirst({
       where: { 
-        OR: [{ id: key }, { slug: key }],
-        status: "PUBLISHED", 
+        OR: [
+          { id: key },
+          { 
+            slug: key,
+            status: "PUBLISHED",
+            publishedAt: { lte: new Date() }
+          }
+        ],
         deletedAt: null,
-        publishedAt: { lte: new Date() }
       },
     });
 
@@ -2017,7 +2022,7 @@ router.get("/help-center/categories/:slug", async (req: Request, res: Response, 
     res.json({
       success: true,
       data: {
-        ...fAQCategory,
+        ...faqCategory,
         articles: [],
         categoryType: "faq"
       }
