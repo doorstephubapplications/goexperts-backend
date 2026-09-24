@@ -922,7 +922,7 @@ const getPublicFaq = async (req: Request, res: Response, next: NextFunction) => 
     res.json({
       success: true,
       data: {
-        categories: (categories || []).filter((c: any) => c.faqs && c.faqs.length > 0),
+        categories: (categories || []).filter((c: any) => c.fAQs && c.fAQs.length > 0),
         popularFaqs: popularFaqs || []
       }
     });
@@ -1928,7 +1928,7 @@ router.get("/help-center/search", async (req: Request, res: Response, next: Next
     }).catch(() => []);
 
     // Search active FAQs
-    const faqs = await (prisma as any).faq?.findMany({
+    const faqs = await (prisma as any).fAQ?.findMany({
       where: {
         status: "active",
         OR: [
@@ -2017,7 +2017,7 @@ router.get("/help-center/categories/:slug", async (req: Request, res: Response, 
     res.json({
       success: true,
       data: {
-        ...faqCategory,
+        ...fAQCategory,
         articles: [],
         categoryType: "faq"
       }

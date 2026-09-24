@@ -2196,3 +2196,58 @@ C:\Users\LENOVO\Desktop\vinod\goexperts\Go-Experts-backend\src\controllers\admin
 
 Unknown field `requester` for include statement on model `SupportTicket`. Available options are marked with ?.
 
+[2026-09-23T17:21:02.753Z] PRISMA ERROR:
+
+Invalid `prisma.wallet.findUnique()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\common\helpers\portal-shared.ts:150:36
+
+  147 }
+  148 
+  149 export async function getOrCreateWallet(userId: string, currency = "INR") {
+→ 150   let wallet = await prisma.wallet.findUnique(
+Timed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 25)
+
+[2026-09-23T17:21:03.154Z] PRISMA ERROR:
+
+Invalid `prisma.user.findFirst()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\common\helpers\portal-shared.ts:77:34
+
+  74 }
+  75 
+  76 async function ensureWelcomeBonusForVerifiedUser(userId: string) {
+→ 77   const user = await prisma.user.findFirst(
+Timed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 25)
+
+[2026-09-23T17:35:35.703Z] PRISMA ERROR:
+
+Invalid `prisma.user.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:947:36
+
+  944 
+  945 router.get("/delete-requests", async (req: Request, res: Response, next: NextFunction) => {
+  946   try {
+→ 947     const rows = await prisma.user.findMany(
+The table `users` does not exist in the current database.
+
+[2026-09-23T17:36:22.135Z] PRISMA ERROR:
+
+Invalid `prisma.user.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:947:36
+
+  944 
+  945 router.get("/delete-requests", async (req: Request, res: Response, next: NextFunction) => {
+  946   try {
+→ 947     const rows = await prisma.user.findMany(
+The table `users` does not exist in the current database.
+
+[2026-09-23T17:38:52.050Z] PRISMA ERROR:
+
+Invalid `prisma.user.findMany()` invocation in
+C:\Users\THATIPALLY VINOD\OneDrive\Desktop\goexperts\Go-Experts-backend\src\routes\public\public.routes.ts:947:36
+
+  944 
+  945 router.get("/delete-requests", async (req: Request, res: Response, next: NextFunction) => {
+  946   try {
+→ 947     const rows = await prisma.user.findMany(
+The table `users` does not exist in the current database.
+
