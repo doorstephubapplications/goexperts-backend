@@ -922,7 +922,7 @@ const getPublicFaq = async (req: Request, res: Response, next: NextFunction) => 
     res.json({
       success: true,
       data: {
-        categories: (categories || []).filter((c: any) => c.faqs && c.faqs.length > 0),
+        categories: (categories || []).filter((c: any) => c.fAQs && c.fAQs.length > 0),
         popularFaqs: popularFaqs || []
       }
     });
@@ -1686,10 +1686,15 @@ router.get("/blogs/:id", async (req: Request, res: Response, next: NextFunction)
     // First try by ID, then by slug
     let row = await prisma.blog.findFirst({
       where: { 
-        OR: [{ id: key }, { slug: key }],
-        status: "PUBLISHED", 
+        OR: [
+          { id: key },
+          { 
+            slug: key,
+            status: "PUBLISHED",
+            publishedAt: { lte: new Date() }
+          }
+        ],
         deletedAt: null,
-        publishedAt: { lte: new Date() }
       },
     });
 
@@ -1928,7 +1933,7 @@ router.get("/help-center/search", async (req: Request, res: Response, next: Next
     }).catch(() => []);
 
     // Search active FAQs
-    const faqs = await (prisma as any).faq?.findMany({
+    const faqs = await (prisma as any).fAQ?.findMany({
       where: {
         status: "active",
         OR: [

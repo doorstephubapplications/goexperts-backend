@@ -1,4 +1,3 @@
-
 node_modules/
 dist/
 .env
@@ -10,3 +9,4 @@ uploads/
 *.local
 *.sql
 *.db
+src/scripts/
