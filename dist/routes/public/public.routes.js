@@ -633,6 +633,45 @@ const getPageHandler = (pageName) => async (req, res, next) => {
 router.get("/legal", getPageHandler("Legal"));
 router.get("/privacy", getPageHandler("Privacy"));
 router.get("/refund", getPageHandler("Refund Policy"));
+router.get("/page-by-slug/:slug", async (req, res, next) => {
+    try {
+        const slug = req.params.slug;
+        const pages = await prisma.cmsPage.findMany({
+            where: { status: "active", deletedAt: null }
+        });
+        let matchedPage = null;
+        for (const page of pages) {
+            const jsonToParse = page.publishedJson || page.draftJson;
+            if (jsonToParse) {
+                try {
+                    const parsed = typeof jsonToParse === "string" ? JSON.parse(jsonToParse) : jsonToParse;
+                    let pageSlug = parsed?.seo?.canonicalUrl || "";
+                    pageSlug = pageSlug.trim();
+                    if (pageSlug.includes("/")) {
+                        const parts = pageSlug.split("/").filter(Boolean);
+                        pageSlug = parts[parts.length - 1];
+                    }
+                    if (pageSlug === slug) {
+                        matchedPage = page;
+                        break;
+                    }
+                }
+                catch (e) { }
+            }
+        }
+        if (!matchedPage) {
+            const fallbackMap = { "terms": "Legal", "privacy": "Privacy", "refund-policy": "Refund Policy" };
+            if (fallbackMap[slug])
+                matchedPage = pages.find(p => p.name === fallbackMap[slug]) || null;
+        }
+        if (!matchedPage)
+            return res.status(404).json({ success: false, message: "Page not found" });
+        res.json({ success: true, data: matchedPage });
+    }
+    catch (e) {
+        next(e);
+    }
+});
 router.get("/cms_pages", async (req, res, next) => {
     try {
         const pageName = req.query.name;
@@ -804,7 +843,7 @@ const getPublicFaq = async (req, res, next) => {
         res.json({
             success: true,
             data: {
-                categories: (categories || []).filter((c) => c.faqs && c.faqs.length > 0),
+                categories: (categories || []).filter((c) => c.fAQs && c.fAQs.length > 0),
                 popularFaqs: popularFaqs || []
             }
         });
@@ -1504,10 +1543,15 @@ router.get("/blogs/:id", async (req, res, next) => {
         // First try by ID, then by slug
         let row = await prisma.blog.findFirst({
             where: {
-                OR: [{ id: key }, { slug: key }],
-                status: "PUBLISHED",
+                OR: [
+                    { id: key },
+                    {
+                        slug: key,
+                        status: "PUBLISHED",
+                        publishedAt: { lte: new Date() }
+                    }
+                ],
                 deletedAt: null,
-                publishedAt: { lte: new Date() }
             },
         });
         if (!row) {
@@ -1728,7 +1772,7 @@ router.get("/help-center/search", async (req, res, next) => {
             take: 5
         }).catch(() => []);
         // Search active FAQs
-        const faqs = await prisma.faq?.findMany({
+        const faqs = await prisma.fAQ?.findMany({
             where: {
                 status: "active",
                 OR: [

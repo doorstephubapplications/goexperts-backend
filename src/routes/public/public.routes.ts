@@ -759,7 +759,7 @@ router.get("/page-by-slug/:slug", async (req: Request, res: Response, next: Next
     }
     
     if (!matchedPage) {
-       const fallbackMap: Record<string, string> = { "terms": "Legal", "privacy": "Privacy", "refund-policy": "Refund Policy" };
+       const fallbackMap: Record<string, string> = { "terms-condition": "Legal", "terms-conditions": "Legal", "terms": "Legal", "privacy": "Privacy", "privacy-policy": "Privacy Policy", "refund-policy": "Refund Policy" };
        if (fallbackMap[slug]) matchedPage = pages.find(p => p.name === fallbackMap[slug]) || null;
     }
     
