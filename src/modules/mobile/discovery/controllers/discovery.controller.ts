@@ -4,6 +4,13 @@ import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { RecommendationEngine } from '../../../../services/mobile/recommendation.service.js';
 import { getSettingsSection } from '../../../../services/settings/settings.service.js';
+import {
+  cleanTag,
+  cleanDesc,
+  cleanProjectTitle,
+  cleanStartupTitle,
+  dedupeBy,
+} from '../../../../utils/mobile/discovery-cleaners.util.js';
 
 export const addRecentlyViewed = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -154,18 +161,6 @@ async function getActiveProjects(limit: number = 5, excludeUserId?: string) {
   }).catch(() => []);
 }
 
-function dedupeBy<T>(arr: T[], keyFn: (item: T) => string): T[] {
-  const seen = new Set<string>();
-  const result: T[] = [];
-  for (const item of arr) {
-    const key = keyFn(item).toLowerCase().trim();
-    if (key && !seen.has(key)) {
-      seen.add(key);
-      result.push(item);
-    }
-  }
-  return result;
-}
 
 async function buildRecommendationItems(role: string, userId: string) {
   const limit = 10;

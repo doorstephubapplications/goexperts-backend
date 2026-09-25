@@ -154,7 +154,20 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       trustScore: 0,
     };
 
-    const data = {
+    const sentInvitationsCount = await prisma.connectionInvitation.count({
+      where: { senderId: userId, status: 'PENDING' },
+    });
+    const receivedInvitationsCount = await prisma.connectionInvitation.count({
+      where: { receiverId: userId, status: 'PENDING' },
+    });
+    const connectionsCount = await prisma.connection.count({
+      where: {
+        OR: [{ userOneId: userId }, { userTwoId: userId }],
+        status: 'ACTIVE',
+      },
+    });
+
+    const data: Record<string, any> = {
       profileCompletion: completion.profileCompletion,
       profileCompletedPer: completion.profileCompletion,
       profileCompletedPercentage: completion.profileCompletion,
@@ -171,7 +184,13 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       referralsCount: referralsCount || 0,
       referralCount: referralsCount || 0,
       walletBalance: wallet?.balance || 0,
-      subscriptionStatus: subscription ? 'active' : 'inactive',
+      subscription: subscription
+        ? {
+            status: subscription.status,
+            planId: subscription.planId,
+            endDate: subscription.endDate,
+          }
+        : null,
       todaysTasks: todayTasksCount,
       upcomingMeetings,
       unreadNotifications,
@@ -185,7 +204,10 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       averageRating: avgRating,
       reviewCount: reviews.length,
       topSkills,
-      projectStatistics: { total: acceptedProjects + completedProjects, completed: completedProjects },
+     // projectStatistics: { total: acceptedProjects + completedProjects, completed: completedProjects },
+      sentInvitationsCount,
+      receivedInvitationsCount,
+      connectionsCount,
     };
 
     return res.json(successResponse('Freelancer dashboard retrieved', data));

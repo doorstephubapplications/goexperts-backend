@@ -230,6 +230,19 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
       trustScore: 0,
     };
 
+    const sentInvitationsCount = await prisma.connectionInvitation.count({
+      where: { senderId: userId, status: 'PENDING' },
+    });
+    const receivedInvitationsCount = await prisma.connectionInvitation.count({
+      where: { receiverId: userId, status: 'PENDING' },
+    });
+    const connectionsCount = await prisma.connection.count({
+      where: {
+        OR: [{ userOneId: userId }, { userTwoId: userId }],
+        status: 'ACTIVE',
+      },
+    });
+
     return res.json(
       successResponse('Investor dashboard retrieved', {
         profileCompletion: completion.profileCompletion,
@@ -252,6 +265,7 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
             status: subscription.status,
             planId: subscription.planId,
             planName: subscription.plan.name,
+            endDate: subscription.endDate,
           }
           : null,
         walletBalance: wallet?.balance || 0,
@@ -265,6 +279,9 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         upcomingMeetings: upcomingMeetingsCount,
         watchlistCount,
         supportTickets: supportTicketsCount,
+        sentInvitationsCount,
+        receivedInvitationsCount,
+        connectionsCount,
         widgets: {
           recommendedStartups,
           trendingStartups: trendingStartupsList,
