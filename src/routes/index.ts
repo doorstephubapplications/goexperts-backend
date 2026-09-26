@@ -371,6 +371,7 @@ const searchColumnsMapping: Record<string, string[]> = {
   Meeting: ["founder", "investor"],
   Subscription: ["plan", "user"],
   Payment: ["user", "gateway", "invoice"],
+  Invoice: ["invoiceNumber", "status"],
   WalletTransaction: ["type", "description", "status"],
   Conversation: ["name", "role"],
   CmsPage: ["name", "category"],
@@ -2317,11 +2318,13 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
         ? { _count: { select: { skills: true } } }
         : modelName === "Skill"
           ? { category: { select: { id: true, name: true } } }
-          : modelName === "City"
-            ? { country: { select: { id: true, name: true } } }
-            : modelName === "WalletTransaction"
-              ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
-              : undefined;
+            : modelName === "City"
+              ? { country: { select: { id: true, name: true } } }
+              : modelName === "WalletTransaction"
+                ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
+                : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
+                  ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
+                  : undefined;
 
   // Create router using factory
   const crudRouter = createCrudRouter(modelName as any, searchCols, include ? { include } : {});

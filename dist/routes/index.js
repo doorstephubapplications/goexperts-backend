@@ -316,6 +316,7 @@ const searchColumnsMapping = {
     Meeting: ["founder", "investor"],
     Subscription: ["plan", "user"],
     Payment: ["user", "gateway", "invoice"],
+    Invoice: ["invoiceNumber", "status"],
     WalletTransaction: ["type", "description", "status"],
     Conversation: ["name", "role"],
     CmsPage: ["name", "category"],
@@ -2094,7 +2095,9 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
                     ? { country: { select: { id: true, name: true } } }
                     : modelName === "WalletTransaction"
                         ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
-                        : undefined;
+                        : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
+                            ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
+                            : undefined;
     // Create router using factory
     const crudRouter = createCrudRouter(modelName, searchCols, include ? { include } : {});
     // We wrap list get request to auto inject default role query filters for user roles
