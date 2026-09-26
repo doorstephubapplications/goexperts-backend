@@ -371,6 +371,7 @@ const searchColumnsMapping: Record<string, string[]> = {
   Meeting: ["founder", "investor"],
   Subscription: ["plan", "user"],
   Payment: ["user", "gateway", "invoice"],
+  Invoice: ["invoiceNumber", "status"],
   WalletTransaction: ["type", "description", "status"],
   Conversation: ["name", "role"],
   CmsPage: ["name", "category"],
@@ -2303,6 +2304,66 @@ router.use("/admin/about-page", authMiddleware as any, aboutRouter);
 router.use("/admin/faqs", authMiddleware as any, faqAdminRouter);
 router.use("/admin/content/footer", authMiddleware as any, footerAdminRouter);
 
+// Custom Override for Project By ID to hydrate Relational Data
+router.get("/admin/projects/:id", authMiddleware as any, async (req, res, next) => {
+  try {
+    const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+    
+    // Hydrate Client
+    let clientObj = null;
+    if (project.client) {
+      const user = await prisma.user.findUnique({ 
+        where: { id: project.client }, 
+        select: { id: true, fullName: true, email: true, role: true, clientProfile: { select: { company: true } } } 
+      });
+      if (user) {
+        clientObj = {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          company: user.clientProfile?.company || user.fullName
+        };
+      }
+    }
+
+    // Hydrate Freelancer
+    let freelancerObj = null;
+    if (project.freelancer) {
+      const user = await prisma.user.findUnique({ 
+        where: { id: project.freelancer }, 
+        select: { id: true, fullName: true, email: true } 
+      });
+      if (user) {
+        freelancerObj = {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email
+        };
+      }
+    }
+
+    // Convert Technology
+    let techArray: string[] = [];
+    if (project.technology) {
+      techArray = project.technology.split(",").map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...project,
+        client: clientObj || project.client,
+        freelancer: freelancerObj || project.freelancer,
+        technology: techArray,
+        technologyText: project.technology
+      }
+    });
+  } catch(e) {
+    next(e);
+  }
+});
+
 // 4. Dynamic Whitelisted CRUD Routers
 Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
   if (["freelancers", "clients", "investors", "founders"].includes(tableName)) return;
@@ -2317,11 +2378,13 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
         ? { _count: { select: { skills: true } } }
         : modelName === "Skill"
           ? { category: { select: { id: true, name: true } } }
-          : modelName === "City"
-            ? { country: { select: { id: true, name: true } } }
-            : modelName === "WalletTransaction"
-              ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
-              : undefined;
+            : modelName === "City"
+              ? { country: { select: { id: true, name: true } } }
+              : modelName === "WalletTransaction"
+                ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
+                : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
+                  ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
+                  : undefined;
 
   // Create router using factory
   const crudRouter = createCrudRouter(modelName as any, searchCols, include ? { include } : {});

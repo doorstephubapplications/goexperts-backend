@@ -42,6 +42,8 @@ import {
   deleteEmailTemplate,
   getIndustryColorsSettings,
   saveIndustryColorsSettings,
+  getMobileAppLinksSettings,
+  saveMobileAppLinksSettings,
 } from "../../controllers/settings/settings.controller.js";
 
 const router = Router();
@@ -105,6 +107,10 @@ router.put("/currency", saveCurrencySettings);
 // Google Maps Settings
 router.get("/google-maps", getGoogleMapsSettings);
 router.put("/google-maps", saveGoogleMapsSettings);
+
+// Mobile App Links
+router.get("/mobile-app-links", getMobileAppLinksSettings);
+router.put("/mobile-app-links", saveMobileAppLinksSettings);
 
 // Email SMTP Settings & Templates
 router.get("/email", getEmailSettings);

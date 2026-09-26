@@ -1,14 +1,19 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-
-async function checkUsers() {
+async function main() {
   const users = await prisma.user.findMany({
-    where: { role: 'client' },
-    orderBy: { updatedAt: 'desc' },
-    take: 5
+    where: {
+      id: {
+        in: [
+          '1cae8fda-9440-4237-8a4b-e70df1b9e6e2',
+          '60098b3f-3d43-4408-b226-efa4a968a836',
+          'd8d2de71-4ea0-49a9-bf24-4f292c549cfd'
+        ]
+      }
+    }
   });
-  console.log('Recent Client Users:');
-  users.forEach(u => console.log(u.email, u.fullName, u.id));
+  console.log('Found users:', users.map(u => u.id));
 }
-
-checkUsers().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch(e => console.error(e))
+  .finally(() => prisma.$disconnect());
