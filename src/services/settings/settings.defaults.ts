@@ -457,6 +457,11 @@ export const SETTINGS_DEFAULTS = {
       logoName: "",
     },
   },
+  mobile_app_links: {
+    playStoreUrl: "https://play.google.com/store/apps/details?id=com.yourcompany.app",
+    appleStoreUrl: "https://apps.apple.com/us/app/your-app/id1234567890",
+    isActive: true,
+  },
 } as const;
 
 export type SettingsSection = keyof typeof SETTINGS_DEFAULTS;
