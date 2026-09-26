@@ -2079,6 +2079,63 @@ router.use("/admin/founders", authMiddleware, auditMiddleware("mutate", "founder
 router.use("/admin/about-page", authMiddleware, aboutRouter);
 router.use("/admin/faqs", authMiddleware, faqAdminRouter);
 router.use("/admin/content/footer", authMiddleware, footerAdminRouter);
+// Custom Override for Project By ID to hydrate Relational Data
+router.get("/admin/projects/:id", authMiddleware, async (req, res, next) => {
+    try {
+        const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+        if (!project)
+            return res.status(404).json({ success: false, message: "Project not found" });
+        // Hydrate Client
+        let clientObj = null;
+        if (project.client) {
+            const user = await prisma.user.findUnique({
+                where: { id: project.client },
+                select: { id: true, fullName: true, email: true, role: true, clientProfile: { select: { company: true } } }
+            });
+            if (user) {
+                clientObj = {
+                    id: user.id,
+                    fullName: user.fullName,
+                    email: user.email,
+                    company: user.clientProfile?.company || user.fullName
+                };
+            }
+        }
+        // Hydrate Freelancer
+        let freelancerObj = null;
+        if (project.freelancer) {
+            const user = await prisma.user.findUnique({
+                where: { id: project.freelancer },
+                select: { id: true, fullName: true, email: true }
+            });
+            if (user) {
+                freelancerObj = {
+                    id: user.id,
+                    fullName: user.fullName,
+                    email: user.email
+                };
+            }
+        }
+        // Convert Technology
+        let techArray = [];
+        if (project.technology) {
+            techArray = project.technology.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+        res.json({
+            success: true,
+            data: {
+                ...project,
+                client: clientObj || project.client,
+                freelancer: freelancerObj || project.freelancer,
+                technology: techArray,
+                technologyText: project.technology
+            }
+        });
+    }
+    catch (e) {
+        next(e);
+    }
+});
 // 4. Dynamic Whitelisted CRUD Routers
 Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
     if (["freelancers", "clients", "investors", "founders"].includes(tableName))

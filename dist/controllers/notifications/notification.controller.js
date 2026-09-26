@@ -122,9 +122,19 @@ export const markRead = async (req, res, next) => {
 export const markAllRead = async (req, res, next) => {
     try {
         const { userId } = req.body;
-        const where = { status: "sent" };
-        if (userId)
+        const where = { status: { not: "read" } };
+        if (userId) {
             where.userId = userId;
+        }
+        else if (req.user?.type === "admin" || req.user?.role === "super_admin" || req.user?.role?.includes("admin")) {
+            where.OR = [
+                { userId: null },
+                { userId: req.user.id }
+            ];
+        }
+        else if (req.user) {
+            where.userId = req.user.id;
+        }
         await prisma.notification.updateMany({
             where,
             data: { status: "read", readAt: new Date() },
