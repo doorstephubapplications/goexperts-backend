@@ -127,19 +127,17 @@ export const markAllRead = async (req, res, next) => {
             where.userId = userId;
         }
         else if (req.user?.type === "admin" || req.user?.role === "super_admin" || req.user?.role?.includes("admin")) {
-            where.OR = [
-                { userId: null },
-                { userId: req.user.id }
-            ];
+            // Admin dashboard lists all notifications globally, so "Mark all read" should clear all of them
+            // No userId filter applied here
         }
         else if (req.user) {
             where.userId = req.user.id;
         }
-        await prisma.notification.updateMany({
+        const updated = await prisma.notification.updateMany({
             where,
             data: { status: "read", readAt: new Date() },
         });
-        res.json({ success: true, message: "All notifications marked as read" });
+        res.json({ success: true, message: `All notifications marked as read (${updated.count} updated)` });
     }
     catch (err) {
         next(err);

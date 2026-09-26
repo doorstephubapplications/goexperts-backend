@@ -1351,16 +1351,29 @@ adminFreelancersRouter.get("/", async (req, res, next) => {
                 [col]: { contains: search },
             }));
         }
-        const { rows, total, degraded } = await listFreelancersCompat({
-            page,
-            pageSize,
+        let verificationStrict = filters.verificationStrict;
+        delete filters.verificationStrict;
+        const { rows: fetchedRows, total: fetchedTotal, degraded } = await listFreelancersCompat({
+            page: verificationStrict ? 1 : page,
+            pageSize: verificationStrict ? 100000 : pageSize,
             search,
             orderBy,
             ascending,
             filters,
             include: freelancerInclude,
         });
-        res.json({ success: true, rows: await sanitizeUserRowsAsync(rows), total, degraded });
+        let finalRows = fetchedRows;
+        let finalTotal = fetchedTotal;
+        if (verificationStrict) {
+            finalRows = fetchedRows.filter((user) => {
+                const stats = getVerificationStats(user);
+                const isVerified = stats.profileApproved && stats.kycApproved;
+                return verificationStrict === "verified" ? isVerified : !isVerified;
+            });
+            finalTotal = finalRows.length;
+            finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+        }
+        res.json({ success: true, rows: await sanitizeUserRowsAsync(finalRows), total: finalTotal, degraded });
     }
     catch (err) {
         next(err);
@@ -1560,14 +1573,34 @@ adminClientsRouter.get("/", async (req, res, next) => {
                 { clientProfile: { is: { industry: { contains: search } } } },
             ];
         }
+        let verificationStrict = filters.verificationStrict;
+        delete where.verificationStrict;
+        let take = pageSize;
+        let skip = (page - 1) * pageSize;
+        if (verificationStrict) {
+            take = 100000;
+            skip = 0;
+        }
         const total = await prisma.user.count({ where });
-        const rows = await prisma.user.findMany({
+        const fetchedRows = await prisma.user.findMany({
             where,
             include: clientInclude,
-            skip: (page - 1) * pageSize,
-            take: pageSize,
+            skip,
+            take,
             orderBy: { [orderBy]: ascending ? "asc" : "desc" },
         });
+        let finalRows = fetchedRows;
+        let finalTotal = total;
+        if (verificationStrict) {
+            finalRows = fetchedRows.filter((user) => {
+                const stats = getVerificationStats(user);
+                const isVerified = stats.profileApproved && stats.kycApproved;
+                return verificationStrict === "verified" ? isVerified : !isVerified;
+            });
+            finalTotal = finalRows.length;
+            finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+        }
+        const rows = finalRows;
         const projectCounts = await getClientProjectCountMap(rows.map((r) => r.id));
         const rowsWithProjectCounts = applyClientProjectCounts(rows, projectCounts);
         const docSettings = await prisma.setting.findMany({
@@ -1591,7 +1624,7 @@ adminClientsRouter.get("/", async (req, res, next) => {
             ...r,
             documents: docMap.get(r.id) || [],
         }));
-        res.json({ success: true, rows: sanitizedRows, total });
+        res.json({ success: true, rows: sanitizedRows, total: finalTotal });
     }
     catch (err) {
         next(err);
@@ -1762,15 +1795,35 @@ adminInvestorsRouter.get("/", async (req, res, next) => {
                 { investorProfile: { is: { focusAreas: { contains: search } } } },
             ];
         }
+        let verificationStrict = filters.verificationStrict;
+        delete where.verificationStrict;
+        let take = pageSize;
+        let skip = (page - 1) * pageSize;
+        if (verificationStrict) {
+            take = 100000;
+            skip = 0;
+        }
         const total = await prisma.user.count({ where });
-        const rows = await prisma.user.findMany({
+        const fetchedRows = await prisma.user.findMany({
             where,
             include: investorInclude,
-            skip: (page - 1) * pageSize,
-            take: pageSize,
+            skip,
+            take,
             orderBy: { [orderBy]: ascending ? "asc" : "desc" },
         });
-        res.json({ success: true, rows: sanitizeUserRows(rows), total });
+        let finalRows = fetchedRows;
+        let finalTotal = total;
+        if (verificationStrict) {
+            finalRows = fetchedRows.filter((user) => {
+                const stats = getVerificationStats(user);
+                const isVerified = stats.profileApproved && stats.kycApproved;
+                return verificationStrict === "verified" ? isVerified : !isVerified;
+            });
+            finalTotal = finalRows.length;
+            finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+        }
+        const rows = finalRows;
+        res.json({ success: true, rows: sanitizeUserRows(rows), total: finalTotal });
     }
     catch (err) {
         next(err);
@@ -1930,15 +1983,35 @@ adminFoundersRouter.get("/", async (req, res, next) => {
                 { founderProfile: { is: { stage: { contains: search } } } },
             ];
         }
+        let verificationStrict = filters.verificationStrict;
+        delete where.verificationStrict;
+        let take = pageSize;
+        let skip = (page - 1) * pageSize;
+        if (verificationStrict) {
+            take = 100000;
+            skip = 0;
+        }
         const total = await prisma.user.count({ where });
-        const rows = await prisma.user.findMany({
+        const fetchedRows = await prisma.user.findMany({
             where,
             include: founderInclude,
-            skip: (page - 1) * pageSize,
-            take: pageSize,
+            skip,
+            take,
             orderBy: { [orderBy]: ascending ? "asc" : "desc" },
         });
-        res.json({ success: true, rows: sanitizeUserRows(rows), total });
+        let finalRows = fetchedRows;
+        let finalTotal = total;
+        if (verificationStrict) {
+            finalRows = fetchedRows.filter((user) => {
+                const stats = getVerificationStats(user);
+                const isVerified = stats.profileApproved && stats.kycApproved;
+                return verificationStrict === "verified" ? isVerified : !isVerified;
+            });
+            finalTotal = finalRows.length;
+            finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+        }
+        const rows = finalRows;
+        res.json({ success: true, rows: sanitizeUserRows(rows), total: finalTotal });
     }
     catch (err) {
         next(err);

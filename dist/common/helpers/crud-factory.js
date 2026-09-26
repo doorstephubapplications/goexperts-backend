@@ -188,6 +188,8 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
             Object.entries(rawFilters || {}).forEach(([key, value]) => {
                 if (value == null || value === "")
                     return;
+                if (key === "projectsSpend")
+                    return; // Ignore custom filter that doesn't exist directly on model
                 where[key] = value;
             });
             if (search && searchColumns.length > 0) {
