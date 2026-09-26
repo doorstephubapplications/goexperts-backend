@@ -112,4 +112,14 @@ router.put('/:id/legal', async (req, res) => {
   }
 });
 
+// Legal links — replace all at once
+router.put('/:id/legal', async (req, res) => {
+  try {
+    await service.upsertLegalLinks(req.params.id, req.body.links || []);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 export default router;

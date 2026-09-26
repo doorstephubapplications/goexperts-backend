@@ -731,6 +731,45 @@ router.get("/legal", getPageHandler("Legal"));
 router.get("/privacy", getPageHandler("Privacy"));
 router.get("/refund", getPageHandler("Refund Policy"));
 
+router.get("/page-by-slug/:slug", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const slug = req.params.slug;
+    const pages = await prisma.cmsPage.findMany({
+      where: { status: "active", deletedAt: null }
+    });
+    
+    let matchedPage = null;
+    for (const page of pages) {
+      const jsonToParse = page.publishedJson || page.draftJson;
+      if (jsonToParse) {
+        try {
+          const parsed = typeof jsonToParse === "string" ? JSON.parse(jsonToParse) : jsonToParse;
+          let pageSlug = parsed?.seo?.canonicalUrl || "";
+          pageSlug = pageSlug.trim();
+          if (pageSlug.includes("/")) {
+            const parts = pageSlug.split("/").filter(Boolean);
+            pageSlug = parts[parts.length - 1];
+          }
+          if (pageSlug === slug) {
+            matchedPage = page;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+    
+    if (!matchedPage) {
+       const fallbackMap: Record<string, string> = { "terms-condition": "Legal", "terms-conditions": "Legal", "terms": "Legal", "privacy": "Privacy", "privacy-policy": "Privacy Policy", "refund-policy": "Refund Policy" };
+       if (fallbackMap[slug]) matchedPage = pages.find(p => p.name === fallbackMap[slug]) || null;
+    }
+    
+    if (!matchedPage) return res.status(404).json({ success: false, message: "Page not found" });
+    res.json({ success: true, data: matchedPage });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/cms_pages", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const pageName = req.query.name;
