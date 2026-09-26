@@ -43,6 +43,50 @@ function uniqueValues(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+const clientProposalFreelancerSelect = {
+  id: true,
+  fullName: true,
+  email: true,
+  avatarUrl: true,
+  bio: true,
+};
+
+async function attachClientProposalFreelancers<T extends { freelancerId?: string | null }>(
+  proposals: T[]
+) {
+  const freelancerIds = [...new Set(proposals.map((p) => p.freelancerId).filter(Boolean))] as string[];
+  if (!freelancerIds.length) return proposals.map((proposal) => ({ ...proposal, freelancer: null }));
+
+  const freelancers = await prisma.user.findMany({
+    where: { id: { in: freelancerIds } },
+    select: clientProposalFreelancerSelect,
+  });
+  const freelancerById = new Map(freelancers.map((freelancer) => [freelancer.id, freelancer]));
+
+  return proposals.map((proposal) => ({
+    ...proposal,
+    freelancer: proposal.freelancerId ? freelancerById.get(proposal.freelancerId) ?? null : null,
+  }));
+}
+
+async function attachClientContractFreelancers<T extends { freelancerId?: string | null }>(
+  contracts: T[]
+) {
+  const freelancerIds = [...new Set(contracts.map((c) => c.freelancerId).filter(Boolean))] as string[];
+  if (!freelancerIds.length) return contracts.map((contract) => ({ ...contract, freelancer: null }));
+
+  const freelancers = await prisma.user.findMany({
+    where: { id: { in: freelancerIds } },
+    select: clientProposalFreelancerSelect,
+  });
+  const freelancerById = new Map(freelancers.map((freelancer) => [freelancer.id, freelancer]));
+
+  return contracts.map((contract) => ({
+    ...contract,
+    freelancer: contract.freelancerId ? freelancerById.get(contract.freelancerId) ?? null : null,
+  }));
+}
+
 /** Resolve industry/category strings (names, ids, or comma-separated ids) to display names. */
 async function resolveIndustry(raw: string | null | undefined): Promise<{ id: string; name: string } | null> {
   const values = uniqueValues(parseIndustryValues(raw));
@@ -182,7 +226,7 @@ export const getClientDashboard = async (req: AuthenticatedRequest, res: Respons
       prisma.project.count({ where: { ...projWhere, status: "completed" } }),
       prisma.contract.findMany({
         where: { clientId: userId, deletedAt: null },
-        include: { project: true, freelancer: { select: { fullName: true } } },
+        include: { project: true },
         orderBy: { createdAt: "desc" },
         take: 10,
       }),
@@ -200,6 +244,7 @@ export const getClientDashboard = async (req: AuthenticatedRequest, res: Respons
     ]);
 
     const totalSpend = Number(user.clientProfile?.totalSpend ?? 0);
+    const contractsWithFreelancers = await attachClientContractFreelancers(contracts);
 
     res.json({
       success: true,
@@ -237,7 +282,7 @@ export const getClientDashboard = async (req: AuthenticatedRequest, res: Respons
         latestReviews: [],
         aiSuggestions: [],
         recentProjects,
-        recentContracts: contracts.map((c) => ({
+        recentContracts: contractsWithFreelancers.map((c) => ({
           id: c.id,
           contractNumber: c.contractNumber,
           project: c.project?.title || "Project",
@@ -613,7 +658,6 @@ export const getClientProject = async (req: AuthenticatedRequest, res: Response,
       prisma.task.findMany({ where: { projectId: project.id, deletedAt: null } }),
       prisma.proposal.findMany({
         where: { projectId: project.id, deletedAt: null },
-        include: { freelancer: { select: { fullName: true, email: true, avatarUrl: true } } },
         orderBy: { createdAt: "desc" },
       }),
       prisma.contract.findMany({ where: { projectId: project.id, deletedAt: null } }),
@@ -627,7 +671,8 @@ export const getClientProject = async (req: AuthenticatedRequest, res: Response,
       }).catch(() => null);
     }
 
-    const enrichedProject = (await enrichProjects([{ ...project, budgetRange, tasks, proposals, contracts }]))[0];
+    const proposalsWithFreelancers = await attachClientProposalFreelancers(proposals);
+    const enrichedProject = (await enrichProjects([{ ...project, budgetRange, tasks, proposals: proposalsWithFreelancers, contracts }]))[0];
     res.json({ success: true, data: enrichedProject });
   } catch (err) {
     handleError(err, res, next);
@@ -802,11 +847,11 @@ export const listProjectApplications = async (req: AuthenticatedRequest, res: Re
 
     const rows = await prisma.proposal.findMany({
       where: { projectId: project.id, deletedAt: null },
-      include: { freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true, bio: true } } },
       orderBy: { createdAt: "desc" },
     });
 
-    res.json({ success: true, rows, total: rows.length });
+    const rowsWithFreelancers = await attachClientProposalFreelancers(rows);
+    res.json({ success: true, rows: rowsWithFreelancers, total: rows.length });
   } catch (err) {
     handleError(err, res, next);
   }
@@ -826,12 +871,12 @@ export const listClientApplications = async (req: AuthenticatedRequest, res: Res
       where: { project: { is: projWhere }, deletedAt: null },
       include: {
         project: { select: { id: true, title: true } },
-        freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true, bio: true } }
       },
       orderBy: { createdAt: "desc" },
     });
 
-    const mappedRows = rows.map((r: any) => ({
+    const rowsWithFreelancers = await attachClientProposalFreelancers(rows);
+    const mappedRows = rowsWithFreelancers.map((r: any) => ({
       ...r,
       projectTitle: r.project?.title || "Project",
     }));
@@ -890,10 +935,11 @@ export const listClientContracts = async (req: AuthenticatedRequest, res: Respon
 
     const rows = await prisma.contract.findMany({
       where: { clientId: userId, deletedAt: null },
-      include: { project: true, freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
+      include: { project: true },
       orderBy: { createdAt: "desc" },
     });
-    res.json({ success: true, rows, total: rows.length });
+    const rowsWithFreelancers = await attachClientContractFreelancers(rows);
+    res.json({ success: true, rows: rowsWithFreelancers, total: rows.length });
   } catch (err) {
     handleError(err, res, next);
   }

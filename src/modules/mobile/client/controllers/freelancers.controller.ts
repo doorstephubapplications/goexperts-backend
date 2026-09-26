@@ -117,7 +117,10 @@ export const listFreelancers = async (req: AuthRequest, res: Response, next: Nex
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
-    const q = String(req.query.search || req.query.q || '').trim();
+    let q = String(req.query.search || req.query.q || '').trim();
+    if (q.length > 0 && q.length < 3) {
+      q = '';
+    }
     const categoryIds = String(
       req.query.categoryIds || req.query.categoryId || req.query.industryId || '',
     )

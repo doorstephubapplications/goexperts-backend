@@ -4,6 +4,29 @@ import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
 
+const freelancerSelect = {
+  id: true,
+  fullName: true,
+  avatarUrl: true,
+  freelancerProfile: true,
+};
+
+const attachFreelancers = async <T extends { freelancerId?: string | null }>(proposals: T[]) => {
+  const freelancerIds = [...new Set(proposals.map((p) => p.freelancerId).filter(Boolean))] as string[];
+  if (!freelancerIds.length) return proposals.map((proposal) => ({ ...proposal, freelancer: null }));
+
+  const freelancers = await prisma.user.findMany({
+    where: { id: { in: freelancerIds } },
+    select: freelancerSelect,
+  });
+  const freelancerById = new Map(freelancers.map((freelancer) => [freelancer.id, freelancer]));
+
+  return proposals.map((proposal) => ({
+    ...proposal,
+    freelancer: proposal.freelancerId ? freelancerById.get(proposal.freelancerId) ?? null : null,
+  }));
+};
+
 const shapeProposal = (proposal: any, contractId?: string | null, currentUserId?: string) => ({
   ...proposal,
   freelancerId: proposal.freelancerId || proposal.freelancer?.id,
@@ -21,26 +44,32 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
-    const search = String(req.query.search || req.query.q || '').trim();
+    let search = String(req.query.search || req.query.q || '').trim();
+    if (search.length > 0 && search.length < 3) search = '';
     const where: any = { project: { client: req.user.id } };
     if (search) {
+      const matchingFreelancers = await prisma.user.findMany({
+        where: { fullName: { contains: search } },
+        select: { id: true },
+      });
       where.OR = [
         { coverLetter: { contains: search } },
         { project: { title: { contains: search } } },
-        { freelancer: { fullName: { contains: search } } },
+        { freelancerId: { in: matchingFreelancers.map((freelancer) => freelancer.id) } },
       ];
     }
     const [proposals, total] = await Promise.all([
       prisma.proposal.findMany({
         where,
-        include: { project: true, freelancer: { select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true } } },
+        include: { project: true },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' }
       }),
       prisma.proposal.count({ where })
     ]);
-    return res.json(successResponse('Proposals retrieved', proposals.map((p) => shapeProposal(p, null, req.user.id)), { page, limit, total, totalPages: Math.ceil(total / limit) }));
+    const proposalsWithFreelancers = await attachFreelancers(proposals);
+    return res.json(successResponse('Proposals retrieved', proposalsWithFreelancers.map((p) => shapeProposal(p, null, req.user.id)), { page, limit, total, totalPages: Math.ceil(total / limit) }));
   } catch (error) { next(error); }
 };
 
@@ -52,7 +81,6 @@ export const listProjectProposals = async (req: AuthRequest, res: Response, next
     const [proposals, total] = await Promise.all([
       prisma.proposal.findMany({
         where: { projectId: req.params.projectId, project: { client: req.user.id } },
-        include: { freelancer: { select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true } } },
         skip, take: limit
       }),
       prisma.proposal.count({ where: { projectId: req.params.projectId, project: { client: req.user.id } } })
@@ -69,7 +97,8 @@ export const listProjectProposals = async (req: AuthRequest, res: Response, next
       }
     });
 
-    const shaped = proposals.map((p) => shapeProposal(p, contractMap.get(p.id) || null, req.user.id));
+    const proposalsWithFreelancers = await attachFreelancers(proposals);
+    const shaped = proposalsWithFreelancers.map((p) => shapeProposal(p, contractMap.get(p.id) || null, req.user.id));
     return res.json(successResponse('Project proposals', shaped, { page, limit, total, totalPages: Math.ceil(total / limit) }));
   } catch (error) { next(error); }
 };
@@ -80,7 +109,6 @@ export const getProposal = async (req: AuthRequest, res: Response, next: NextFun
       where: { id: req.params.id, project: { client: req.user.id } },
       include: {
         project: true,
-        freelancer: { select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true } },
       }
     });
     if (!proposal) return res.status(404).json(errorResponse('Proposal not found', 'NOT_FOUND'));
@@ -90,9 +118,10 @@ export const getProposal = async (req: AuthRequest, res: Response, next: NextFun
       select: { id: true }
     });
 
+    const [proposalWithFreelancer] = await attachFreelancers([proposal]);
     return res.json(
       successResponse('Proposal details', {
-        ...shapeProposal(proposal, contract?.id || null, req.user.id),
+        ...shapeProposal(proposalWithFreelancer, contract?.id || null, req.user.id),
       })
     );
   } catch (error) { next(error); }
