@@ -82,7 +82,7 @@ const shapeInvitation = async (invitation: any, peerKey: 'senderId' | 'receiverI
 export const getReceivedInvitations = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const invitations = await prisma.connectionInvitation.findMany({
-      where: { receiverId: { in: await profileIds(req.user.id) } },
+      where: { receiverId: { in: await profileIds(req.user.id) }, status: { not: 'ACCEPTED' } },
       orderBy: { createdAt: 'desc' },
     });
     const shaped = (await Promise.all(
@@ -95,7 +95,7 @@ export const getReceivedInvitations = async (req: AuthRequest, res: Response, ne
 export const getSentInvitations = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const invitations = await prisma.connectionInvitation.findMany({
-      where: { senderId: { in: await profileIds(req.user.id) } },
+      where: { senderId: { in: await profileIds(req.user.id) }, status: { not: 'ACCEPTED' } },
       orderBy: { createdAt: 'desc' },
     });
     const shaped = (await Promise.all(

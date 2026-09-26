@@ -62,7 +62,7 @@ export const getReceivedInvitations = async (req: AuthenticatedRequest, res: Res
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const invitations = await prisma.connectionInvitation.findMany({
-      where: { receiverId: userId },
+      where: { receiverId: userId, status: { not: 'ACCEPTED' } },
       include: {
         sender: { select: { id: true, fullName: true, avatarUrl: true, role: true } }
       },
@@ -80,7 +80,7 @@ export const getSentInvitations = async (req: AuthenticatedRequest, res: Respons
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const invitations = await prisma.connectionInvitation.findMany({
-      where: { senderId: userId },
+      where: { senderId: userId, status: { not: 'ACCEPTED' } },
       include: {
         receiver: { select: { id: true, fullName: true, avatarUrl: true, role: true } }
       },

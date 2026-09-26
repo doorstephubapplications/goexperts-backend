@@ -113,7 +113,7 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
 
     let where: any = {
       deletedAt: null,
-      status: 'active',
+      status: { in: ['active', 'PENDING'] },
       OR: [{ userA: req.user.id }, { userB: req.user.id }],
     };
 
@@ -181,6 +181,7 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
 
       const unreadCount = unreadMap.get(c.id) ?? (c.unread || 0);
 
+      const isPending = c.status === 'PENDING';
       const result = {
         ...c,
         participantId: otherId,
@@ -195,6 +196,8 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
         lastMessageAt: lastTime,
         unread: unreadCount,
         unreadCount: unreadCount,
+        conversationStatus: c.status,
+        isMuted: isPending,
         _sortTime: new Date(lastTime).getTime(),
       };
 
@@ -415,6 +418,7 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
           ...newInvite,
           conversationId: pendingConversation.id,
           status: 'PENDING',
+          conversationStatus: 'PENDING',
           isMine: true,
           text: trimmedText,
         }));
