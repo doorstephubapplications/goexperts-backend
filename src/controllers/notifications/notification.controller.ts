@@ -138,7 +138,7 @@ export const markRead = async (req: Request, res: Response, next: NextFunction) 
 export const markAllRead = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.body;
-    const where: any = { status: "sent" };
+    const where: any = { status: { not: "read" } };
     if (userId) where.userId = userId;
 
     await prisma.notification.updateMany({
