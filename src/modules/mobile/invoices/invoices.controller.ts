@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database.js';
 import { successResponse } from '../../../core/response.js';
 import { AuthRequest } from '../../../middlewares/auth.js';
 
+import { buildPublicFileUrl } from '../../../utils/public-url.js';
 export const getInvoices = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const invoices = await prisma.invoice.findMany({ where: { userId: req.user.id } });
@@ -28,7 +29,6 @@ export const downloadInvoice = async (req: AuthRequest, res: Response, next: Nex
     if (inv.userId !== req.user.id) return res.status(403).json({ success: false, message: 'Forbidden' });
 
     const { publicPath } = await generateInvoicePdf(id) as any;
-    const base = process.env.API_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    return res.json(successResponse('Invoice download link generated', { url: `${base}${publicPath}` }));
+    return res.json(successResponse('Invoice download link generated', { url: buildPublicFileUrl(publicPath, req) }));
   } catch (error) { next(error); }
 };
