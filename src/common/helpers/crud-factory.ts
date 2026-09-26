@@ -217,6 +217,7 @@ export function createCrudRouter(
       const rawFilters = req.body?.filters || (req.query.filters ? JSON.parse(req.query.filters as string) : {});
       Object.entries(rawFilters || {}).forEach(([key, value]) => {
         if (value == null || value === "") return;
+        if (key === "projectsSpend") return; // Ignore custom filter that doesn't exist directly on model
         where[key] = value;
       });
 
