@@ -52,6 +52,7 @@ import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
 import { getVerificationStats } from "../common/helpers/verification.js";
+import adminDashboardRouter from "./admin/dashboard.routes.js";
 import tasksRoutes from "./tasks.routes.js";
 import mobileRoutes from "../modules/mobile/index.js";
 import { saveInvestor, unsaveInvestor } from "../modules/mobile/public/public.controller.js";
@@ -130,7 +131,8 @@ router.use("/public/resume-templates", publicResumeTemplateRouter);
 router.use("/public/resume-share", publicResumeShareRouter);
 router.use("/v1/public", publicRoutes);
 // 2.2 Admin operations
-router.use("/admin/dashboard", dashboardRoutes);
+router.use("/admin/dashboard", adminDashboardRouter);
+router.use("/admin/dashboard-old", dashboardRoutes);
 router.use("/admin/dashboard", dashboardInsightsRouter);
 router.use("/admin/notifications", notificationRoutes);
 router.use("/admin/notification-queue", queueRouter);

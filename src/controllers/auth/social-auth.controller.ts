@@ -60,6 +60,15 @@ export const googleAuthStart = (req: Request, res: Response) => {
     sameSite: "lax",
     maxAge: 10 * 60 * 1000,
   });
+  
+  if (req.query.panel) {
+    res.cookie("google_oauth_panel", req.query.panel, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 10 * 60 * 1000,
+    });
+  }
 
   const url = googleClient.generateAuthUrl({
     access_type: "offline",
@@ -105,25 +114,67 @@ export const googleAuthCallback = async (req: Request, res: Response) => {
 
     const { sub: googleUserId, email } = payload;
 
+    // Admin Panel Logic
+    const panel = req.cookies.google_oauth_panel;
+    res.clearCookie("google_oauth_panel");
+    const adminFrontendUrl = process.env.ADMIN_FRONTEND_URL || "http://localhost:5173"; // Default for local
+    const targetUrl = panel === 'admin' ? adminFrontendUrl : frontendUrl;
+
+    if (panel === 'admin') {
+      let adminIdentity = await prisma.authIdentity.findUnique({
+        where: { provider_providerUserId: { provider: "GOOGLE", providerUserId: googleUserId } },
+      });
+      let admin = null;
+      if (adminIdentity?.adminUserId) {
+        admin = await prisma.adminUser.findUnique({ where: { id: adminIdentity.adminUserId } });
+      } else if (email) {
+        admin = await prisma.adminUser.findFirst({ where: { email } });
+        if (admin) {
+           await prisma.authIdentity.create({
+             data: {
+               provider: "GOOGLE",
+               providerUserId: googleUserId,
+               adminUserId: admin.id
+             }
+           });
+        }
+      }
+
+      if (admin) {
+        if (admin.status === "SUSPENDED" || admin.status === "BLOCKED" || admin.status === "DELETED") {
+          return res.redirect(`${targetUrl}/auth?error=account_unavailable`);
+        }
+        const jwt = await import("jsonwebtoken");
+        const authToken = jwt.sign(
+          { id: admin.id, email: admin.email, role: admin.role?.name || "admin", type: "admin" },
+          process.env.JWT_SECRET!,
+          { expiresIn: "48h" }
+        );
+        return res.redirect(`${targetUrl}/auth/social-success?token=${authToken}`);
+      } else {
+        return res.redirect(`${targetUrl}/auth?error=google_admin_not_found`);
+      }
+    }
+
     // 1. Check if AuthIdentity exists
     let authIdentity = await prisma.authIdentity.findUnique({
       where: { provider_providerUserId: { provider: "GOOGLE", providerUserId: googleUserId } },
       include: { user: true }
     });
 
-    if (authIdentity) {
+    if (authIdentity && authIdentity.user) {
       const user = authIdentity.user;
       
       // Account Status Check
       if (user.status === "SUSPENDED") {
-        return res.redirect(`${frontendUrl}/login?error=account_suspended`);
+        return res.redirect(`${targetUrl}/login?error=account_suspended`);
       }
       if (user.status === "BLOCKED" || user.status === "DELETED") {
-        return res.redirect(`${frontendUrl}/login?error=account_unavailable`);
+        return res.redirect(`${targetUrl}/login?error=account_unavailable`);
       }
 
       const authToken = generateYourJwt(user);
-      return res.redirect(`${frontendUrl}/auth/social-success?token=${authToken}`);
+      return res.redirect(`${targetUrl}/auth/social-success?token=${authToken}`);
     }
 
     // 2. AuthIdentity does not exist. Check if email collides with an existing account.
@@ -132,13 +183,13 @@ export const googleAuthCallback = async (req: Request, res: Response) => {
       if (existingUser) {
         // Email Collision: Require Secure Linking
         const regToken = generateRegistrationTransaction("GOOGLE", googleUserId, email);
-        return res.redirect(`${frontendUrl}/auth/social-success?requiresLinking=true&regToken=${regToken}&email=${encodeURIComponent(email)}`);
+        return res.redirect(`${targetUrl}/auth/social-success?requiresLinking=true&regToken=${regToken}&email=${encodeURIComponent(email)}`);
       }
     }
 
     // 3. Completely new user. Issue Registration Transaction Token.
     const regToken = generateRegistrationTransaction("GOOGLE", googleUserId, email);
-    return res.redirect(`${frontendUrl}/auth/social-success?newUser=true&regToken=${regToken}`);
+    return res.redirect(`${targetUrl}/auth/social-success?newUser=true&regToken=${regToken}`);
 
   } catch (error: any) {
     console.error("[GoogleAuth] Auth error:", error?.message || error);

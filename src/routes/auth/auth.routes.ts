@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import {
   login,
   register,
@@ -40,9 +41,17 @@ router.post("/admin/register", registerAdmin);
 router.post("/admin/signup", registerAdmin);
 router.post("/logout", authMiddleware as any, logout as any);
 router.post("/refresh", refresh);
-router.post("/forgot-password", forgotPassword);
-router.post("/verify-password-reset-otp", verifyPasswordResetOtp);
-router.post("/reset-password", resetPassword);
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per `window`
+  message: { success: false, message: "Too many password reset requests from this IP, please try again after 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post("/forgot-password", forgotPasswordLimiter, forgotPassword);
+router.post("/verify-password-reset-otp", forgotPasswordLimiter, verifyPasswordResetOtp);
+router.post("/reset-password", forgotPasswordLimiter, resetPassword);
 router.post("/change-password", authMiddleware as any, changePassword as any);
 router.get("/me", authMiddleware as any, me as any);
 router.put("/me", authMiddleware as any, updateProfile as any);
