@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database.js';
+﻿import { prisma } from '../../config/database.js';
 
 interface SearchInput {
   query: string;
@@ -31,11 +31,13 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
         role: 'freelancer',
         status: 'active',
         deletedAt: null,
-        OR: [
-          { fullName: { contains: q } },
-          { city: { contains: q } },
-          { bio: { contains: q } }
-        ],
+        ...(q ? {
+          OR: [
+            { fullName: { contains: q } },
+            { city: { contains: q } },
+            { bio: { contains: q } }
+          ]
+        } : {}),
         ...(city ? { city: { contains: city } } : {})
       },
       select: { id: true, fullName: true, avatarUrl: true, city: true, bio: true, freelancerProfile: true },
@@ -49,7 +51,9 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
         role: 'client',
         status: 'active',
         deletedAt: null,
-        OR: [{ fullName: { contains: q } }, { city: { contains: q } }],
+        ...(q ? {
+          OR: [{ fullName: { contains: q } }, { city: { contains: q } }]
+        } : {}),
         ...(city ? { city: { contains: city } } : {})
       },
       select: { id: true, fullName: true, avatarUrl: true, city: true, clientProfile: true },
@@ -63,7 +67,7 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
         role: 'investor',
         status: 'active',
         deletedAt: null,
-        OR: [{ fullName: { contains: q } }, { city: { contains: q } }]
+        ...(q ? { OR: [{ fullName: { contains: q } }, { city: { contains: q } }] } : {})
       },
       select: { id: true, fullName: true, avatarUrl: true, city: true, investorProfile: true },
       skip, take: limit
@@ -76,11 +80,13 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
         role: 'founder',
         status: 'active',
         deletedAt: null,
-        OR: [
-          { fullName: { contains: q } },
-          { founderProfile: { startupName: { contains: q } } },
-          { founderProfile: { industry: { contains: q } } }
-        ],
+        ...(q ? {
+          OR: [
+            { fullName: { contains: q } },
+            { founderProfile: { startupName: { contains: q } } },
+            { founderProfile: { industry: { contains: q } } }
+          ]
+        } : {}),
         ...(industry ? { founderProfile: { industry: { contains: industry } } } : {}),
         ...(stage ? { founderProfile: { stage: { contains: stage } } } : {})
       },
@@ -93,11 +99,13 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
     results.projects = await prisma.project.findMany({
       where: {
         deletedAt: null,
-        OR: [
-          { title: { contains: q } },
-          { category: { contains: q } },
-          { technology: { contains: q } }
-        ],
+        ...(q ? {
+          OR: [
+            { title: { contains: q } },
+            { category: { contains: q } },
+            { technology: { contains: q } }
+          ]
+        } : {}),
         ...(category ? { category: { contains: category } } : {}),
         status: input.status || undefined
       },
@@ -112,10 +120,12 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
           uploadedBy: userId,
           deletedAt: null,
           status: 'active',
-          OR: [
-            { originalName: { contains: q } },
-            { filetype: { contains: q } }
-          ]
+          ...(q ? {
+            OR: [
+              { originalName: { contains: q } },
+              { filetype: { contains: q } }
+            ]
+          } : {})
         },
         skip, take: limit
       });
@@ -126,10 +136,12 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
     results.blogs = await prisma.blog.findMany({
       where: {
         status: 'active',
-        OR: [
-          { title: { contains: q } },
-          { category: { contains: q } }
-        ]
+        ...(q ? {
+          OR: [
+            { title: { contains: q } },
+            { category: { contains: q } }
+          ]
+        } : {})
       },
       select: { id: true, title: true, category: true, author: true, createdAt: true },
       skip, take: limit
@@ -139,10 +151,12 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
   if (all || type === 'faq') {
     results.fAQs = await prisma.fAQ.findMany({
       where: {
-        OR: [
-          { question: { contains: q } },
-          { answer: { contains: q } }
-        ]
+        ...(q ? {
+          OR: [
+            { question: { contains: q } },
+            { answer: { contains: q } }
+          ]
+        } : {})
       },
       skip, take: limit
     });
@@ -152,10 +166,12 @@ export const globalSearch = async (userId: string | null, input: SearchInput) =>
     results.tickets = await prisma.supportTicket.findMany({
       where: {
         requesterId: userId,
-        OR: [
-          { subject: { contains: q } },
-          { categoryId: { contains: q } }
-        ]
+        ...(q ? {
+          OR: [
+            { subject: { contains: q } },
+            { categoryId: { contains: q } }
+          ]
+        } : {})
       },
       select: { id: true, subject: true, status: true, priority: true, createdAt: true },
       skip, take: limit

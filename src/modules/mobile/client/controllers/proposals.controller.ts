@@ -33,6 +33,8 @@ const shapeProposal = (proposal: any, contractId?: string | null, currentUserId?
   freelancerName: proposal.freelancer?.fullName || proposal.freelancerName || 'Freelancer',
   freelancerAvatar: proposal.freelancer?.avatarUrl || proposal.freelancerAvatar || null,
   clientId: proposal.project?.client || proposal.clientId || null,
+  clientName: proposal.project?.clientDetails?.fullName || proposal.clientName || 'Client',
+  clientAvatar: proposal.project?.clientDetails?.avatarUrl || proposal.clientAvatar || null,
   projectTitle: proposal.project?.title || proposal.projectTitle || 'Project',
   projectDescription: proposal.project?.description || proposal.projectDescription || '',
   contractId: contractId ?? proposal.contractId ?? null,
@@ -44,12 +46,16 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
-    let search = String(req.query.search || req.query.q || '').trim();
-    if (search.length > 0 && search.length < 3) search = '';
-    const where: any = { project: { client: req.user.id } };
+    const search = String(req.query.search || req.query.q || '').trim();
+    const where: any = { deletedAt: null, project: { client: req.user.id } };
     if (search) {
       const matchingFreelancers = await prisma.user.findMany({
-        where: { fullName: { contains: search } },
+        where: {
+          OR: [
+            { fullName: { contains: search } },
+            { email: { contains: search } },
+          ],
+        },
         select: { id: true },
       });
       where.OR = [

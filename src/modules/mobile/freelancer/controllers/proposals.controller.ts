@@ -69,6 +69,17 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
     if (status) where.status = status;
 
     if (search) {
+      const matchingUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { fullName: { contains: search } },
+            { email: { contains: search } },
+          ],
+        },
+        select: { id: true },
+      });
+      const matchingUserIds = matchingUsers.map((user) => user.id);
+
       where.AND = [{ OR: where.OR }, {
         OR: [
           { project: { title: { contains: search } } },
@@ -76,6 +87,8 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
           { coverLetter: { contains: search } },
           { project: { category: { contains: search } } },
           { project: { technology: { contains: search } } },
+          { project: { client: { in: matchingUserIds } } },
+          { freelancerId: { in: matchingUserIds } },
         ],
       }];
       delete where.OR;

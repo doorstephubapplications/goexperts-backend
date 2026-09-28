@@ -125,6 +125,28 @@ async function getActiveProjects(limit: number = 5, excludeUserId?: string) {
 async function buildRecommendationItems(role: string, userId: string) {
   const limit = 10;
 
+  const userAvatarFields = (user: any) => ({
+    avatarUrl: user?.avatarUrl ?? null,
+    avatar: user?.avatarUrl ?? null,
+    user: user
+      ? {
+          id: user.id,
+          fullName: user.fullName,
+          avatarUrl: user.avatarUrl ?? null,
+        }
+      : null,
+  });
+
+  const avatarMapFor = async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) return new Map<string, any>();
+    const users = await prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, fullName: true, avatarUrl: true },
+    }).catch(() => []);
+    return new Map<string, any>(users.map((u) => [u.id, u] as [string, any]));
+  };
+
   try {
     if (role === 'freelancer') {
       const [projects, clients, startups] = await Promise.all([
@@ -138,13 +160,19 @@ async function buildRecommendationItems(role: string, userId: string) {
         getActiveStartupIdeas(limit, userId),
       ]);
 
+      const [projectUserMap, startupUserMap] = await Promise.all([
+        avatarMapFor((projects || []).map((p: any) => p.client)),
+        avatarMapFor((startups || []).map((s: any) => s.founder)),
+      ]);
+
       const mappedProjects = dedupeBy(
-        (projects || []).map((p) => ({
+        (projects || []).map((p: any) => ({
           id: p.id,
           title: cleanProjectTitle(p.title, p.category, p.technology),
           subtitle: cleanTag(p.category, 'Project'),
           description: cleanDesc(p.technology ?? p.description, ''),
           budget: p.budget,
+          ...userAvatarFields(projectUserMap.get(p.client)),
         })),
         (p) => p.title
       ).slice(0, 5);
@@ -155,17 +183,19 @@ async function buildRecommendationItems(role: string, userId: string) {
           title: c.fullName || 'Client',
           subtitle: cleanTag(c.clientProfile?.company, 'Client'),
           description: cleanDesc(c.clientProfile?.industry ?? c.city, ''),
+          ...userAvatarFields(c),
         })),
         (c) => c.title
       ).slice(0, 5);
 
       const mappedStartups = dedupeBy(
-        (startups || []).map((s) => ({
+        (startups || []).map((s: any) => ({
           id: s.id,
           title: cleanStartupTitle((s as any).title, s.startup, s.industry),
           subtitle: cleanTag(s.stage, 'Startup'),
           description: cleanDesc(s.industry, ''),
           funding: s.funding,
+          ...userAvatarFields(startupUserMap.get(s.founder)),
         })),
         (s) => s.title
       ).slice(0, 5);
@@ -194,23 +224,27 @@ async function buildRecommendationItems(role: string, userId: string) {
         }).catch(() => []),
       ]);
 
+      const startupUserMap = await avatarMapFor((startups || []).map((s: any) => s.founder));
+
       const mappedFreelancers = dedupeBy(
         (freelancers || []).map((f) => ({
           id: f.id,
           title: f.fullName || 'Freelancer',
           subtitle: cleanTag(f.freelancerProfile?.skills, 'Freelancer'),
           description: cleanDesc(f.freelancerProfile?.industry ?? f.city, ''),
+          ...userAvatarFields(f),
         })),
         (f) => f.title
       ).slice(0, 5);
 
       const mappedStartups = dedupeBy(
-        (startups || []).map((s) => ({
+        (startups || []).map((s: any) => ({
           id: s.id,
           title: cleanStartupTitle((s as any).title, s.startup, s.industry),
           subtitle: cleanTag(s.stage, 'Startup'),
           description: cleanDesc(s.industry, ''),
           funding: s.funding,
+          ...userAvatarFields(startupUserMap.get(s.founder)),
         })),
         (s) => s.title
       ).slice(0, 5);
@@ -221,6 +255,7 @@ async function buildRecommendationItems(role: string, userId: string) {
           title: i.fullName || 'Investor',
           subtitle: cleanTag(i.investorProfile?.firm, 'Investor'),
           description: cleanDesc(i.investorProfile?.focusAreas ?? i.city, ''),
+          ...userAvatarFields(i),
         })),
         (i) => i.title
       ).slice(0, 5);
@@ -244,24 +279,31 @@ async function buildRecommendationItems(role: string, userId: string) {
         }).catch(() => []),
       ]);
 
+      const [startupUserMap, projectUserMap] = await Promise.all([
+        avatarMapFor((startups || []).map((s: any) => s.founder)),
+        avatarMapFor((projects || []).map((p: any) => p.client)),
+      ]);
+
       const mappedStartups = dedupeBy(
-        (startups || []).map((s) => ({
+        (startups || []).map((s: any) => ({
           id: s.id,
           title: cleanStartupTitle((s as any).title, s.startup, s.industry),
           subtitle: cleanTag(s.stage, 'Startup'),
           description: cleanDesc(s.industry, ''),
           funding: s.funding,
+          ...userAvatarFields(startupUserMap.get(s.founder)),
         })),
         (s) => s.title
       ).slice(0, 5);
 
       const mappedProjects = dedupeBy(
-        (projects || []).map((p) => ({
+        (projects || []).map((p: any) => ({
           id: p.id,
           title: cleanProjectTitle(p.title, p.category, p.technology),
           subtitle: cleanTag(p.category, 'Project'),
           description: cleanDesc(p.technology ?? p.description, ''),
           budget: p.budget,
+          ...userAvatarFields(projectUserMap.get(p.client)),
         })),
         (p) => p.title
       ).slice(0, 5);
@@ -272,6 +314,7 @@ async function buildRecommendationItems(role: string, userId: string) {
           title: f.fullName || 'Freelancer',
           subtitle: cleanTag(f.freelancerProfile?.skills, 'Freelancer'),
           description: cleanDesc(f.freelancerProfile?.industry ?? f.city, ''),
+          ...userAvatarFields(f),
         })),
         (f) => f.title
       ).slice(0, 5);
@@ -290,32 +333,39 @@ async function buildRecommendationItems(role: string, userId: string) {
       getActiveProjects(limit, userId),
     ]);
 
+    const [startupUserMap, projectUserMap] = await Promise.all([
+      avatarMapFor((startups || []).map((s: any) => s.founder)),
+      avatarMapFor((projects || []).map((p: any) => p.client)),
+    ]);
+
     return {
       investors: dedupeBy(
-        (investors || []).map((i) => ({ id: i.id, title: i.fullName, subtitle: cleanTag(i.investorProfile?.firm, 'Investor'), description: cleanDesc(i.investorProfile?.focusAreas ?? i.city, '') })),
+        (investors || []).map((i) => ({ id: i.id, title: i.fullName, subtitle: cleanTag(i.investorProfile?.firm, 'Investor'), description: cleanDesc(i.investorProfile?.focusAreas ?? i.city, ''), ...userAvatarFields(i) })),
         (i) => i.title
       ).slice(0, 5),
       freelancers: dedupeBy(
-        (freelancers || []).map((f) => ({ id: f.id, title: f.fullName, subtitle: cleanTag(f.freelancerProfile?.skills, 'Freelancer'), description: cleanDesc(f.freelancerProfile?.industry ?? f.city, '') })),
+        (freelancers || []).map((f) => ({ id: f.id, title: f.fullName, subtitle: cleanTag(f.freelancerProfile?.skills, 'Freelancer'), description: cleanDesc(f.freelancerProfile?.industry ?? f.city, ''), ...userAvatarFields(f) })),
         (f) => f.title
       ).slice(0, 5),
       startups: dedupeBy(
-        (startups || []).map((s) => ({
+        (startups || []).map((s: any) => ({
           id: s.id,
           title: cleanStartupTitle((s as any).title, s.startup, s.industry),
           subtitle: cleanTag(s.stage, 'Startup'),
           description: cleanDesc(s.industry, ''),
           funding: s.funding,
+          ...userAvatarFields(startupUserMap.get(s.founder)),
         })),
         (s) => s.title
       ).slice(0, 5),
       projects: dedupeBy(
-        (projects || []).map((p) => ({
+        (projects || []).map((p: any) => ({
           id: p.id,
           title: cleanProjectTitle(p.title, p.category, p.technology),
           subtitle: cleanTag(p.category, 'Project'),
           description: cleanDesc(p.technology ?? p.description, ''),
           budget: p.budget,
+          ...userAvatarFields(projectUserMap.get(p.client)),
         })),
         (p) => p.title
       ).slice(0, 5),

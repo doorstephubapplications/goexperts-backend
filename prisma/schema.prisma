@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
 }
 
 datasource db {
@@ -181,6 +182,9 @@ model User {
   @@index([role])
   @@index([status])
   @@index([createdAt])
+  @@fulltext([fullName])
+  @@fulltext([city])
+  @@fulltext([bio])
   @@map("users")
 }
 
@@ -298,6 +302,8 @@ model FounderProfile {
   verificationJson String?  @map("verification_json") @db.Text
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@fulltext([startupName])
+  @@fulltext([industry])
   @@map("founder_profiles")
 }
 
@@ -338,6 +344,9 @@ model Project {
   @@index([status])
   @@index([category])
   @@index([createdAt])
+  @@fulltext([title])
+  @@fulltext([category])
+  @@fulltext([technology])
   @@map("projects")
 }
 
@@ -1141,6 +1150,8 @@ model Blog {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
+  @@fulltext([title])
+  @@fulltext([category])
   @@map("blogs")
 }
 
@@ -1253,6 +1264,8 @@ model MediaFile {
   updatedAt    DateTime           @updatedAt @map("updated_at")
   versions     MediaFileVersion[]
 
+  @@fulltext([originalName])
+  @@fulltext([filetype])
   @@map("media_files")
 }
 
@@ -1341,6 +1354,8 @@ model SupportTicket {
   @@index([categoryId])
   @@index([priority])
   @@index([createdAt])
+  @@fulltext([subject])
+  @@fulltext([categoryId])
   @@map("support_tickets")
 }
 
@@ -2761,6 +2776,8 @@ model FAQ {
   @@index([categoryId, isPublished, sortOrder])
   @@index([isFeatured, isPublished])
   @@index([slug])
+  @@fulltext([question])
+  @@fulltext([answer])
 }
 
 model FAQPageSeo {
