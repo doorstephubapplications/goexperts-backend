@@ -48,6 +48,7 @@ import resumeTemplateRouter from "./admin/resume-template.routes.js";
 import kycRouter from "./admin/kyc.routes.js";
 import adminSupportDeskRouter from "./admin/support-desk.routes.js";
 import adminWithdrawalsRouter from "./admin/withdrawals.routes.js";
+import { adminUsersRouter } from "./admin/admin-users.routes.js";
 import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
@@ -135,6 +136,8 @@ router.use("/public/resume-templates", publicResumeTemplateRouter);
 router.use("/public/resume-share", publicResumeShareRouter);
 router.use("/v1/public", publicRoutes);
 // 2.2 Admin operations
+router.use("/admin/users", authMiddleware, adminUsersRouter);
+router.use("/v1/admin/users", authMiddleware, adminUsersRouter);
 router.use("/admin/dashboard", adminDashboardRouter);
 router.use("/admin/dashboard-old", dashboardRoutes);
 router.use("/admin/dashboard", dashboardInsightsRouter);
@@ -313,12 +316,12 @@ const searchColumnsMapping = {
     City: ["name"],
     User: ["fullName", "email", "country"],
     Project: ["title", "client", "freelancer", "category", "technology", "timeline", "status"],
-    Task: ["title", "assignedTo"],
+    Task: ["title", "assignedTo", "priority", "status"],
     HelpCategory: ["name", "slug", "shortDescription"],
     HelpArticle: ["title", "slug", "excerpt", "content"],
     HelpVideoGuide: ["title", "description"],
-    StartupIdea: ["startup", "founder", "industry"],
-    Investment: ["investor", "startup"],
+    StartupIdea: ["startup", "founder", "industry", "category", "stage"],
+    Investment: ["investor", "startup", "status", "docs"],
     Meeting: ["founder", "investor"],
     Subscription: ["plan", "user"],
     Payment: ["user", "gateway", "invoice"],
@@ -2161,11 +2164,47 @@ router.use("/admin/content/footer", authMiddleware, footerAdminRouter);
 // Custom Override for Project By ID to hydrate Relational Data
 router.get("/admin/projects/:id", authMiddleware, async (req, res, next) => {
     try {
-        const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+        const project = await prisma.project.findUnique({
+            where: { id: req.params.id },
+            include: {
+                milestones: true,
+                tasks: {
+                    select: {
+                        id: true,
+                        title: true,
+                        status: true,
+                        priority: true,
+                        progress: true,
+                        assignedTo: true,
+                        dueDate: true,
+                    }
+                },
+                proposals: {
+                    include: {
+                        freelancer: {
+                            select: {
+                                id: true,
+                                fullName: true,
+                                email: true,
+                                avatarUrl: true
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: "desc" }
+                },
+                _count: {
+                    select: {
+                        proposals: true,
+                        milestones: true,
+                        tasks: true
+                    }
+                }
+            }
+        });
         if (!project)
             return res.status(404).json({ success: false, message: "Project not found" });
         // Hydrate Client
-        let clientObj = null;
+        let clientObj = project.client;
         if (project.client) {
             const user = await prisma.user.findUnique({
                 where: { id: project.client },
@@ -2182,32 +2221,175 @@ router.get("/admin/projects/:id", authMiddleware, async (req, res, next) => {
         }
         // Hydrate Freelancer
         let freelancerObj = null;
-        if (project.freelancer) {
+        let targetFreelancerId = project.freelancer;
+        if (!targetFreelancerId) {
+            const contract = await prisma.contract.findFirst({
+                where: { projectId: project.id },
+                select: { freelancerId: true }
+            });
+            if (contract?.freelancerId) {
+                targetFreelancerId = contract.freelancerId;
+            }
+            else {
+                const acceptedProp = await prisma.proposal.findFirst({
+                    where: { projectId: project.id, status: "accepted" },
+                    select: { freelancerId: true }
+                });
+                if (acceptedProp?.freelancerId) {
+                    targetFreelancerId = acceptedProp.freelancerId;
+                }
+            }
+        }
+        if (targetFreelancerId) {
             const user = await prisma.user.findUnique({
-                where: { id: project.freelancer },
-                select: { id: true, fullName: true, email: true }
+                where: { id: targetFreelancerId },
+                select: { id: true, fullName: true, email: true, freelancerProfile: { select: { titleHeadline: true } } }
             });
             if (user) {
                 freelancerObj = {
                     id: user.id,
                     fullName: user.fullName,
-                    email: user.email
+                    email: user.email,
+                    title: user.freelancerProfile?.titleHeadline || "Assigned Specialist"
+                };
+            }
+            else if (typeof targetFreelancerId === "string" && targetFreelancerId.length < 20) {
+                freelancerObj = {
+                    id: targetFreelancerId,
+                    fullName: targetFreelancerId,
+                    email: "",
+                    title: "Assigned Specialist"
                 };
             }
         }
-        // Convert Technology
+        // Hydrate Category
+        let resolvedCategory = project.category;
+        if (project.category) {
+            const [cat, ind] = await Promise.all([
+                prisma.skillCategory.findUnique({ where: { id: project.category } }).catch(() => null),
+                prisma.industry.findUnique({ where: { id: project.category } }).catch(() => null)
+            ]);
+            resolvedCategory = cat?.name || ind?.name || project.category;
+        }
+        // Hydrate Technology Skills
         let techArray = [];
         if (project.technology) {
-            techArray = project.technology.split(",").map((s) => s.trim()).filter(Boolean);
+            const rawIds = project.technology.split(",").map((s) => s.trim()).filter(Boolean);
+            const skills = await prisma.skill.findMany({ where: { id: { in: rawIds } }, select: { id: true, name: true } });
+            const skillMap = Object.fromEntries(skills.map(s => [s.id, s.name]));
+            techArray = rawIds.map(id => skillMap[id] || id);
+        }
+        // Hydrate Work Mode
+        let resolvedWorkMode = project.workMode;
+        if (project.workMode) {
+            const [wm, mo] = await Promise.all([
+                prisma.workMode.findUnique({ where: { id: project.workMode } }).catch(() => null),
+                prisma.masterOption.findUnique({ where: { id: project.workMode } }).catch(() => null)
+            ]);
+            resolvedWorkMode = wm?.name || mo?.label || project.workMode;
+        }
+        // Hydrate Budget Range
+        let resolvedBudgetRange = project.budgetRangeId;
+        if (project.budgetRangeId) {
+            const br = await prisma.masterOption.findUnique({ where: { id: project.budgetRangeId } }).catch(() => null);
+            if (br?.label)
+                resolvedBudgetRange = br.label;
+        }
+        // Format Experience Level
+        let resolvedExp = project.experienceLevel;
+        if (project.experienceLevel) {
+            if (project.experienceLevel === "mo_experience_level_intermediate")
+                resolvedExp = "Intermediate";
+            else if (project.experienceLevel === "mo_experience_level_expert")
+                resolvedExp = "Expert";
+            else if (project.experienceLevel === "mo_experience_level_entry")
+                resolvedExp = "Entry Level";
+        }
+        // Parse Attachments array if JSON
+        let parsedAttachments = project.attachments;
+        if (project.attachments) {
+            try {
+                parsedAttachments = JSON.parse(project.attachments);
+            }
+            catch {
+                parsedAttachments = project.attachments;
+            }
+        }
+        // Hydrate Task Assignees inside project.tasks
+        const taskAssigneeIds = Array.from(new Set((project.tasks || []).map((t) => t.assignedTo).filter((v) => v && v.length > 20)));
+        const [taskUsers, taskAdmins] = await Promise.all([
+            prisma.user.findMany({ where: { id: { in: taskAssigneeIds } }, select: { id: true, fullName: true, email: true } }),
+            prisma.adminUser.findMany({ where: { id: { in: taskAssigneeIds } }, select: { id: true, fullName: true, email: true } })
+        ]);
+        const taskUserMap = Object.fromEntries([
+            ...taskUsers.map((u) => [u.id, u.fullName || u.email]),
+            ...taskAdmins.map((a) => [a.id, a.fullName || a.email])
+        ]);
+        const hydratedTasks = (project.tasks || []).map((t) => ({
+            ...t,
+            assignedTo: taskUserMap[t.assignedTo] || (t.assignedTo && t.assignedTo.length > 20 ? "Unassigned" : (t.assignedTo || "Unassigned")),
+        }));
+        // Hydrate Proposals with parsed attachments
+        const hydratedProposals = (project.proposals || []).map((p) => {
+            let parsedAtt = p.attachments;
+            if (typeof p.attachments === "string" && p.attachments.startsWith("[")) {
+                try {
+                    parsedAtt = JSON.parse(p.attachments);
+                }
+                catch { }
+            }
+            return {
+                ...p,
+                attachments: parsedAtt,
+            };
+        });
+        // Hydrate Meetings for Project
+        const projUserIds = [
+            typeof clientObj === "object" ? clientObj?.id : project.client,
+            typeof freelancerObj === "object" ? freelancerObj?.id : project.freelancer,
+            ...project.proposals.map(p => p.freelancerId)
+        ].filter(Boolean);
+        let hydratedMeetings = [];
+        if (projUserIds.length > 0) {
+            const pMeetings = await prisma.meeting.findMany({
+                where: {
+                    deletedAt: null,
+                    OR: [
+                        { founder: { in: projUserIds } },
+                        { investor: { in: projUserIds } },
+                        { createdBy: { in: projUserIds } }
+                    ]
+                },
+                orderBy: { createdAt: "desc" }
+            });
+            const mUserIds = Array.from(new Set([
+                ...pMeetings.map(m => m.founder),
+                ...pMeetings.map(m => m.investor),
+            ].filter(v => v && v.length > 20)));
+            const mUsers = await prisma.user.findMany({ where: { id: { in: mUserIds } }, select: { id: true, fullName: true, email: true } });
+            const mUserMap = Object.fromEntries(mUsers.map(u => [u.id, u.fullName || u.email]));
+            hydratedMeetings = pMeetings.map(m => ({
+                ...m,
+                founderName: mUserMap[m.founder] || (m.founder && m.founder.length < 20 ? m.founder : "Host"),
+                investorName: mUserMap[m.investor] || (m.investor && m.investor.length < 20 ? m.investor : "Attendee"),
+            }));
         }
         res.json({
             success: true,
             data: {
                 ...project,
-                client: clientObj || project.client,
-                freelancer: freelancerObj || project.freelancer,
+                client: clientObj,
+                freelancer: freelancerObj,
+                category: resolvedCategory,
                 technology: techArray,
-                technologyText: project.technology
+                technologyText: techArray.join(", "),
+                workMode: resolvedWorkMode,
+                budgetRangeId: resolvedBudgetRange,
+                experienceLevel: resolvedExp,
+                attachments: parsedAttachments,
+                tasks: hydratedTasks,
+                proposals: hydratedProposals,
+                meetings: hydratedMeetings,
             }
         });
     }
@@ -2221,19 +2403,37 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
         return;
     console.log("Mounting CRUD router for:", tableName, modelName);
     const searchCols = searchColumnsMapping[modelName] || ["name"];
-    const include = modelName === "Task"
-        ? { attachments: true, project: { select: { id: true, title: true, category: true } } }
-        : modelName === "SkillCategory"
-            ? { _count: { select: { skills: true } } }
-            : modelName === "Skill"
-                ? { category: { select: { id: true, name: true } } }
-                : modelName === "City"
-                    ? { country: { select: { id: true, name: true } } }
-                    : modelName === "WalletTransaction"
-                        ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
-                        : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
-                            ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
-                            : undefined;
+    const include = modelName === "Project"
+        ? {
+            milestones: true,
+            tasks: { select: { id: true, title: true, status: true, priority: true, progress: true, assignedTo: true, dueDate: true } },
+            proposals: {
+                include: {
+                    freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true } }
+                },
+                orderBy: { createdAt: "desc" }
+            },
+            _count: { select: { proposals: true, milestones: true, tasks: true } }
+        }
+        : modelName === "Task"
+            ? {
+                attachments: true,
+                checklists: true,
+                timeLogs: true,
+                comments: { orderBy: { createdAt: "desc" } },
+                project: { select: { id: true, title: true, category: true, budget: true, status: true } }
+            }
+            : modelName === "SkillCategory"
+                ? { _count: { select: { skills: true } } }
+                : modelName === "Skill"
+                    ? { category: { select: { id: true, name: true } } }
+                    : modelName === "City"
+                        ? { country: { select: { id: true, name: true } } }
+                        : modelName === "WalletTransaction"
+                            ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
+                            : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
+                                ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
+                                : undefined;
     // Create router using factory
     const crudRouter = createCrudRouter(modelName, searchCols, include ? { include } : {});
     // We wrap list get request to auto inject default role query filters for user roles
@@ -2290,9 +2490,9 @@ router.post("/admin/users/:id/remind-kyc", authMiddleware, async (req, res, next
         const user = await prisma.user.findUnique({ where: { id: req.params.id } });
         if (!user)
             return res.status(404).json({ success: false, message: "User not found" });
-        const { sendEmail } = await import("../services/mobile/email.service.js");
-        await sendEmail(user.email, "Action Required: Complete Your KYC on Go Experts", `<p>Hi ${user.fullName || "User"},</p><p>We noticed that your KYC verification is incomplete. Please log in to your dashboard and submit the required documents so we can fully activate your account and features.</p><p>Thank you,<br>The Go Experts Team</p>`);
-        res.json({ success: true, message: "KYC reminder sent" });
+        const { sendKycReminderEmail } = await import("../services/mobile/email.service.js");
+        await sendKycReminderEmail(user.email, user.fullName || "User");
+        res.json({ success: true, message: "KYC reminder email sent successfully" });
     }
     catch (e) {
         next(e);
@@ -2303,9 +2503,9 @@ router.post("/admin/users/:id/remind-profile", authMiddleware, async (req, res, 
         const user = await prisma.user.findUnique({ where: { id: req.params.id } });
         if (!user)
             return res.status(404).json({ success: false, message: "User not found" });
-        const { sendEmail } = await import("../services/mobile/email.service.js");
-        await sendEmail(user.email, "Action Required: Complete Your Profile on Go Experts", `<p>Hi ${user.fullName || "User"},</p><p>Your profile is currently incomplete. To get the most out of Go Experts and start connecting with others, please take a moment to log in and complete your profile to at least 75%.</p><p>Thank you,<br>The Go Experts Team</p>`);
-        res.json({ success: true, message: "Profile reminder sent" });
+        const { sendProfileReminderEmail } = await import("../services/mobile/email.service.js");
+        await sendProfileReminderEmail(user.email, user.fullName || "User");
+        res.json({ success: true, message: "Profile reminder email sent successfully" });
     }
     catch (err) {
         next(err);
@@ -2316,47 +2516,22 @@ router.post("/admin/users/:id/remind-onboarding", authMiddleware, async (req, re
         const user = await prisma.user.findUnique({ where: { id: req.params.id } });
         if (!user)
             return res.status(404).json({ success: false, message: "User not found" });
-        const { EmailChannelAdapter } = await import("../modules/notifications/notification.service.js");
-        const emailAdapter = new EmailChannelAdapter();
-        let parsedConfig = {};
-        const chanConfig = await prisma.communicationChannel.findUnique({ where: { name: "email" } }).catch(() => null);
-        if (chanConfig?.config)
-            parsedConfig = JSON.parse(chanConfig.config);
-        const clientHost = process.env.CLIENT_URL || "https://goexperts.in";
-        const loginLink = `${clientHost}/login`;
-        const html = `
-      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background-color: #f9fafb; padding: 40px 20px; border-radius: 12px;">
-        <div style="background-color: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
-          <h2 style="color: #1a202c; font-size: 24px; font-weight: 800; margin-bottom: 16px;">Complete Your Onboarding</h2>
-          <p style="font-size: 16px; color: #4a5568; line-height: 1.6; margin-bottom: 24px; text-align: left;">
-            Hi <strong>${user.fullName || "User"}</strong>,<br><br>
-            We noticed that you haven't fully completed your onboarding on <strong>Go Experts</strong>. 
-            Completing your profile is essential to unlock the full potential of our platform, whether you're looking to connect with top-tier talent, innovative startups, or verified investors.
-          </p>
-          <div style="background-color: #f1f5f9; padding: 20px; border-radius: 8px; margin-bottom: 32px; text-align: left;">
-            <h4 style="margin: 0 0 12px 0; color: #1e293b; font-size: 16px;">Why complete onboarding?</h4>
-            <ul style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.6;">
-              <li>Gain instant access to matched opportunities.</li>
-              <li>Enhance your visibility within the Go Experts network.</li>
-              <li>Activate your account for communications and proposals.</li>
-            </ul>
-          </div>
-          <a href="${loginLink}" style="background-color: #E30613; color: #ffffff; padding: 14px 36px; border-radius: 8px; font-weight: 700; font-size: 16px; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(227, 6, 19, 0.3);">
-            Resume Onboarding &rarr;
-          </a>
-          <p style="margin-top: 32px; font-size: 13px; color: #94a3b8; text-align: center;">
-            If you need any assistance, our support team is here to help. Just reply to this email.
-          </p>
-        </div>
-      </div>
-    `;
-        await emailAdapter.send({
-            to: user.email,
-            subject: "Action Required: Complete Your Go Experts Onboarding",
-            body: `Hi ${user.fullName || "User"},\n\nWe noticed that you haven't fully completed your onboarding on Go Experts. Please log in and complete your profile to unlock all platform features.\n\nLogin here: ${loginLink}\n\nThank you,\nThe Go Experts Team`,
-            html,
-        }, parsedConfig);
-        res.json({ success: true, message: "Onboarding reminder sent successfully" });
+        const { sendRegistrationReminderEmail } = await import("../services/mobile/email.service.js");
+        await sendRegistrationReminderEmail(user.email, user.fullName || "User");
+        res.json({ success: true, message: "Onboarding reminder email sent successfully" });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+router.post("/admin/users/:id/remind-registration", authMiddleware, async (req, res, next) => {
+    try {
+        const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+        if (!user)
+            return res.status(404).json({ success: false, message: "User not found" });
+        const { sendRegistrationReminderEmail } = await import("../services/mobile/email.service.js");
+        await sendRegistrationReminderEmail(user.email, user.fullName || "User");
+        res.json({ success: true, message: "Registration reminder email sent successfully" });
     }
     catch (err) {
         next(err);
