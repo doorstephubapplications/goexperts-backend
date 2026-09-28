@@ -345,7 +345,7 @@ model Project {
   @@index([category])
   @@index([createdAt])
   @@fulltext([title])
-  @@fulltext([category])
+  @@fulltext([category], map: "projects_category_fulltext_idx")
   @@fulltext([technology])
   @@map("projects")
 }
@@ -1355,7 +1355,7 @@ model SupportTicket {
   @@index([priority])
   @@index([createdAt])
   @@fulltext([subject])
-  @@fulltext([categoryId])
+  @@fulltext([categoryId], map: "support_tickets_category_id_fulltext_idx")
   @@map("support_tickets")
 }
 
