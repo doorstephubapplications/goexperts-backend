@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getClientProject } from "../../controllers/client/client.controller.js";
 import { respondToInvitation, listFreelancerInvitations } from "../../controllers/freelancer/freelancer-extra.controller.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
@@ -89,6 +90,7 @@ router.use(portalRoleMiddleware(["freelancer", "client", "investor", "founder", 
 
 router.get("/projects", searchPublishedProjects as any);
 router.post("/projects/search", searchPublishedProjects as any);
+router.get("/projects/:id", getClientProject as any);
 router.get("/dashboard", getFreelancerDashboard as any);
 router.get("/professional", getFreelancerProfile as any);
 router.patch("/professional", updateFreelancerProfile as any);

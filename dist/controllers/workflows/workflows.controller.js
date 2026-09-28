@@ -188,6 +188,104 @@ export const publishProject = async (req, res, next) => {
         next(err);
     }
 };
+export const completeProject = async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id } = req.params;
+        const project = await prisma.project.findUnique({
+            where: { id },
+            include: {
+                contracts: { where: { deletedAt: null } },
+                milestones: true,
+            },
+        });
+        if (!project || project.deletedAt) {
+            return res.status(404).json({ success: false, message: "Project not found" });
+        }
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, fullName: true, email: true, role: true, clientProfile: { select: { company: true } } },
+        });
+        if (!user)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const clientNeedles = [user.fullName, user.email, user.clientProfile?.company]
+            .map((v) => String(v || "").trim()).filter(Boolean);
+        const isOwner = project.client === user.id || clientNeedles.some((n) => project.client?.includes(n));
+        const isAdmin = user.role === "admin";
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: "Only the project owner or administrator can mark a project as completed" });
+        }
+        if (project.status === "completed") {
+            return res.status(409).json({ success: false, message: "Project is already completed" });
+        }
+        if (project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cancelled projects cannot be completed" });
+        }
+        // Check for milestones awaiting client review
+        const pendingReviewMilestone = project.milestones.find((m) => m.status === "Submitted");
+        if (pendingReviewMilestone) {
+            return res.status(400).json({
+                success: false,
+                message: `Milestone "${pendingReviewMilestone.title}" is currently submitted for review. Please review all submitted milestones before completing the project.`,
+            });
+        }
+        const result = await prisma.$transaction(async (tx) => {
+            const updatedProject = await tx.project.update({
+                where: { id },
+                data: { status: "completed" },
+            });
+            const updatedContracts = await tx.contract.updateMany({
+                where: {
+                    projectId: id,
+                    deletedAt: null,
+                    status: { in: ["active", "pending_acceptance", "draft"] },
+                },
+                data: { status: "completed" },
+            });
+            return { updatedProject, updatedContracts };
+        });
+        await logWorkflowAction({
+            userId,
+            action: "complete",
+            entity: "Project",
+            entityId: id,
+            description: `Project "${project.title}" completed by client ${user.fullName}.`,
+            oldValue: { status: project.status },
+            newValue: { status: "completed" },
+        });
+        // Notify the contracted freelancer(s)
+        const activeContract = project.contracts.find((c) => c.status === "active" || c.status === "pending_acceptance") || project.contracts[0];
+        if (activeContract?.freelancerId && activeContract.freelancerId !== userId) {
+            await NotificationService.enqueue({
+                userId: activeContract.freelancerId,
+                type: "project",
+                title: "Project Completed & Signed Off",
+                message: `Project "${project.title}" has been signed off and marked completed by the client. You can now leave a review.`,
+                priority: "normal",
+                channel: "omnichannel",
+                variables: {
+                    projectTitle: project.title,
+                    clientName: user.fullName,
+                },
+                metadata: {
+                    projectId: project.id,
+                    contractId: activeContract.id,
+                    actionUrl: `/dashboard/projects/${project.id}?tab=overview`,
+                },
+            }).catch((err) => console.error("Failed to enqueue completion notification:", err));
+        }
+        res.json({
+            success: true,
+            message: "Project and contracts completed successfully",
+            project: result.updatedProject,
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
 // ─── 2. PROPOSAL ENGINE ────────────────────────────────────────────────────
 export const submitProposal = async (req, res, next) => {
     try {
@@ -566,15 +664,25 @@ export const patchContractStatus = async (req, res, next) => {
 // ─── 4. MILESTONE ENGINE ───────────────────────────────────────────────────
 export const createMilestone = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { projectId, title, dueDate } = req.body;
         if (!projectId || !title) {
             return res.status(400).json({ success: false, message: "projectId and title are required" });
         }
+        const project = await prisma.project.findUnique({ where: { id: projectId } });
+        if (!project || project.deletedAt) {
+            return res.status(404).json({ success: false, message: "Project not found" });
+        }
+        if (project.status === "completed" || project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot add milestones to a completed or cancelled project" });
+        }
         const milestone = await prisma.milestone.create({
-            data: { projectId, title, dueDate, status: "Pending" },
+            data: { projectId, title: String(title).trim(), dueDate: dueDate || null, status: "Pending" },
         });
         await logWorkflowAction({
-            userId: req.user?.id || "system",
+            userId,
             action: "create",
             entity: "Milestone",
             entityId: milestone.id,
@@ -587,48 +695,52 @@ export const createMilestone = async (req, res, next) => {
         next(err);
     }
 };
-// Database Transaction #4: Milestone Approved → Payment Release Placeholder
 export const approveMilestone = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { id } = req.params;
         const milestone = await prisma.milestone.findUnique({
             where: { id },
-            include: { project: true },
+            include: { project: { include: { contracts: { where: { deletedAt: null } } } } },
         });
         if (!milestone)
             return res.status(404).json({ success: false, message: "Milestone not found" });
-        const result = await prisma.$transaction(async (tx) => {
-            const updated = await tx.milestone.update({
-                where: { id },
-                data: { status: "Completed" },
-            });
-            // Find client user by full name
-            const clientUser = await tx.user.findFirst({
-                where: { fullName: milestone.project.client },
-            });
-            const userId = clientUser?.id || req.user?.id || "";
-            // Create a Payment settlement placeholder
-            const invoiceNumber = `INV-MS-${Math.floor(100000 + Math.random() * 900000)}`;
-            const payment = await tx.payment.create({
-                data: {
-                    userId,
-                    gateway: "Internal Wallet Release",
-                    amount: parseFloat((milestone.project.budget / 2).toFixed(2)), // release 50% budget partition
-                    currency: "INR",
-                    transactionId: invoiceNumber,
-                    status: "completed",
-                },
-            });
-            return { updated, payment };
+        if (milestone.project.status === "completed" || milestone.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot modify milestones on a completed or cancelled project" });
+        }
+        const updated = await prisma.milestone.update({
+            where: { id },
+            data: { status: "Completed" },
         });
         await logWorkflowAction({
-            userId: req.user?.id || "system",
+            userId,
             action: "approve",
             entity: "Milestone",
             entityId: id,
-            description: `Milestone approved. Released payment placeholder ${result.payment.transactionId} for $${result.payment.amount}`,
+            description: `Milestone "${milestone.title}" approved by client.`,
+            oldValue: milestone,
+            newValue: updated,
         });
-        res.json({ success: true, ...result });
+        // Notify the freelancer
+        const activeContract = milestone.project.contracts.find((c) => c.status === "active" || c.status === "pending_acceptance") || milestone.project.contracts[0];
+        if (activeContract?.freelancerId && activeContract.freelancerId !== userId) {
+            await NotificationService.enqueue({
+                userId: activeContract.freelancerId,
+                type: "milestone",
+                title: "Milestone Approved",
+                message: `Milestone "${milestone.title}" has been approved for project "${milestone.project.title}".`,
+                priority: "normal",
+                channel: "omnichannel",
+                metadata: {
+                    projectId: milestone.projectId,
+                    milestoneId: milestone.id,
+                    actionUrl: `/dashboard/projects/${milestone.projectId}?tab=milestones`,
+                },
+            }).catch(() => { });
+        }
+        res.json({ success: true, milestone: updated });
     }
     catch (err) {
         next(err);
@@ -636,23 +748,48 @@ export const approveMilestone = async (req, res, next) => {
 };
 export const rejectMilestone = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { id } = req.params;
-        const existing = await prisma.milestone.findUnique({ where: { id } });
-        if (!existing)
+        const milestone = await prisma.milestone.findUnique({
+            where: { id },
+            include: { project: { include: { contracts: { where: { deletedAt: null } } } } },
+        });
+        if (!milestone)
             return res.status(404).json({ success: false, message: "Milestone not found" });
+        if (milestone.project.status === "completed" || milestone.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot modify milestones on a completed or cancelled project" });
+        }
         const updated = await prisma.milestone.update({
             where: { id },
             data: { status: "Rejected" },
         });
         await logWorkflowAction({
-            userId: req.user?.id || "system",
+            userId,
             action: "reject",
             entity: "Milestone",
             entityId: id,
-            description: `Milestone "${existing.title}" rejected.`,
-            oldValue: existing,
+            description: `Milestone "${milestone.title}" rejected.`,
+            oldValue: milestone,
             newValue: updated,
         });
+        const activeContract = milestone.project.contracts.find((c) => c.status === "active" || c.status === "pending_acceptance") || milestone.project.contracts[0];
+        if (activeContract?.freelancerId && activeContract.freelancerId !== userId) {
+            await NotificationService.enqueue({
+                userId: activeContract.freelancerId,
+                type: "milestone",
+                title: "Milestone Rejected",
+                message: `Milestone "${milestone.title}" was rejected on project "${milestone.project.title}".`,
+                priority: "normal",
+                channel: "omnichannel",
+                metadata: {
+                    projectId: milestone.projectId,
+                    milestoneId: milestone.id,
+                    actionUrl: `/dashboard/projects/${milestone.projectId}?tab=milestones`,
+                },
+            }).catch(() => { });
+        }
         res.json({ success: true, milestone: updated });
     }
     catch (err) {
@@ -661,75 +798,168 @@ export const rejectMilestone = async (req, res, next) => {
 };
 export const requestChangesMilestone = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { id } = req.params;
-        const existing = await prisma.milestone.findUnique({ where: { id } });
-        if (!existing)
+        const milestone = await prisma.milestone.findUnique({
+            where: { id },
+            include: { project: { include: { contracts: { where: { deletedAt: null } } } } },
+        });
+        if (!milestone)
             return res.status(404).json({ success: false, message: "Milestone not found" });
+        if (milestone.project.status === "completed" || milestone.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot request revisions on a completed or cancelled project" });
+        }
         const updated = await prisma.milestone.update({
             where: { id },
             data: { status: "Changes Requested" },
         });
         await logWorkflowAction({
-            userId: req.user?.id || "system",
+            userId,
             action: "request_changes",
             entity: "Milestone",
             entityId: id,
-            description: `Changes requested on milestone "${existing.title}".`,
-            oldValue: existing,
+            description: `Changes requested on milestone "${milestone.title}".`,
+            oldValue: milestone,
             newValue: updated,
         });
+        const activeContract = milestone.project.contracts.find((c) => c.status === "active" || c.status === "pending_acceptance") || milestone.project.contracts[0];
+        if (activeContract?.freelancerId && activeContract.freelancerId !== userId) {
+            await NotificationService.enqueue({
+                userId: activeContract.freelancerId,
+                type: "milestone",
+                title: "Revisions Requested on Milestone",
+                message: `The client requested changes on milestone "${milestone.title}" for project "${milestone.project.title}".`,
+                priority: "normal",
+                channel: "omnichannel",
+                metadata: {
+                    projectId: milestone.projectId,
+                    milestoneId: milestone.id,
+                    actionUrl: `/dashboard/projects/${milestone.projectId}?tab=milestones`,
+                },
+            }).catch(() => { });
+        }
         res.json({ success: true, milestone: updated });
     }
     catch (err) {
         next(err);
     }
 };
-// ─── 5. TASK ENGINE ────────────────────────────────────────────────────────
-export const createTask = async (req, res, next) => {
+export const submitMilestone = async (req, res, next) => {
     try {
-        const { projectId, title, assignedTo, priority, dueDate } = req.body;
-        if (!projectId || !title) {
-            return res.status(400).json({ success: false, message: "projectId and title are required" });
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id } = req.params;
+        const milestone = await prisma.milestone.findUnique({
+            where: { id },
+            include: { project: true },
+        });
+        if (!milestone)
+            return res.status(404).json({ success: false, message: "Milestone not found" });
+        if (milestone.project.status === "completed" || milestone.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot submit milestones on a completed or cancelled project" });
         }
-        const task = await prisma.task.create({
-            data: {
-                projectId,
-                title,
-                assignedTo,
-                priority: priority || "Medium",
-                dueDate,
-                status: "assigned",
-            },
+        const updated = await prisma.milestone.update({
+            where: { id },
+            data: { status: "Submitted" },
         });
         await logWorkflowAction({
-            userId: req.user?.id || "system",
-            action: "create",
-            entity: "Task",
-            entityId: task.id,
-            description: `New task "${title}" assigned to ${assignedTo || "unassigned"}`,
-            newValue: task,
+            userId,
+            action: "submit",
+            entity: "Milestone",
+            entityId: id,
+            description: `Milestone "${milestone.title}" submitted for client review.`,
+            oldValue: milestone,
+            newValue: updated,
         });
-        res.status(201).json({ success: true, task });
+        // Notify client
+        const clientUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { id: milestone.project.client },
+                    { fullName: milestone.project.client },
+                    { email: milestone.project.client },
+                ],
+            },
+        });
+        if (clientUser?.id && clientUser.id !== userId) {
+            await NotificationService.enqueue({
+                userId: clientUser.id,
+                type: "milestone",
+                title: "Milestone Submitted for Review",
+                message: `Freelancer submitted milestone "${milestone.title}" for review on project "${milestone.project.title}".`,
+                priority: "normal",
+                channel: "omnichannel",
+                metadata: {
+                    projectId: milestone.projectId,
+                    milestoneId: milestone.id,
+                    actionUrl: `/business/projects/${milestone.projectId}?tab=milestones`,
+                },
+            }).catch(() => { });
+        }
+        res.json({ success: true, milestone: updated });
     }
     catch (err) {
         next(err);
     }
 };
+export const deleteMilestone = async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id } = req.params;
+        const milestone = await prisma.milestone.findUnique({
+            where: { id },
+            include: { project: true },
+        });
+        if (!milestone)
+            return res.status(404).json({ success: false, message: "Milestone not found" });
+        if (milestone.project.status === "completed" || milestone.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot delete milestones on a completed or cancelled project" });
+        }
+        await prisma.milestone.delete({ where: { id } });
+        await logWorkflowAction({
+            userId,
+            action: "delete",
+            entity: "Milestone",
+            entityId: id,
+            description: `Milestone "${milestone.title}" was removed.`,
+            oldValue: milestone,
+        });
+        res.json({ success: true, message: "Milestone removed" });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+// ─── 5. TASK ENGINE ────────────────────────────────────────────────────────
 export const patchTaskStatus = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { id } = req.params;
         const { status } = req.body;
         if (!status)
             return res.status(400).json({ success: false, message: "status is required" });
-        const existing = await prisma.task.findUnique({ where: { id } });
+        const existing = await prisma.task.findUnique({
+            where: { id },
+            include: { project: true },
+        });
         if (!existing)
             return res.status(404).json({ success: false, message: "Task not found" });
+        if (existing.project.status === "completed" || existing.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot modify tasks on a completed or cancelled project" });
+        }
         const updated = await prisma.task.update({
             where: { id },
             data: { status },
         });
         await logWorkflowAction({
-            userId: req.user?.id || "system",
+            userId,
             action: "status_change",
             entity: "Task",
             entityId: id,
@@ -745,18 +975,20 @@ export const patchTaskStatus = async (req, res, next) => {
 };
 export const createTaskComment = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { id } = req.params;
         const { comment, author } = req.body;
         if (!comment)
             return res.status(400).json({ success: false, message: "comment content required" });
-        const authorName = author || req.user?.email || "System User";
-        const authorId = req.user?.id || "system";
+        const authorName = author || req.user?.fullName || req.user?.email || "System User";
         const newComment = await prisma.taskComment.create({
             data: {
                 taskId: id,
-                authorId,
+                authorId: userId,
                 author: authorName,
-                comment,
+                comment: String(comment).trim(),
             },
         });
         res.status(201).json({ success: true, comment: newComment });
@@ -767,16 +999,28 @@ export const createTaskComment = async (req, res, next) => {
 };
 export const createTaskAttachment = async (req, res, next) => {
     try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         const { id } = req.params;
         const { filename, filepath, filesize } = req.body;
         if (!filename || !filepath) {
             return res.status(400).json({ success: false, message: "filename and filepath required" });
         }
+        const task = await prisma.task.findUnique({
+            where: { id },
+            include: { project: true },
+        });
+        if (!task)
+            return res.status(404).json({ success: false, message: "Task not found" });
+        if (task.project.status === "completed" || task.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot add attachments to a completed or cancelled project" });
+        }
         const attachment = await prisma.taskAttachment.create({
             data: {
                 taskId: id,
-                filename,
-                filepath,
+                filename: String(filename).trim(),
+                filepath: String(filepath).trim(),
                 filesize: filesize ? parseInt(filesize) : 0,
             },
         });
@@ -787,59 +1031,148 @@ export const createTaskAttachment = async (req, res, next) => {
     }
 };
 // ─── 6. REVIEW ENGINE ───────────────────────────────────────────────────────
-// Database Transaction #5: Project Completed → Review prompt & triggers Review Engine
 export const createReview = async (req, res, next) => {
     try {
-        const { projectId, reviewerId, revieweeId, rating, comment } = req.body;
-        if (!projectId || !reviewerId || !revieweeId || rating === undefined) {
-            return res.status(400).json({ success: false, message: "Missing required fields" });
+        const reviewerId = req.user?.id;
+        if (!reviewerId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { projectId, revieweeId: rawRevieweeId, rating: rawRating, comment } = req.body;
+        const rating = parseFloat(rawRating);
+        if (!projectId || !Number.isFinite(rating)) {
+            return res.status(400).json({ success: false, message: "projectId and valid rating (1-5) are required" });
         }
+        if (rating < 1 || rating > 5) {
+            return res.status(400).json({ success: false, message: "Rating must be between 1 and 5 stars" });
+        }
+        if (comment && typeof comment === "string" && comment.length > 2000) {
+            return res.status(400).json({ success: false, message: "Comment cannot exceed 2000 characters" });
+        }
+        // 1. Fetch project and participants
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            include: {
+                contracts: { where: { deletedAt: null } },
+            },
+        });
+        if (!project || project.deletedAt) {
+            return res.status(404).json({ success: false, message: "Project not found" });
+        }
+        // 2. Validate project completion status
+        const hasCompletedContract = project.contracts.some((c) => c.status === "completed");
+        if (project.status !== "completed" && !hasCompletedContract) {
+            return res.status(400).json({
+                success: false,
+                message: "Reviews can only be submitted for completed projects with finalized delivery.",
+            });
+        }
+        // 3. Resolve reviewer & reviewee
+        const activeContract = project.contracts.find((c) => c.status === "completed" || c.status === "active") || project.contracts[0];
+        const clientUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { id: project.client },
+                    { fullName: project.client },
+                    { email: project.client },
+                ],
+            },
+        });
+        const clientId = clientUser?.id || project.client;
+        const freelancerId = activeContract?.freelancerId;
+        let targetRevieweeId = rawRevieweeId;
+        // Check relationship
+        const isClientReviewing = reviewerId === clientId || reviewerId === project.client;
+        const isFreelancerReviewing = reviewerId === freelancerId;
+        if (!isClientReviewing && !isFreelancerReviewing && req.user?.role !== "admin") {
+            return res.status(403).json({
+                success: false,
+                message: "You are not an authorized participant on this project and cannot submit a review.",
+            });
+        }
+        if (isClientReviewing) {
+            if (!targetRevieweeId && freelancerId)
+                targetRevieweeId = freelancerId;
+        }
+        else if (isFreelancerReviewing) {
+            if (!targetRevieweeId && clientId)
+                targetRevieweeId = clientId;
+        }
+        if (!targetRevieweeId) {
+            return res.status(400).json({ success: false, message: "revieweeId could not be determined" });
+        }
+        // Prevent self-review
+        if (reviewerId === targetRevieweeId) {
+            return res.status(400).json({ success: false, message: "You cannot review yourself" });
+        }
+        // 4. Check uniqueness (1 review per reviewer + reviewee + project)
+        const existingReview = await prisma.review.findFirst({
+            where: {
+                projectId,
+                reviewerId,
+                revieweeId: targetRevieweeId,
+            },
+        });
+        if (existingReview) {
+            return res.status(409).json({
+                success: false,
+                message: "You have already submitted a review for this project.",
+                review: existingReview,
+            });
+        }
+        // 5. Transaction: create review and update profile aggregate rating
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Create the review
             const review = await tx.review.create({
                 data: {
                     projectId,
                     reviewerId,
-                    revieweeId,
-                    rating: parseFloat(rating),
-                    comment,
+                    revieweeId: targetRevieweeId,
+                    rating,
+                    comment: comment ? String(comment).trim() : null,
                 },
             });
-            // 2. Update ratings average in freelancer/client profile
-            // Check reviewer/reviewee role type
-            const targetUser = await tx.user.findUnique({ where: { id: revieweeId } });
-            if (targetUser?.role === "freelancer") {
-                const allReviews = await tx.review.findMany({ where: { revieweeId } });
-                const avg = allReviews.reduce((acc, curr) => acc + curr.rating, 0) / allReviews.length;
-                await tx.freelancerProfile.update({
-                    where: { userId: revieweeId },
+            // Update ratings average in freelancer profile if reviewee is freelancer
+            const revieweeUser = await tx.user.findUnique({
+                where: { id: targetRevieweeId },
+                select: { id: true, role: true },
+            });
+            if (revieweeUser?.role === "freelancer") {
+                const allReviews = await tx.review.findMany({
+                    where: { revieweeId: targetRevieweeId },
+                    select: { rating: true },
+                });
+                const totalRating = allReviews.reduce((acc, curr) => acc + curr.rating, 0);
+                const avg = allReviews.length > 0 ? Math.round((totalRating / allReviews.length) * 10) / 10 : 5;
+                await tx.freelancerProfile.updateMany({
+                    where: { userId: targetRevieweeId },
                     data: { rating: avg },
                 });
             }
-            // 3. Auto-close project/contract if both parties reviewed (or when reviewing)
-            const project = await tx.project.findUnique({ where: { id: projectId } });
-            let updatedProject = null;
-            if (project && project.status !== "completed") {
-                updatedProject = await tx.project.update({
-                    where: { id: projectId },
-                    data: { status: "completed" },
-                });
-                // Also complete contracts linked to this project
-                await tx.contract.updateMany({
-                    where: { projectId },
-                    data: { status: "completed" },
-                });
-            }
-            return { review, updatedProject };
+            return review;
         });
         await logWorkflowAction({
             userId: reviewerId,
             action: "submit",
             entity: "Review",
-            entityId: result.review.id,
-            description: `Review submitted for project. Rating given: ${rating}`,
+            entityId: result.id,
+            description: `${req.user?.fullName || "User"} submitted a ${rating}-star review for project "${project.title}".`,
+            newValue: result,
         });
-        res.status(201).json({ success: true, ...result });
+        // Enqueue notification to reviewee
+        await NotificationService.enqueue({
+            userId: targetRevieweeId,
+            type: "review",
+            title: "New Review Received",
+            message: `${req.user?.fullName || "A project participant"} left you a ${rating}-star review for "${project.title}".`,
+            priority: "normal",
+            channel: "omnichannel",
+            metadata: {
+                projectId: project.id,
+                reviewId: result.id,
+                actionUrl: isClientReviewing
+                    ? `/dashboard/projects/${project.id}?tab=overview`
+                    : `/business/projects/${project.id}?tab=overview`,
+            },
+        }).catch(() => { });
+        res.status(201).json({ success: true, message: "Review submitted successfully", review: result });
     }
     catch (err) {
         next(err);

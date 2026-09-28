@@ -541,23 +541,123 @@ async function findOwnedProject(userId, projectId) {
     const project = await prisma.project.findFirst({ where: { ...where, id: projectId } });
     return project;
 }
+async function findParticipantProject(userId, projectId) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, fullName: true, email: true, role: true, clientProfile: { select: { company: true } } },
+    });
+    if (!user)
+        throw new HttpError("User not found", 404);
+    const project = await prisma.project.findFirst({
+        where: { id: projectId, deletedAt: null },
+    });
+    if (!project)
+        return null;
+    if (user.role === "admin")
+        return project;
+    // 1. Client owner match
+    const clientNeedlesList = [user.fullName, user.email, user.clientProfile?.company]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean);
+    const isClient = project.client === user.id || clientNeedlesList.some((n) => project.client?.includes(n));
+    if (isClient)
+        return project;
+    // 2. Contracted freelancer match
+    const contract = await prisma.contract.findFirst({
+        where: { projectId: project.id, freelancerId: user.id, deletedAt: null },
+    });
+    if (contract)
+        return project;
+    // 3. Assigned freelancer match
+    const isAssigned = project.freelancer === user.id || (user.fullName && project.freelancer?.includes(user.fullName));
+    if (isAssigned)
+        return project;
+    return null;
+}
 export const getClientProject = async (req, res, next) => {
     try {
         const userId = requireUser(req, res);
         if (!userId)
             return;
-        const project = await findOwnedProject(userId, req.params.id);
+        const project = await findParticipantProject(userId, req.params.id);
         if (!project)
-            return res.status(404).json({ success: false, message: "Project not found" });
-        const [tasks, proposals, contracts] = await Promise.all([
-            prisma.task.findMany({ where: { projectId: project.id, deletedAt: null } }),
-            prisma.proposal.findMany({
+            return res.status(404).json({ success: false, message: "Project not found or access denied" });
+        const [tasks, proposals, contracts, milestones, clientUser, activityLogs, conversation, reviews] = await Promise.all([
+            prisma.task.findMany({
                 where: { projectId: project.id, deletedAt: null },
-                include: { freelancer: { select: { fullName: true, email: true, avatarUrl: true } } },
+                include: {
+                    comments: { orderBy: { createdAt: "desc" } },
+                    attachments: true,
+                },
                 orderBy: { createdAt: "desc" },
             }),
-            prisma.contract.findMany({ where: { projectId: project.id, deletedAt: null } }),
+            prisma.proposal.findMany({
+                where: { projectId: project.id, deletedAt: null },
+                include: { freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
+                orderBy: { createdAt: "desc" },
+            }),
+            prisma.contract.findMany({
+                where: { projectId: project.id, deletedAt: null },
+                include: {
+                    client: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
+                    freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
+                },
+                orderBy: { createdAt: "desc" },
+            }),
+            prisma.milestone.findMany({
+                where: { projectId: project.id },
+                orderBy: { createdAt: "asc" },
+            }),
+            prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { id: project.client },
+                        { fullName: project.client },
+                        { email: project.client },
+                    ],
+                },
+                select: { id: true, fullName: true, email: true, avatarUrl: true, clientProfile: { select: { company: true } } },
+            }),
+            prisma.activityLog.findMany({
+                where: {
+                    OR: [
+                        { description: { contains: project.title } },
+                        { description: { contains: project.id } },
+                    ],
+                },
+                orderBy: { createdAt: "desc" },
+                take: 30,
+            }),
+            prisma.conversation.findFirst({
+                where: { projectId: project.id },
+                select: { id: true, updatedAt: true },
+            }),
+            prisma.review.findMany({
+                where: { projectId: project.id },
+                include: {
+                    reviewer: { select: { id: true, fullName: true, avatarUrl: true } },
+                    reviewee: { select: { id: true, fullName: true, avatarUrl: true } },
+                },
+                orderBy: { createdAt: "desc" },
+            }),
         ]);
+        let freelancerUser = null;
+        const activeContract = contracts.find((c) => c.status === "active" || c.status === "pending_acceptance") || contracts[0];
+        if (activeContract?.freelancer) {
+            freelancerUser = activeContract.freelancer;
+        }
+        else if (project.freelancer) {
+            freelancerUser = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { id: project.freelancer },
+                        { fullName: project.freelancer },
+                        { email: project.freelancer },
+                    ],
+                },
+                select: { id: true, fullName: true, email: true, avatarUrl: true },
+            });
+        }
         let budgetRange = null;
         if (project.budgetRangeId) {
             budgetRange = await prisma.masterOption?.findUnique({
@@ -565,7 +665,19 @@ export const getClientProject = async (req, res, next) => {
                 select: { id: true, label: true, value: true, min: true, max: true }
             }).catch(() => null);
         }
-        const enrichedProject = (await enrichProjects([{ ...project, budgetRange, tasks, proposals, contracts }]))[0];
+        const enrichedProject = (await enrichProjects([{
+                ...project,
+                budgetRange,
+                tasks,
+                proposals,
+                contracts,
+                milestones,
+                clientUser,
+                freelancerUser,
+                activityLogs,
+                conversationId: conversation?.id || null,
+                reviews,
+            }]))[0];
         res.json({ success: true, data: enrichedProject });
     }
     catch (err) {
@@ -584,6 +696,8 @@ export const updateClientProject = async (req, res, next) => {
         const data = {};
         if (body.title != null)
             data.title = String(body.title).trim();
+        if (body.description != null)
+            data.description = String(body.description).trim();
         if (body.budget != null && body.budget !== "")
             data.budget = Number(body.budget);
         if (body.category != null)
@@ -592,6 +706,11 @@ export const updateClientProject = async (req, res, next) => {
             data.technology = String(body.technology).trim();
         if (body.timeline != null)
             data.timeline = String(body.timeline).trim() || null;
+        if (body.attachments !== undefined) {
+            data.attachments = Array.isArray(body.attachments)
+                ? JSON.stringify(body.attachments)
+                : (body.attachments ? String(body.attachments) : null);
+        }
         if (body.startDate !== undefined) {
             const d = new Date(body.startDate);
             data.startDate = (body.startDate === null || body.startDate === "" || Number.isNaN(d.getTime())) ? null : d;
@@ -620,6 +739,12 @@ export const updateClientProject = async (req, res, next) => {
                 }
                 throw err;
             }
+        }
+        if (data.status === "completed") {
+            await prisma.contract.updateMany({
+                where: { projectId: project.id, deletedAt: null },
+                data: { status: "completed" },
+            }).catch(() => { });
         }
         const updated = await prisma.project.update({ where: { id: project.id }, data });
         res.json({ success: true, message: "Project updated", data: updated });

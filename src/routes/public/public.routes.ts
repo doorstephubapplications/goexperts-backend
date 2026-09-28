@@ -2184,11 +2184,34 @@ router.get("/investors", async (req: Request, res: Response, next: NextFunction)
 // Public Single Investor Details
 router.get("/investors/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
-    const user = await prisma.user.findUnique({
-      where: { id },
-      include: { investorProfile: true }
-    });
+    const rawId = String(req.params.id || "").trim();
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawId);
+
+    let user: any = null;
+    if (isUUID) {
+      user = await prisma.user.findUnique({
+        where: { id: rawId },
+        include: { investorProfile: true },
+      });
+    }
+
+    if (!user) {
+      // Find by matching slug or name or firm
+      const normalized = rawId.replace(/-/g, " ").toLowerCase();
+      user = await prisma.user.findFirst({
+        where: {
+          role: "investor",
+          deletedAt: null,
+          OR: [
+            { fullName: { equals: normalized } },
+            { fullName: { contains: normalized } },
+            { investorProfile: { firm: { equals: normalized } } },
+            { investorProfile: { firm: { contains: normalized } } },
+          ],
+        },
+        include: { investorProfile: true },
+      });
+    }
 
     if (!user || user.role?.toLowerCase() !== "investor") {
       return res.status(404).json({ success: false, message: "Investor not found" });
@@ -2196,15 +2219,262 @@ router.get("/investors/:id", async (req: Request, res: Response, next: NextFunct
 
     const p = user.investorProfile;
 
+    // Load extra details if available
+    let extra: any = {};
+    try {
+      const setting = await prisma.setting.findFirst({
+        where: { key: `user:${user.id}:investor-profile-details` },
+      });
+      if (setting?.value) extra = JSON.parse(setting.value);
+    } catch {}
+
+    const focusAreas = p?.focusAreas
+      ? p.focusAreas.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : Array.isArray(extra?.focusAreas)
+        ? extra.focusAreas
+        : [];
+
+    const preferredStage = p?.preferredStage
+      ? p.preferredStage.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : Array.isArray(extra?.preferredStage)
+        ? extra.preferredStage
+        : [];
+
+    const location = [user.city, user.country].filter(Boolean).join(", ") || extra?.location || user.country || "";
+
+    const isAccreditedDeclared =
+      p?.isAccredited === "Yes" ||
+      p?.isAccredited === "true" ||
+      p?.isAccredited === true ||
+      extra?.isAccredited === "Yes" ||
+      extra?.isAccredited === "true";
+
     res.json({
       success: true,
       data: {
         id: user.id,
-        name: p?.firm || user.fullName || "Unnamed Investor",
+        name: user.fullName || "Unnamed Investor",
+        firmName: p?.firm || extra?.firm || "Ventures",
+        investorType: p?.investorType || extra?.investorType || "Angel Investor",
         pitch: user.bio || "Investment firm focused on early stage startups.",
-        firmName: p?.firm || "Ventures",
-        verified: true
+        bio: user.bio || "",
+        avatarUrl: user.avatarUrl || null,
+        coverUrl: user.coverImageUrl || null,
+        location,
+        country: user.country || null,
+        city: user.city || null,
+        website: extra?.website || null,
+        linkedin: extra?.linkedin || null,
+        ticketMin: p?.ticketMin ?? null,
+        ticketMax: p?.ticketMax ?? null,
+        focusAreas,
+        preferredStage,
+        isAccreditedDeclared,
+        // Semantic verification badges:
+        identityVerified: Boolean(user.isVerified || user.verified),
+        status: user.status || "active",
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Public Founders List
+router.get("/founders", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { page = 1, pageSize = 12 } = req.query;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    const take = Number(pageSize);
+
+    const where: any = { role: { in: ["founder", "Founder"] }, deletedAt: null };
+
+    if (req.query.search) {
+      const q = String(req.query.search).trim();
+      where.OR = [
+        { fullName: { contains: q } },
+        { founderProfile: { startupName: { contains: q } } },
+        { founderProfile: { industry: { contains: q } } },
+      ];
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      include: { founderProfile: true },
+      skip,
+      take,
+      orderBy: { createdAt: "desc" },
+    });
+
+    const total = await prisma.user.count({ where });
+
+    const rows = users.map((u) => {
+      const fp = u.founderProfile;
+      return {
+        id: u.id,
+        name: u.fullName || "Founder",
+        role: fp?.founderRole || "Founder",
+        startupName: fp?.startupName || "",
+        industry: fp?.industry || "Technology",
+        stage: fp?.stage || "MVP",
+        location: [u.city, u.country].filter(Boolean).join(", ") || u.country || "",
+        avatarUrl: u.avatarUrl || null,
+        coverUrl: u.coverImageUrl || null,
+        identityVerified: Boolean(u.isVerified || u.verified),
+        status: u.status || "active",
+      };
+    });
+
+    res.json({ success: true, rows, total, page: Number(page), pageSize: Number(pageSize) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Public Single Founder Details
+router.get("/founders/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawId = String(req.params.id || "").trim();
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawId);
+
+    let user: any = null;
+    if (isUUID) {
+      user = await prisma.user.findUnique({
+        where: { id: rawId },
+        include: { founderProfile: true },
+      });
+    }
+
+    if (!user) {
+      // Find by matching slug or name or startupName
+      const normalized = rawId.replace(/-/g, " ").toLowerCase();
+      user = await prisma.user.findFirst({
+        where: {
+          role: { in: ["founder", "Founder"] },
+          deletedAt: null,
+          OR: [
+            { fullName: { equals: normalized } },
+            { fullName: { contains: normalized } },
+            { founderProfile: { startupName: { equals: normalized } } },
+            { founderProfile: { startupName: { contains: normalized } } },
+          ],
+        },
+        include: { founderProfile: true },
+      });
+    }
+
+    // Also support finding founder by their associated startup idea ID or startup idea slug
+    if (!user) {
+      const startupMatch = await prisma.startupIdea.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            { id: rawId },
+            { startup: { equals: rawId.replace(/-/g, " ") } },
+            { startup: { contains: rawId.replace(/-/g, " ") } },
+          ],
+        },
+      });
+      if (startupMatch && startupMatch.founder) {
+        user = await prisma.user.findFirst({
+          where: {
+            role: { in: ["founder", "Founder"] },
+            deletedAt: null,
+            OR: [
+              { id: startupMatch.founder },
+              { fullName: startupMatch.founder },
+              { email: startupMatch.founder },
+            ],
+          },
+          include: { founderProfile: true },
+        });
       }
+    }
+
+    if (!user || (user.role?.toLowerCase() !== "founder" && user.role?.toLowerCase() !== "admin")) {
+      return res.status(404).json({ success: false, message: "Founder not found" });
+    }
+
+    const fp = user.founderProfile;
+
+    // Load extra details if available from setting
+    let extra: any = {};
+    try {
+      const setting = await prisma.setting.findFirst({
+        where: { key: `user:${user.id}:founder-profile-details` },
+      });
+      if (setting?.value) extra = JSON.parse(setting.value);
+    } catch {}
+
+    // Resolve associated startup
+    const needles = [user.id, user.fullName, user.email, fp?.startupName].filter(Boolean);
+    let startup: any = null;
+    if (needles.length > 0) {
+      startup = await prisma.startupIdea.findFirst({
+        where: {
+          deletedAt: null,
+          OR: needles.map((n) => ({ founder: { contains: n } })),
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    const location = [user.city, user.country].filter(Boolean).join(", ") || extra?.location || user.country || "";
+
+    const cleanSlug = (title: string, id: string) => {
+      const base = String(title || "startup").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      return id ? `${base}-${id.slice(0, 8)}` : base;
+    };
+
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.fullName || "Founder",
+        founderRole: fp?.founderRole || extra?.founderRole || "Founder",
+        bio: user.bio || fp?.founderBio || "",
+        avatarUrl: user.avatarUrl || null,
+        coverUrl: user.coverImageUrl || null,
+        location,
+        country: user.country || null,
+        city: user.city || null,
+        website: extra?.website || null,
+        linkedin: extra?.linkedin || null,
+        skills: Array.isArray(extra?.skills) ? extra.skills : (extra?.skills ? String(extra.skills).split(",").map((s: string) => s.trim()) : (fp?.industry ? [fp.industry] : [])),
+        experience: extra?.experience || null,
+        education: extra?.education || null,
+        educationLevel: extra?.educationLevel || null,
+        identityVerified: Boolean(user.isVerified || user.verified),
+        status: user.status || "active",
+        startup: startup ? {
+          id: startup.id,
+          name: startup.startup,
+          slug: cleanSlug(startup.startup, startup.id),
+          industry: startup.industry,
+          category: startup.category,
+          stage: startup.stage,
+          funding: startup.funding,
+          equity: startup.equity,
+          pitch: startup.pitch || startup.oneLinePitch || startup.description,
+          logo: startup.logo,
+          coverUrl: startup.coverUrl,
+          status: startup.status,
+          isPublished: startup.status === "active" || startup.visibility === "Public",
+        } : (fp?.startupName ? {
+          id: null,
+          name: fp.startupName,
+          slug: cleanSlug(fp.startupName, ""),
+          industry: fp.industry || "Technology",
+          stage: fp.stage || "MVP",
+          funding: fp.targetRaise || 0,
+          equity: null,
+          pitch: fp.pitch || "",
+          logo: null,
+          coverUrl: null,
+          status: "draft",
+          isPublished: false,
+        } : null),
+      },
     });
   } catch (err) {
     next(err);

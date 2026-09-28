@@ -31,8 +31,8 @@ async function loadFounderUser(userId: string) {
   });
 }
 
-function founderNeedles(user: { fullName: string; email: string }, profile: { startupName?: string | null } | null) {
-  return [user.fullName, user.email, profile?.startupName].map((v) => String(v || "").trim()).filter(Boolean);
+function founderNeedles(user: { id?: string; fullName: string; email: string }, profile: { startupName?: string | null } | null) {
+  return [user.id, user.fullName, user.email, profile?.startupName].map((v) => String(v || "").trim()).filter(Boolean);
 }
 
 function handleError(err: unknown, res: Response, next: NextFunction) {
@@ -222,7 +222,7 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
       },
     });
 
-    const extraFields = ["website", "linkedin", "location", "education", "experience"];
+    const extraFields = ["website", "linkedin", "location", "education", "experience", "skills", "founderRole", "founderTypeId"];
     const details: any = await getJsonSetting(userId, "founder-profile-details", {});
     for (const key of extraFields) {
       if (body[key] !== undefined) {
@@ -280,6 +280,10 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
     else if (body.equity != null && body.equity !== "") data.equity = Number(body.equity);
     if (body.visibility != null) data.visibility = String(body.visibility).trim();
     if (body.status != null) data.status = String(body.status).trim();
+    if (body.logo != null) data.logo = String(body.logo).trim() || null;
+    if (body.coverUrl != null) data.coverUrl = String(body.coverUrl).trim() || null;
+    if (body.pitchDeck != null) data.pitchDeck = String(body.pitchDeck).trim() || null;
+    if (body.businessPlan != null) data.businessPlan = String(body.businessPlan).trim() || null;
 
     let updated;
     if (startup) {
@@ -300,6 +304,10 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
           equity: data.equity || 0,
           visibility: data.visibility || "Public",
           status: data.status || "active",
+          logo: data.logo || null,
+          coverUrl: data.coverUrl || null,
+          pitchDeck: data.pitchDeck || null,
+          businessPlan: data.businessPlan || null,
         }
       });
 
@@ -378,6 +386,19 @@ export const putBusinessPlan = async (req: AuthenticatedRequest, res: Response, 
     const existing = await getJsonSetting(userId, "business-plan", {});
     const merged = { ...existing, ...(req.body || {}), updatedAt: new Date().toISOString() };
     await setJsonSetting(userId, "business-plan", merged);
+
+    const user = await loadFounderUser(userId);
+    if (user) {
+      const startup = await findExistingStartup(user);
+      if (startup) {
+        const planText = typeof merged === "string" ? merged : merged.documentUrl || merged.summary || merged.content || JSON.stringify(merged);
+        await prisma.startupIdea.update({
+          where: { id: startup.id },
+          data: { businessPlan: planText },
+        }).catch(() => {});
+      }
+    }
+
     res.json({ success: true, message: "Business plan saved", data: merged });
   } catch (err) {
     handleError(err, res, next);
@@ -402,6 +423,18 @@ export const putPitchDeck = async (req: AuthenticatedRequest, res: Response, nex
     const existing = await getJsonSetting(userId, "pitch-deck", {});
     const merged = { ...existing, ...(req.body || {}), updatedAt: new Date().toISOString() };
     await setJsonSetting(userId, "pitch-deck", merged);
+
+    const user = await loadFounderUser(userId);
+    if (user && merged.url) {
+      const startup = await findExistingStartup(user);
+      if (startup) {
+        await prisma.startupIdea.update({
+          where: { id: startup.id },
+          data: { pitchDeck: String(merged.url) },
+        }).catch(() => {});
+      }
+    }
+
     res.json({ success: true, message: "Pitch deck saved", data: merged });
   } catch (err) {
     handleError(err, res, next);

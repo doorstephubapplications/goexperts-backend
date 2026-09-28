@@ -16,6 +16,8 @@ import {
   approveMilestone,
   rejectMilestone,
   requestChangesMilestone,
+  submitMilestone,
+  deleteMilestone,
   patchTaskStatus,
   createTaskComment,
   createTaskAttachment,
@@ -49,6 +51,8 @@ router.post("/milestones", createMilestone);
 router.patch("/milestones/:id/approve", approveMilestone);
 router.patch("/milestones/:id/reject", rejectMilestone);
 router.patch("/milestones/:id/request-changes", requestChangesMilestone);
+router.patch("/milestones/:id/submit", submitMilestone);
+router.delete("/milestones/:id", deleteMilestone);
 
 // Task Engine (status/comments/attachments — create/update go through admin CRUD)
 router.patch("/tasks/:id/status", patchTaskStatus);

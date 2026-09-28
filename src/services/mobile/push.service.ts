@@ -60,7 +60,9 @@ export const saveDeviceToken = async (userId: string, token: string, platform: s
 
 export const removeDeviceToken = async (token?: string, deviceId?: string, userId?: string) => {
   try {
-    if (token) {
+    if (token && userId) {
+      await prisma.deviceToken.deleteMany({ where: { token, userId } });
+    } else if (token) {
       await prisma.deviceToken.deleteMany({ where: { token } });
     } else if (deviceId && userId) {
       await prisma.deviceToken.deleteMany({ where: { deviceId, userId } });
@@ -72,8 +74,12 @@ export const removeDeviceToken = async (token?: string, deviceId?: string, userI
 
 export const sendPushNotification = async (userId: string, title: string, body: string, data?: any): Promise<boolean> => {
   if (getApps().length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`[PUSH PRODUCTION FAILED] Firebase Admin uninitialized! Push notification skipped for User ${userId}.`);
+      return false;
+    }
     console.log(`[DEV MODE] Push skipped for User ${userId}. Title: ${title}`);
-    return true; // Simulate success
+    return true; // Simulate success only in development
   }
 
   try {

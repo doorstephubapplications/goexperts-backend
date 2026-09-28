@@ -1612,6 +1612,8 @@ model Notification {
   user             User?                         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId], map: "notifications_user_id_fkey")
+  @@index([userId, readAt], map: "notifications_user_id_read_at_idx")
+  @@index([userId, createdAt], map: "notifications_user_id_created_at_idx")
   @@map("notifications")
 }
 
@@ -1630,6 +1632,8 @@ model NotificationQueue {
   notification   Notification                  @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
   @@index([notificationId], map: "notification_queue_notification_id_fkey")
+  @@index([status], map: "notification_queue_status_idx")
+  @@index([status, scheduledAt], map: "notification_queue_status_scheduled_idx")
   @@map("notification_queue")
 }
 
@@ -1817,6 +1821,7 @@ model Review {
   @@index([projectId], map: "reviews_project_id_fkey")
   @@index([revieweeId], map: "reviews_reviewee_id_fkey")
   @@index([reviewerId], map: "reviews_reviewer_id_fkey")
+  @@unique([projectId, reviewerId, revieweeId], map: "reviews_project_reviewer_reviewee_unique")
   @@map("reviews")
 }
 

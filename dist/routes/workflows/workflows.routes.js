@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { approveProject, rejectProject, publishProject, shortlistProposal, rejectProposal, interviewProposal, offerProposal, acceptProposal, withdrawProposal, createContractFromProposal, patchContractStatus, createMilestone, approveMilestone, rejectMilestone, requestChangesMilestone, patchTaskStatus, createTaskComment, createTaskAttachment, createReview, } from "../../controllers/workflows/workflows.controller.js";
+import { approveProject, rejectProject, publishProject, shortlistProposal, rejectProposal, interviewProposal, offerProposal, acceptProposal, withdrawProposal, createContractFromProposal, patchContractStatus, createMilestone, approveMilestone, rejectMilestone, requestChangesMilestone, submitMilestone, deleteMilestone, patchTaskStatus, createTaskComment, createTaskAttachment, createReview, } from "../../controllers/workflows/workflows.controller.js";
 const router = Router();
 // Protect all workflow routes
 router.use(authMiddleware);
@@ -23,6 +23,8 @@ router.post("/milestones", createMilestone);
 router.patch("/milestones/:id/approve", approveMilestone);
 router.patch("/milestones/:id/reject", rejectMilestone);
 router.patch("/milestones/:id/request-changes", requestChangesMilestone);
+router.patch("/milestones/:id/submit", submitMilestone);
+router.delete("/milestones/:id", deleteMilestone);
 // Task Engine (status/comments/attachments — create/update go through admin CRUD)
 router.patch("/tasks/:id/status", patchTaskStatus);
 router.post("/tasks/:id/comments", createTaskComment);

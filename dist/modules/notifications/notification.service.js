@@ -94,6 +94,11 @@ export class EmailChannelAdapter {
             console.warn(`\n⚠️ [SMTP DELIVERY FAILED] Could not send email via ${host}:${port} to ${payload.to}`);
             console.warn(`⚠️ Reason: ${e.message}`);
             console.warn(`👉 Verify SMTP_USER & SMTP_PASS in .env or Admin Settings (communicationChannel table).\n`);
+            // In production, never fall back to Ethereal test accounts. Return observable failure.
+            if (process.env.NODE_ENV === "production") {
+                console.error(`[SMTP PRODUCTION DELIVERY FAILED] Failure for ${payload.to}: ${e.message}`);
+                return { status: "failed", errorMessage: `SMTP Production Error: ${e.message}` };
+            }
             try {
                 console.log(`[EMAIL ADAPTER FALLBACK] Creating Ethereal SMTP fallback for ${payload.to}...`);
                 const testAccount = await nodemailer.createTestAccount();
@@ -340,16 +345,21 @@ export class NotificationService {
      * Process a single queue entry
      */
     static async processQueueItem(queueId) {
+        // Atomic claim pattern to prevent race conditions across concurrent workers
+        const claim = await prisma.notificationQueue.updateMany({
+            where: { id: queueId, status: "pending" },
+            data: { status: "processing", runAt: new Date() },
+        });
+        if (claim.count === 0) {
+            // Item already claimed by another worker instance or finished
+            return;
+        }
         const queueItem = await prisma.notificationQueue.findUnique({
             where: { id: queueId },
             include: { notification: { include: { user: { include: { deviceTokens: true } } } } },
         });
-        if (!queueItem || queueItem.status === "completed")
+        if (!queueItem || !queueItem.notification)
             return;
-        await prisma.notificationQueue.update({
-            where: { id: queueId },
-            data: { status: "processing", runAt: new Date() },
-        });
         const notif = queueItem.notification;
         const adapter = this.getAdapterForChannel(notif.channel);
         // 1. Fetch channel configuration

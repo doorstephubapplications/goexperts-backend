@@ -27,7 +27,9 @@ router.delete('/device-token', deleteToken);
 router.get('/', getNotifications);
 router.get('/unread-count', getUnreadCount);
 router.patch('/read-all', markAllAsRead);
+router.post('/mark-all-read', markAllAsRead);
 router.patch('/:id/read', markAsRead);
+router.post('/:id/read', markAsRead);
 router.delete('/:id', deleteNotification);
 
 // User Preferences

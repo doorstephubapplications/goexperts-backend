@@ -222,9 +222,9 @@ router.get('/wallet/transactions', authenticate, getTransactions);
 router.post('/wallet/withdraw', authenticate, requestWithdrawal);
 
 // ─── Reviews & Ratings (Universal Access) ───
-router.get('/reviews', authenticate, getReceivedReviews);
-router.get('/reviews/breakdown', authenticate, getRatingBreakdown);
-router.get('/reviews/average', authenticate, getAverageRating);
+router.get('/reviews', authenticateOptional, getReceivedReviews);
+router.get('/reviews/breakdown', authenticateOptional, getRatingBreakdown);
+router.get('/reviews/average', authenticateOptional, getAverageRating);
 router.post('/reviews/:id/reply', authenticate, replyToReview);
 
 // ─── Verification (KYC) (Universal Access) ───

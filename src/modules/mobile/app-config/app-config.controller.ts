@@ -6,14 +6,17 @@ export {
 } from '../system/controllers/config.controller.js';
 
 import { Request, Response, NextFunction } from 'express';
-import { successResponse } from '../../../core/response.js';
+import { successResponse, errorResponse } from '../../../core/response.js';
 import { AuthRequest } from '../../../middlewares/auth.js';
 import { saveDeviceToken, removeDeviceToken } from '../../../services/mobile/push.service.js';
 
 export const saveToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json(errorResponse('Authentication required to register device token', 401));
+    }
     const { fcmToken, deviceId, deviceName, platform } = req.body;
-    const userId = req.user?.id || 'anonymous';
     if (fcmToken) {
       await saveDeviceToken(userId, fcmToken, platform, deviceId, deviceName).catch(() => null);
     }
@@ -23,11 +26,12 @@ export const saveToken = async (req: AuthRequest, res: Response, next: NextFunct
   }
 };
 
-export const deleteToken = async (req: Request, res: Response, next: NextFunction) => {
+export const deleteToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { fcmToken } = req.body;
+    const userId = req.user?.id;
+    const { fcmToken, deviceId } = req.body;
     if (fcmToken) {
-      await removeDeviceToken(fcmToken).catch(() => null);
+      await removeDeviceToken(fcmToken, deviceId, userId).catch(() => null);
     }
     return res.json(successResponse('Device token removed'));
   } catch (error) {

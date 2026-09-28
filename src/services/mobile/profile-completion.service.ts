@@ -257,9 +257,9 @@ function evaluateInvestor(user: any, ip: any) {
   };
 
   const interestMissing = [];
-  if (!fields.investorType) interestMissing.push({ key: 'investorType', label: 'Investor Type', sectionKey: 'firm' });
-  if (!fields.focusAreas) interestMissing.push({ key: 'focusAreas', label: 'Preferred Industries', sectionKey: 'focus' });
-  if (!isIndividual && !fields.firm) interestMissing.push({ key: 'firm', label: 'Firm Name', sectionKey: 'firm' });
+  if (!fields.investorType) interestMissing.push({ key: 'investorType', label: 'Investor Type', sectionKey: 'investment', route: '/investor/profile?tab=investment' });
+  if (!fields.focusAreas) interestMissing.push({ key: 'focusAreas', label: 'Preferred Industries', sectionKey: 'investment', route: '/investor/profile?tab=investment' });
+  if (!isIndividual && !fields.firm) interestMissing.push({ key: 'firm', label: 'Firm Name', sectionKey: 'firm', route: '/investor/profile?tab=firm' });
   
   if (interestMissing.length > 0) {
     capabilities.expressInterest = {
@@ -328,8 +328,18 @@ function evaluateFounder(user: any, fp: any) {
   let score = Math.round((earnedScore / maxScore) * 100);
   if (score > 100) score = 100;
 
-  const missingCore = core.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label, sectionKey: c.key === 'targetRaise' ? 'funding' : 'startup' }));
-  const missingRecommended = recommended.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label, sectionKey: 'startup' }));
+  const missingCore = core.filter(c => !c.valid).map(c => ({ 
+    key: c.key, 
+    label: c.label, 
+    sectionKey: c.key === 'targetRaise' ? 'funding' : (['startupName', 'industry', 'stage'].includes(c.key) ? 'startup' : 'personal'),
+    route: c.key === 'targetRaise' ? '/founder/profile?tab=funding' : (['startupName', 'industry', 'stage'].includes(c.key) ? '/founder/profile?tab=startup' : '/founder/profile?tab=personal')
+  }));
+  const missingRecommended = recommended.filter(c => !c.valid).map(c => ({ 
+    key: c.key, 
+    label: c.label, 
+    sectionKey: 'location',
+    route: '/founder/profile?tab=location'
+  }));
 
   const capabilities: Record<string, any> = {
     browseInvestors: { allowed: true },
@@ -338,9 +348,9 @@ function evaluateFounder(user: any, fp: any) {
   };
 
   const contactMissing = [];
-  if (!fields.startupName) contactMissing.push({ key: 'startupName', label: 'Startup Name', sectionKey: 'startup' });
-  if (!fields.pitch) contactMissing.push({ key: 'pitch', label: 'Short Pitch', sectionKey: 'startup' });
-  if (seekingFunding && !fields.targetRaise) contactMissing.push({ key: 'targetRaise', label: 'Target Raise', sectionKey: 'funding' });
+  if (!fields.startupName) contactMissing.push({ key: 'startupName', label: 'Startup Name', sectionKey: 'startup', route: '/founder/profile?tab=startup' });
+  if (!fields.pitch) contactMissing.push({ key: 'pitch', label: 'Short Pitch', sectionKey: 'pitch', route: '/founder/profile?tab=pitch' });
+  if (seekingFunding && !fields.targetRaise) contactMissing.push({ key: 'targetRaise', label: 'Target Raise', sectionKey: 'funding', route: '/founder/profile?tab=funding' });
   
   if (contactMissing.length > 0) {
     capabilities.contactInvestor = {

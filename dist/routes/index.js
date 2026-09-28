@@ -54,12 +54,16 @@ import subscriptionRoutes from "./subscription/subscription.routes.js";
 import { getVerificationStats } from "../common/helpers/verification.js";
 import tasksRoutes from "./tasks.routes.js";
 import mobileRoutes from "../modules/mobile/index.js";
+import unifiedNotificationRoutes from "../modules/mobile/notifications/notifications.routes.js";
 import { saveInvestor, unsaveInvestor } from "../modules/mobile/public/public.controller.js";
 const router = Router();
 // 1. Auth & Payment routes (Public/Unprotected - mounted on all version prefixes)
 router.use("/auth", authRoutes);
 router.use("/v1/auth", authRoutes);
 router.use("/payments", paymentsRoutes);
+// Unified Notifications Routes (Omnichannel: In-App, Realtime, Push, Email preferences)
+router.use("/notifications", unifiedNotificationRoutes);
+router.use("/v1/notifications", unifiedNotificationRoutes);
 // Mobile API Routes (/api/v1/mobile/..., /api/mobile/...)
 router.use("/v1/mobile", mobileRoutes);
 router.use("/mobile", mobileRoutes);
