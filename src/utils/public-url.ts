@@ -5,13 +5,16 @@ const getRuntimeEnv = () => {
 
 const normalizeBaseUrl = (req?: any) => {
   const env = getRuntimeEnv();
-  const envUrl = env.BASE_URL || env.APP_URL || env.PUBLIC_URL;
+  const envUrl = env.BASE_URL || env.APP_URL || env.PUBLIC_URL || env.API_BASE_URL;
   if (envUrl) {
     return String(envUrl).replace(/\/+$/, '');
   }
 
   if (req?.get) {
     const host = req.get('host');
+    if (host && host.includes('localhost')) {
+      return 'https://apiai.goexperts.in';
+    }
     const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
     if (host) {
       return `${proto}://${host}`.replace(/\/+$/, '');

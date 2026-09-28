@@ -17,21 +17,25 @@ export const listConversations = async (req: AuthenticatedRequest, res: Response
     const userId = requireUser(req, res);
     if (!userId) return;
     
-    const { contextType } = req.query;
+    const { contextType, page = "1", pageSize = "100" } = req.query;
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limit = parseInt(pageSize as string, 10) || 100;
+    const skip = (pageNum - 1) * limit;
 
     const whereClause: any = {
       OR: [{ userA: userId }, { userB: userId }],
     };
     
-    // Admins can see all support tickets
-    if (req.user?.role === "admin" && contextType === "SUPPORT") {
+    // Admins can see all conversations
+    if (req.user?.role?.includes("admin")) {
       delete whereClause.OR;
-      whereClause.contextType = "SUPPORT";
     }
 
     if (contextType) {
       whereClause.contextType = String(contextType);
     }
+
+    const totalCount = await prisma.conversation.count({ where: whereClause });
 
     const convs = await prisma.conversation.findMany({
       where: whereClause,
@@ -39,6 +43,8 @@ export const listConversations = async (req: AuthenticatedRequest, res: Response
         project: { select: { id: true, title: true } },
       },
       orderBy: { updatedAt: "desc" },
+      skip,
+      take: limit,
     });
 
         const states = await prisma.conversationState.findMany({ where: { userId, conversationId: { in: convs.map(c => c.id) } } });
@@ -107,7 +113,14 @@ export const listConversations = async (req: AuthenticatedRequest, res: Response
       };
     }));
 
-    res.json({ success: true, rows: formatted, total: formatted.length });
+    res.json({ 
+      success: true, 
+      rows: formatted, 
+      total: totalCount,
+      page: pageNum,
+      pageSize: limit,
+      totalPages: Math.ceil(totalCount / limit)
+    });
   } catch (err) {
     next(err);
   }
@@ -130,13 +143,22 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
     
     if (!conv) return res.status(404).json({ success: false, message: "Conversation not found" });
     
-    if (conv.userA !== userId && conv.userB !== userId && req.user?.role !== "admin") {
+    if (conv.userA !== userId && conv.userB !== userId && !req.user?.role?.includes("admin")) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
+
+    const { page = "1", pageSize = "200" } = req.query;
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limit = parseInt(pageSize as string, 10) || 200;
+    const skip = (pageNum - 1) * limit;
+
+    const totalCount = await prisma.message.count({ where: { conversationId: id } });
 
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
       orderBy: { createdAt: "asc" },
+      skip,
+      take: limit,
     });
 
     const formatted = messages.map(m => ({
@@ -161,7 +183,10 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
     res.json({ 
       success: true, 
       rows: formatted, 
-      total: formatted.length,
+      total: totalCount,
+      page: pageNum,
+      pageSize: limit,
+      totalPages: Math.ceil(totalCount / limit),
       conversation: {
         id: conv.id,
         contextType: conv.contextType,

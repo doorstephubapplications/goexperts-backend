@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { createBackupSettings, deleteBackupSettings, getApiKeysSettings, saveApiKeysSettings, getAppsSettings, saveAppsSettings, getAuditTrailsSettings, getBackupsSettings, getBrandingSettings, getCountrySettings, getCurrencySettings, getEmailSettings, getEnvironmentSettings, getGeneralSettings, getGoogleMapsSettings, getPaymentsSettings, getRolesSettings, getSecuritySettings, getSmsSettings, getSplashSettings, getSystemLogsSettings, getWhatsappSettings, saveBrandingSettings, saveCountrySettings, saveCurrencySettings, saveEmailSettings, saveEnvironmentSettings, saveGeneralSettings, saveGoogleMapsSettings, savePaymentsSettings, saveSecuritySettings, saveSmsSettings, saveSplashSettings, saveWhatsappSettings, sendTestEmailHandler, testIntegrationConnection, getEmailTemplates, saveEmailTemplate, deleteEmailTemplate, getIndustryColorsSettings, saveIndustryColorsSettings, } from "../../controllers/settings/settings.controller.js";
+import { createBackupSettings, deleteBackupSettings, getApiKeysSettings, saveApiKeysSettings, getAppsSettings, saveAppsSettings, getAuditTrailsSettings, getBackupsSettings, getBrandingSettings, getCountrySettings, getCurrencySettings, getEmailSettings, getEnvironmentSettings, getGeneralSettings, getGoogleMapsSettings, getPaymentsSettings, getRolesSettings, getSecuritySettings, getSmsSettings, getSplashSettings, getSystemLogsSettings, getWhatsappSettings, saveBrandingSettings, saveCountrySettings, saveCurrencySettings, saveEmailSettings, saveEnvironmentSettings, saveGeneralSettings, saveGoogleMapsSettings, savePaymentsSettings, saveSecuritySettings, saveSmsSettings, saveSplashSettings, saveWhatsappSettings, sendTestEmailHandler, testIntegrationConnection, getEmailTemplates, saveEmailTemplate, deleteEmailTemplate, getIndustryColorsSettings, saveIndustryColorsSettings, getMobileAppLinksSettings, saveMobileAppLinksSettings, } from "../../controllers/settings/settings.controller.js";
 const router = Router();
 router.use(authMiddleware);
 import { prisma } from "../../config/database.js";
@@ -55,6 +55,9 @@ router.put("/currency", saveCurrencySettings);
 // Google Maps Settings
 router.get("/google-maps", getGoogleMapsSettings);
 router.put("/google-maps", saveGoogleMapsSettings);
+// Mobile App Links
+router.get("/mobile-app-links", getMobileAppLinksSettings);
+router.put("/mobile-app-links", saveMobileAppLinksSettings);
 // Email SMTP Settings & Templates
 router.get("/email", getEmailSettings);
 router.put("/email", saveEmailSettings);

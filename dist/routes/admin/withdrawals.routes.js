@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { authMiddleware as authenticate } from "../../middlewares/auth.middleware.js";
+import { listWithdrawals, approveWithdrawal, rejectWithdrawal, creditWallet } from "../../controllers/admin/withdrawals.controller.js";
+const router = Router();
+router.use(authenticate);
+router.get("/pending", listWithdrawals);
+router.get("/all", listWithdrawals);
+router.post("/:id/approve", approveWithdrawal);
+router.post("/:id/reject", rejectWithdrawal);
+router.post("/credit-wallet", creditWallet);
+export default router;

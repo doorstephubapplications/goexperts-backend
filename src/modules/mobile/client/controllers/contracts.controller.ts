@@ -3,6 +3,29 @@ import { prisma } from '../../../../config/database.js';
 import { successResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 
+const contractFreelancerSelect = {
+  id: true,
+  fullName: true,
+  avatarUrl: true,
+  freelancerProfile: true,
+};
+
+const attachContractFreelancers = async <T extends { freelancerId?: string | null }>(contracts: T[]) => {
+  const freelancerIds = [...new Set(contracts.map((c) => c.freelancerId).filter(Boolean))] as string[];
+  if (!freelancerIds.length) return contracts.map((contract) => ({ ...contract, freelancer: null }));
+
+  const freelancers = await prisma.user.findMany({
+    where: { id: { in: freelancerIds } },
+    select: contractFreelancerSelect,
+  });
+  const freelancerById = new Map(freelancers.map((freelancer) => [freelancer.id, freelancer]));
+
+  return contracts.map((contract) => ({
+    ...contract,
+    freelancer: contract.freelancerId ? freelancerById.get(contract.freelancerId) ?? null : null,
+  }));
+};
+
 export const listContracts = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -19,7 +42,6 @@ export const listContracts = async (req: AuthRequest, res: Response, next: NextF
         orderBy: { createdAt: 'desc' },
         include: {
           project: { select: { id: true, title: true, status: true } },
-          freelancer: { select: { id: true, fullName: true, avatarUrl: true } },
           proposal: {
             select: {
               id: true,
@@ -34,7 +56,8 @@ export const listContracts = async (req: AuthRequest, res: Response, next: NextF
       }),
       prisma.contract.count({ where })
     ]);
-    return res.json(successResponse('Contracts retrieved', contracts, { page, limit, total, totalPages: Math.ceil(total / limit) }));
+    const contractsWithFreelancers = await attachContractFreelancers(contracts);
+    return res.json(successResponse('Contracts retrieved', contractsWithFreelancers, { page, limit, total, totalPages: Math.ceil(total / limit) }));
   } catch (error) { next(error); }
 };
 
@@ -46,9 +69,6 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
         OR: [{ id: req.params.id }, { proposalId: req.params.id }],
       },
       include: {
-        freelancer: {
-          select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true }
-        },
         project: {
           select: { id: true, title: true, status: true }
         }
@@ -58,6 +78,7 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
     if (!contract) {
       return res.status(404).json(successResponse('Contract not found', null));
     }
+    const [contractWithFreelancer] = await attachContractFreelancers([contract]);
 
     let proposal = null;
     if (contract.proposalId) {
@@ -68,7 +89,7 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
 
     return res.json(
       successResponse('Contract details', {
-        ...contract,
+        ...contractWithFreelancer,
         proposal: proposal
       })
     );

@@ -43,7 +43,7 @@ export const updateMyVerification = async (req: AuthenticatedRequest, res: Respo
 
         res.json({
             success: true,
-            message: "Verification updated successfully",
+            message: "Your document upload success, await admin approval. you can receive notification once approved.",
             data: targetItem || { key: req.body.key }
         });
     } catch (error: any) {

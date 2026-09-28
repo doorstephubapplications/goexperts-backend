@@ -48,7 +48,8 @@ const shapeMeeting = async (meeting: any, viewerId?: string) => {
 
 export const listMeetings = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const search = String(req.query.search || req.query.q || '').trim();
+    let search = String(req.query.search || req.query.q || '').trim();
+    if (search.length > 0 && search.length < 3) search = '';
     const matchedUserIds = search
       ? (await prisma.user.findMany({
           where: {

@@ -102,6 +102,13 @@ router.get("/settings/splash", async (req, res) => {
         data: result.data,
     });
 });
+router.get("/settings/mobile-app-links", async (req, res) => {
+    const result = await getSettingsSection("mobile_app_links");
+    res.json({
+        success: true,
+        data: result.data || result,
+    });
+});
 const COUNTRY_INFO_MAP = {
     "india": { code: "IN", phoneCode: "+91", flag: "🇮🇳", currencyCode: "INR" },
     "usa": { code: "US", phoneCode: "+1", flag: "🇺🇸", currencyCode: "USD" },

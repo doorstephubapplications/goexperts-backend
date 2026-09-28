@@ -1,0 +1,17 @@
+export function canCreateConversation(userRole, targetRole, contextType, contextId) {
+    if (userRole === "admin" || targetRole === "admin") {
+        return contextType === "SUPPORT" || contextType === "DISPUTE" || contextType === "ADMIN";
+    }
+    // Any authenticated platform user can start a conversation about a startup, investor, or general inquiry
+    if (contextType === "STARTUP" || contextType === "GENERAL" || contextType === "INVESTOR" || !contextType) {
+        return true;
+    }
+    const rolePair = [userRole, targetRole].sort().join("-");
+    if (rolePair === "client-freelancer" || rolePair === "founder-freelancer") {
+        return ["PROJECT", "PROPOSAL", "INVITATION", "STARTUP", "GENERAL"].includes(contextType || "");
+    }
+    if (rolePair === "founder-investor") {
+        return ["INVESTMENT", "INVESTOR", "STARTUP", "MEETING", "GENERAL"].includes(contextType || "");
+    }
+    return true;
+}

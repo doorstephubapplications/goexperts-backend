@@ -88,7 +88,6 @@ export const listProposals = async (req: AuthRequest, res: Response, next: NextF
         take: limit,
         include: {
           project: true,
-          freelancer: { select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true } },
         }
       }),
       prisma.proposal.count({ where })
@@ -190,7 +189,6 @@ export const updateProposal = async (req: AuthRequest, res: Response, next: Next
       },
       include: {
         project: true,
-        freelancer: { select: { id: true, fullName: true, avatarUrl: true, freelancerProfile: true } },
       },
     });
     return res.json(successResponse('Proposal updated', await shapeProposal(proposal, req.user.id)));

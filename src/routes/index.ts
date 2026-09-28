@@ -60,6 +60,7 @@ import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
 import { getVerificationStats } from "../common/helpers/verification.js";
+import adminDashboardRouter from "./admin/dashboard.routes.js";
 import tasksRoutes from "./tasks.routes.js";
 
 import mobileRoutes from "../modules/mobile/index.js";
@@ -161,7 +162,8 @@ router.use("/public/resume-share", publicResumeShareRouter);
 router.use("/v1/public", publicRoutes);
 
 // 2.2 Admin operations
-router.use("/admin/dashboard", dashboardRoutes);
+router.use("/admin/dashboard", adminDashboardRouter);
+router.use("/admin/dashboard-old", dashboardRoutes);
 router.use("/admin/dashboard", dashboardInsightsRouter);
 router.use("/admin/notifications", notificationRoutes);
 router.use("/admin/notification-queue", queueRouter);
@@ -376,6 +378,7 @@ const searchColumnsMapping: Record<string, string[]> = {
   Meeting: ["founder", "investor"],
   Subscription: ["plan", "user"],
   Payment: ["user", "gateway", "invoice"],
+  Invoice: ["invoiceNumber", "status"],
   WalletTransaction: ["type", "description", "status"],
   Conversation: ["name", "role"],
   CmsPage: ["name", "category"],
@@ -1453,17 +1456,33 @@ adminFreelancersRouter.get("/", async (req: Request, res: Response, next: NextFu
       }));
     }
 
-    const { rows, total, degraded } = await listFreelancersCompat({
-      page,
-      pageSize,
-      search,
-      orderBy,
-      ascending,
-      filters,
-      include: freelancerInclude,
-    });
+    let verificationStrict = filters.verificationStrict;
+      delete filters.verificationStrict;
 
-    res.json({ success: true, rows: await sanitizeUserRowsAsync(rows), total, degraded });
+      const { rows: fetchedRows, total: fetchedTotal, degraded } = await listFreelancersCompat({
+        page: verificationStrict ? 1 : page,
+        pageSize: verificationStrict ? 100000 : pageSize,
+        search,
+        orderBy,
+        ascending,
+        filters,
+        include: freelancerInclude,
+      });
+
+      let finalRows = fetchedRows as any[];
+      let finalTotal = fetchedTotal;
+
+      if (verificationStrict) {
+        finalRows = fetchedRows.filter((user: any) => {
+          const stats = getVerificationStats(user);
+          const isVerified = stats.profileApproved && stats.kycApproved;
+          return verificationStrict === "verified" ? isVerified : !isVerified;
+        });
+        finalTotal = finalRows.length;
+        finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+      }
+
+      res.json({ success: true, rows: await sanitizeUserRowsAsync(finalRows), total: finalTotal, degraded });
   } catch (err) {
     next(err);
   }
@@ -1691,14 +1710,41 @@ adminClientsRouter.get("/", async (req: Request, res: Response, next: NextFuncti
       ];
     }
 
-    const total = await prisma.user.count({ where });
-    const rows = await prisma.user.findMany({
-      where,
-      include: clientInclude,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { [orderBy]: ascending ? "asc" : "desc" },
-    });
+    let verificationStrict = filters.verificationStrict;
+      delete where.verificationStrict;
+
+      let take = pageSize;
+      let skip = (page - 1) * pageSize;
+      
+      if (verificationStrict) {
+        take = 100000;
+        skip = 0;
+      }
+
+      const total = await prisma.user.count({ where });
+      const fetchedRows = await prisma.user.findMany({
+        where,
+        include: clientInclude,
+        skip,
+        take,
+        orderBy: { [orderBy]: ascending ? "asc" : "desc" },
+      });
+
+      let finalRows = fetchedRows as any[];
+      let finalTotal = total;
+
+      if (verificationStrict) {
+        finalRows = fetchedRows.filter((user: any) => {
+          const stats = getVerificationStats(user);
+          const isVerified = stats.profileApproved && stats.kycApproved;
+          return verificationStrict === "verified" ? isVerified : !isVerified;
+        });
+        finalTotal = finalRows.length;
+        finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+      }
+
+      const rows = finalRows;
+
     const projectCounts = await getClientProjectCountMap(rows.map((r) => r.id));
     const rowsWithProjectCounts = applyClientProjectCounts(rows, projectCounts);
 
@@ -1727,7 +1773,8 @@ adminClientsRouter.get("/", async (req: Request, res: Response, next: NextFuncti
       documents: docMap.get(r.id) || [],
     }));
 
-    res.json({ success: true, rows: sanitizedRows, total });
+    
+      res.json({ success: true, rows: sanitizedRows, total: finalTotal  });
   } catch (err) {
     next(err);
   }
@@ -1918,16 +1965,44 @@ adminInvestorsRouter.get("/", async (req: Request, res: Response, next: NextFunc
       ];
     }
 
-    const total = await prisma.user.count({ where });
-    const rows = await prisma.user.findMany({
-      where,
-      include: investorInclude,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { [orderBy]: ascending ? "asc" : "desc" },
-    });
+    let verificationStrict = filters.verificationStrict;
+      delete where.verificationStrict;
 
-    res.json({ success: true, rows: sanitizeUserRows(rows), total });
+      let take = pageSize;
+      let skip = (page - 1) * pageSize;
+      
+      if (verificationStrict) {
+        take = 100000;
+        skip = 0;
+      }
+
+      const total = await prisma.user.count({ where });
+      const fetchedRows = await prisma.user.findMany({
+        where,
+        include: investorInclude,
+        skip,
+        take,
+        orderBy: { [orderBy]: ascending ? "asc" : "desc" },
+      });
+
+      let finalRows = fetchedRows as any[];
+      let finalTotal = total;
+
+      if (verificationStrict) {
+        finalRows = fetchedRows.filter((user: any) => {
+          const stats = getVerificationStats(user);
+          const isVerified = stats.profileApproved && stats.kycApproved;
+          return verificationStrict === "verified" ? isVerified : !isVerified;
+        });
+        finalTotal = finalRows.length;
+        finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+      }
+
+      const rows = finalRows;
+
+
+    
+      res.json({ success: true, rows: sanitizeUserRows(rows), total: finalTotal  });
   } catch (err) {
     next(err);
   }
@@ -2105,16 +2180,44 @@ adminFoundersRouter.get("/", async (req: Request, res: Response, next: NextFunct
       ];
     }
 
-    const total = await prisma.user.count({ where });
-    const rows = await prisma.user.findMany({
-      where,
-      include: founderInclude,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { [orderBy]: ascending ? "asc" : "desc" },
-    });
+    let verificationStrict = filters.verificationStrict;
+      delete where.verificationStrict;
 
-    res.json({ success: true, rows: sanitizeUserRows(rows), total });
+      let take = pageSize;
+      let skip = (page - 1) * pageSize;
+      
+      if (verificationStrict) {
+        take = 100000;
+        skip = 0;
+      }
+
+      const total = await prisma.user.count({ where });
+      const fetchedRows = await prisma.user.findMany({
+        where,
+        include: founderInclude,
+        skip,
+        take,
+        orderBy: { [orderBy]: ascending ? "asc" : "desc" },
+      });
+
+      let finalRows = fetchedRows as any[];
+      let finalTotal = total;
+
+      if (verificationStrict) {
+        finalRows = fetchedRows.filter((user: any) => {
+          const stats = getVerificationStats(user);
+          const isVerified = stats.profileApproved && stats.kycApproved;
+          return verificationStrict === "verified" ? isVerified : !isVerified;
+        });
+        finalTotal = finalRows.length;
+        finalRows = finalRows.slice((page - 1) * pageSize, page * pageSize);
+      }
+
+      const rows = finalRows;
+
+
+    
+      res.json({ success: true, rows: sanitizeUserRows(rows), total: finalTotal  });
   } catch (err) {
     next(err);
   }
@@ -2308,6 +2411,66 @@ router.use("/admin/about-page", authMiddleware as any, aboutRouter);
 router.use("/admin/faqs", authMiddleware as any, faqAdminRouter);
 router.use("/admin/content/footer", authMiddleware as any, footerAdminRouter);
 
+// Custom Override for Project By ID to hydrate Relational Data
+router.get("/admin/projects/:id", authMiddleware as any, async (req, res, next) => {
+  try {
+    const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+    
+    // Hydrate Client
+    let clientObj = null;
+    if (project.client) {
+      const user = await prisma.user.findUnique({ 
+        where: { id: project.client }, 
+        select: { id: true, fullName: true, email: true, role: true, clientProfile: { select: { company: true } } } 
+      });
+      if (user) {
+        clientObj = {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          company: user.clientProfile?.company || user.fullName
+        };
+      }
+    }
+
+    // Hydrate Freelancer
+    let freelancerObj = null;
+    if (project.freelancer) {
+      const user = await prisma.user.findUnique({ 
+        where: { id: project.freelancer }, 
+        select: { id: true, fullName: true, email: true } 
+      });
+      if (user) {
+        freelancerObj = {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email
+        };
+      }
+    }
+
+    // Convert Technology
+    let techArray: string[] = [];
+    if (project.technology) {
+      techArray = project.technology.split(",").map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...project,
+        client: clientObj || project.client,
+        freelancer: freelancerObj || project.freelancer,
+        technology: techArray,
+        technologyText: project.technology
+      }
+    });
+  } catch(e) {
+    next(e);
+  }
+});
+
 // 4. Dynamic Whitelisted CRUD Routers
 Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
   if (["freelancers", "clients", "investors", "founders"].includes(tableName)) return;
@@ -2322,11 +2485,13 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
         ? { _count: { select: { skills: true } } }
         : modelName === "Skill"
           ? { category: { select: { id: true, name: true } } }
-          : modelName === "City"
-            ? { country: { select: { id: true, name: true } } }
-            : modelName === "WalletTransaction"
-              ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
-              : undefined;
+            : modelName === "City"
+              ? { country: { select: { id: true, name: true } } }
+              : modelName === "WalletTransaction"
+                ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
+                : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
+                  ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
+                  : undefined;
 
   // Create router using factory
   const crudRouter = createCrudRouter(modelName as any, searchCols, include ? { include } : {});

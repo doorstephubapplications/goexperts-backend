@@ -125,6 +125,18 @@ export function createCrudRouter(
         founder: participantMap[r.founder] || r.founder,
         investor: participantMap[r.investor] || r.investor,
       }));
+    } else if (String(mName) === "Invoice") {
+      const userIds = Array.from(new Set(rows.map((r: any) => r.userId).filter(v => v && v.length > 20)));
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds as string[] } },
+        select: { id: true, fullName: true, email: true },
+      });
+      const userMap = Object.fromEntries(users.map((c: any) => [c.id, c]));
+
+      finalRows = rows.map((r: any) => ({
+        ...r,
+        user: userMap[r.userId] || null,
+      }));
     }
 
     return finalRows;
@@ -205,6 +217,7 @@ export function createCrudRouter(
       const rawFilters = req.body?.filters || (req.query.filters ? JSON.parse(req.query.filters as string) : {});
       Object.entries(rawFilters || {}).forEach(([key, value]) => {
         if (value == null || value === "") return;
+        if (key === "projectsSpend") return; // Ignore custom filter that doesn't exist directly on model
         where[key] = value;
       });
 

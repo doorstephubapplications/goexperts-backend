@@ -104,6 +104,18 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
                 investor: participantMap[r.investor] || r.investor,
             }));
         }
+        else if (String(mName) === "Invoice") {
+            const userIds = Array.from(new Set(rows.map((r) => r.userId).filter(v => v && v.length > 20)));
+            const users = await prisma.user.findMany({
+                where: { id: { in: userIds } },
+                select: { id: true, fullName: true, email: true },
+            });
+            const userMap = Object.fromEntries(users.map((c) => [c.id, c]));
+            finalRows = rows.map((r) => ({
+                ...r,
+                user: userMap[r.userId] || null,
+            }));
+        }
         return finalRows;
     };
     // 1. LIST (with search, pagination, sorting, filters)
@@ -176,6 +188,8 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
             Object.entries(rawFilters || {}).forEach(([key, value]) => {
                 if (value == null || value === "")
                     return;
+                if (key === "projectsSpend")
+                    return; // Ignore custom filter that doesn't exist directly on model
                 where[key] = value;
             });
             if (search && searchColumns.length > 0) {

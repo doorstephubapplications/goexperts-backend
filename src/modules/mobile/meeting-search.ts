@@ -30,14 +30,19 @@ export const buildMeetingListWhere = ({
 
   const where: any = {
     deletedAt: null,
-    OR: normalizedSearch
-      ? [
-          { title: { contains: normalizedSearch } },
-          ...participantMatches,
-          ...selfMatches,
-        ]
-      : [...selfMatches],
+    OR: selfMatches,
   };
+
+  if (normalizedSearch) {
+    where.AND = [
+      {
+        OR: [
+          { title: { contains: normalizedSearch } },
+          ...(participantMatches.length ? participantMatches : []),
+        ],
+      },
+    ];
+  }
 
   return where;
 };

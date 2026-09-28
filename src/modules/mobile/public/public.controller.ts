@@ -869,7 +869,8 @@ export const getFreelancers = async (req: Request, res: Response, next: NextFunc
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
     const userId = (req as any).user?.id as string | undefined;
-    const search = String(req.query.search || req.query.q || '').trim();
+    let search = String(req.query.search || req.query.q || '').trim();
+    if (search.length > 0 && search.length < 3) search = '';
     const categoryIds = String(
       req.query.categoryIds || req.query.categoryId || req.query.industryId || '',
     )
@@ -1209,7 +1210,8 @@ export const getInvestors = async (req: Request, res: Response, next: NextFuncti
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
     const userId = (req as any).user?.id as string | undefined;
-    const search = String(req.query.search || req.query.q || '').trim();
+    let search = String(req.query.search || req.query.q || '').trim();
+    if (search.length > 0 && search.length < 3) search = '';
     const focusFilterValues = String(
       req.query.focusAreaId ||
       req.query.focusAreas ||
@@ -2700,7 +2702,8 @@ export const getPublicFreelancerPortfolio = async (req: Request, res: Response, 
     const { id } = req.params;
     const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || '15'), 10) || 15, 1), 100);
-    const search = String(req.query.search || req.query.q || '').trim().toLowerCase();
+    let search = String(req.query.search || req.query.q || '').trim().toLowerCase();
+    if (search.length > 0 && search.length < 3) search = '';
 
     const { readItems } = await import('../freelancer/controllers/portfolio.controller.js');
     let items = await readItems(id);
@@ -2758,7 +2761,8 @@ export const getPublicInvestorPortfolio = async (req: Request, res: Response, ne
     const { id } = req.params;
     const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || '15'), 10) || 15, 1), 100);
-    const search = String(req.query.search || req.query.q || '').trim().toLowerCase();
+    let search = String(req.query.search || req.query.q || '').trim().toLowerCase();
+    if (search.length > 0 && search.length < 3) search = '';
     const status = String(req.query.status || '').trim().toLowerCase();
 
     const { readInvestorPortfolioItems } = await import('../investor/controllers/portfolio.controller.js');

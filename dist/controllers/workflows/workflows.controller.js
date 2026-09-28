@@ -470,10 +470,17 @@ export const acceptProposal = async (req, res, next) => {
         const { id } = req.params;
         const proposal = await prisma.proposal.findUnique({
             where: { id },
-            include: { project: true, freelancer: true },
+            include: { project: true },
         });
         if (!proposal)
             return res.status(404).json({ success: false, message: "Proposal not found" });
+        const freelancer = await prisma.user.findUnique({
+            where: { id: proposal.freelancerId },
+            select: { fullName: true },
+        });
+        if (!freelancer) {
+            return res.status(400).json({ success: false, message: "Proposal freelancer no longer exists" });
+        }
         const contractNumber = `CON-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
         // Prisma Transaction
         const result = await prisma.$transaction(async (tx) => {
@@ -506,7 +513,7 @@ export const acceptProposal = async (req, res, next) => {
                 where: { id: proposal.projectId },
                 data: {
                     status: "in_progress",
-                    freelancer: proposal.freelancer.fullName,
+                    freelancer: freelancer.fullName,
                 },
             });
             // 5. Generate default milestones
@@ -533,7 +540,7 @@ export const acceptProposal = async (req, res, next) => {
                     title: "Setup codebase & initialize git repository",
                     priority: "High",
                     status: "assigned",
-                    assignedTo: proposal.freelancer.fullName,
+                    assignedTo: freelancer.fullName,
                 },
             });
             await tx.task.create({
@@ -542,7 +549,7 @@ export const acceptProposal = async (req, res, next) => {
                     title: "Implement final integration and deployment",
                     priority: "Medium",
                     status: "draft",
-                    assignedTo: proposal.freelancer.fullName,
+                    assignedTo: freelancer.fullName,
                 },
             });
             return { updatedProposal, contract, updatedProject, milestones: [milestone1, milestone2] };
@@ -591,10 +598,17 @@ export const createContractFromProposal = async (req, res, next) => {
         const { proposalId } = req.params;
         const proposal = await prisma.proposal.findUnique({
             where: { id: proposalId },
-            include: { project: true, freelancer: true },
+            include: { project: true },
         });
         if (!proposal)
             return res.status(404).json({ success: false, message: "Proposal not found" });
+        const freelancer = await prisma.user.findUnique({
+            where: { id: proposal.freelancerId },
+            select: { fullName: true },
+        });
+        if (!freelancer) {
+            return res.status(400).json({ success: false, message: "Proposal freelancer no longer exists" });
+        }
         const contractNumber = `CON-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
         const clientId = proposal.project.client;
         const contract = await prisma.$transaction(async (tx) => {

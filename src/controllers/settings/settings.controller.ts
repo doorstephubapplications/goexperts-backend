@@ -71,6 +71,9 @@ export const saveCurrencySettings = saveJsonSection("currency");
 export const getGoogleMapsSettings = jsonSection("google_maps");
 export const saveGoogleMapsSettings = saveJsonSection("google_maps");
 
+export const getMobileAppLinksSettings = jsonSection("mobile_app_links");
+export const saveMobileAppLinksSettings = saveJsonSection("mobile_app_links");
+
 export const getRolesSettings = async (_req: any, res: Response, next: NextFunction) => {
   try {
     const result = await getTeamRoles();
