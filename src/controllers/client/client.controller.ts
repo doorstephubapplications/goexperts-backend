@@ -928,8 +928,8 @@ export const inviteFreelancer = async (req: AuthenticatedRequest, res: Response,
         where: {
           status: 'ACTIVE',
           OR: [
-            { userA: userId, userB: freelancerId },
-            { userA: freelancerId, userB: userId },
+            { userOneId: userId, userTwoId: freelancerId },
+            { userOneId: freelancerId, userTwoId: userId },
           ],
         },
       });

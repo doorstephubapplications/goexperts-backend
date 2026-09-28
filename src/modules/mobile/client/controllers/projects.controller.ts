@@ -625,8 +625,8 @@ export const inviteFreelancer = async (req: AuthRequest, res: Response, next: Ne
         where: {
           status: 'ACTIVE',
           OR: [
-            { userA: userId, userB: freelancerId },
-            { userA: freelancerId, userB: userId },
+            { userOneId: userId, userTwoId: freelancerId },
+            { userOneId: freelancerId, userTwoId: userId },
           ],
         },
       });
