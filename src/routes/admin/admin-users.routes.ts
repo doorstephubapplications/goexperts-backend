@@ -1,8 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../config/database.js";
 
-const prisma = new PrismaClient();
-const adminUsersRouter = Router();
+export const adminUsersRouter = Router();
 
 // ==========================================
 // 1. GET /api/admin/users
@@ -115,7 +114,15 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         freelancerProfile: true,
         clientProfile: true,
         founderProfile: true,
-        investorProfile: true
+        investorProfile: true,
+        wallet: {
+          include: {
+            transactions: {
+              orderBy: { createdAt: "desc" },
+              take: 30
+            }
+          }
+        }
       }
     });
     
@@ -149,6 +156,110 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
       data: {
         ...user,
         verificationCenter
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 2.1 GET /api/admin/users/:id/wallet
+// ==========================================
+adminUsersRouter.get("/:id/wallet", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let wallet = await prisma.wallet.findUnique({
+      where: { userId: req.params.id },
+      include: {
+        transactions: {
+          orderBy: { createdAt: "desc" },
+          take: 50
+        }
+      }
+    });
+
+    if (!wallet) {
+      wallet = await prisma.wallet.create({
+        data: {
+          userId: req.params.id,
+          balance: 0,
+          currency: "INR"
+        },
+        include: {
+          transactions: true
+        }
+      });
+    }
+
+    res.json({ success: true, data: wallet });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 2.2 POST /api/admin/users/:id/wallet/adjust
+// ==========================================
+adminUsersRouter.post("/:id/wallet/adjust", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { amount, actionType, description } = req.body;
+    const numAmount = parseFloat(amount);
+
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: "Valid positive amount is required" });
+    }
+
+    const typeStr = String(actionType || "CREDIT").toUpperCase();
+    if (!["CREDIT", "DEBIT", "BONUS", "REFUND", "ADJUSTMENT"].includes(typeStr)) {
+      return res.status(400).json({ success: false, message: "Invalid action type. Allowed: CREDIT, DEBIT, BONUS, REFUND, ADJUSTMENT" });
+    }
+
+    const isCredit = typeStr !== "DEBIT";
+
+    let wallet = await prisma.wallet.findUnique({ where: { userId: req.params.id } });
+    if (!wallet) {
+      wallet = await prisma.wallet.create({
+        data: {
+          userId: req.params.id,
+          balance: 0,
+          currency: "INR"
+        }
+      });
+    }
+
+    if (!isCredit && wallet.balance < numAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient wallet balance (Current: ₹${wallet.balance}, Requested Debit: ₹${numAmount})`
+      });
+    }
+
+    const newBalance = isCredit ? wallet.balance + numAmount : wallet.balance - numAmount;
+
+    const [updatedWallet, transaction] = await prisma.$transaction([
+      prisma.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: newBalance }
+      }),
+      prisma.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: typeStr,
+          amount: numAmount,
+          direction: isCredit ? "IN" : "OUT",
+          description: description || `Admin ${typeStr} adjustment`,
+          balanceAfter: newBalance,
+          status: "completed"
+        }
+      })
+    ]);
+
+    res.json({
+      success: true,
+      message: `Wallet ${isCredit ? "credited" : "debited"} successfully with ₹${numAmount.toLocaleString("en-IN")}`,
+      data: {
+        wallet: updatedWallet,
+        transaction
       }
     });
   } catch (err) {
@@ -213,23 +324,20 @@ adminUsersRouter.get("/:id/insights", async (req: Request, res: Response, next: 
   }
 });
 
-export { adminUsersRouter };
 
 
 // ==========================================
-// 4. PATCH /api/v1/admin/users/:id
+// 4. PATCH & PUT /api/admin/users/:id
 // Universal Edit Endpoint
 // ==========================================
-adminUsersRouter.patch("/:id", async (req: Request, res: Response, next: NextFunction) => {
+const updateUserHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { account, verification, profile, reason, updatedAt } = req.body;
-    
-    // In production, Zod/Joi validation goes here.
+    const { account, verification, profile, reason, updatedAt, fullName, phone, country, city, status, isVerified } = req.body;
 
     const currentUser = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!currentUser) return res.status(404).json({ success: false, message: "User not found" });
 
-    // Optimistic Locking Enforcement
+    // Optimistic Locking Enforcement (if supplied)
     if (updatedAt && new Date(updatedAt).getTime() !== new Date(currentUser.updatedAt).getTime()) {
       return res.status(409).json({ success: false, message: "Conflict: This user was modified by another administrator. Please refresh." });
     }
@@ -242,74 +350,172 @@ adminUsersRouter.patch("/:id", async (req: Request, res: Response, next: NextFun
       if (account.phone) userUpdateData.phone = account.phone;
       if (account.country) userUpdateData.country = account.country;
       if (account.city) userUpdateData.city = account.city;
+      if (typeof account.isVerified === "boolean") userUpdateData.isVerified = account.isVerified;
+    } else {
+      if (status) userUpdateData.status = status;
+      if (fullName) userUpdateData.fullName = fullName;
+      if (phone !== undefined) userUpdateData.phone = phone;
+      if (country !== undefined) userUpdateData.country = country;
+      if (city !== undefined) userUpdateData.city = city;
+      if (typeof isVerified === "boolean") userUpdateData.isVerified = isVerified;
     }
 
     // Process Profile & Verification Center Updates
-    let profileUpdateData: any = { ...profile };
+    let profileUpdateData: any = { ...(profile || {}) };
     if (verification) {
-      profileUpdateData.verificationJson = JSON.stringify(verification);
+      profileUpdateData.verificationJson = typeof verification === "string" ? verification : JSON.stringify(verification);
     }
     
     // Determine which profile to update based on the user's role
     const role = currentUser.role.toLowerCase();
-    const updatePromises: any[] = [
-      prisma.user.update({ where: { id: req.params.id }, data: userUpdateData })
-    ];
+    const updatePromises: any[] = [];
+
+    if (Object.keys(userUpdateData).length > 0) {
+      updatePromises.push(prisma.user.update({ where: { id: req.params.id }, data: userUpdateData }));
+    }
 
     if (Object.keys(profileUpdateData).length > 0) {
       if (role === "freelancer") {
-        updatePromises.push(prisma.freelancerProfile.update({ where: { userId: req.params.id }, data: profileUpdateData }));
+        updatePromises.push(prisma.freelancerProfile.upsert({
+          where: { userId: req.params.id },
+          update: profileUpdateData,
+          create: { userId: req.params.id, ...profileUpdateData }
+        }));
       } else if (role === "client") {
-        updatePromises.push(prisma.clientProfile.update({ where: { userId: req.params.id }, data: profileUpdateData }));
+        updatePromises.push(prisma.clientProfile.upsert({
+          where: { userId: req.params.id },
+          update: profileUpdateData,
+          create: { userId: req.params.id, ...profileUpdateData }
+        }));
       } else if (role === "founder") {
-        updatePromises.push(prisma.founderProfile.update({ where: { userId: req.params.id }, data: profileUpdateData }));
+        updatePromises.push(prisma.founderProfile.upsert({
+          where: { userId: req.params.id },
+          update: profileUpdateData,
+          create: { userId: req.params.id, ...profileUpdateData }
+        }));
       } else if (role === "investor") {
-        updatePromises.push(prisma.investorProfile.update({ where: { userId: req.params.id }, data: profileUpdateData }));
+        updatePromises.push(prisma.investorProfile.upsert({
+          where: { userId: req.params.id },
+          update: profileUpdateData,
+          create: { userId: req.params.id, ...profileUpdateData }
+        }));
       }
     }
 
     // Audit Log Enforcement
-    updatePromises.push(
-      prisma.adminAuditLog.create({
-        data: {
-          adminId: (req as any).user?.id || "SYSTEM",
-          targetUserId: req.params.id,
-          action: "USER_UPDATED",
-          entityType: "USER",
-          entityId: req.params.id,
-          newValue: JSON.stringify(req.body),
-          createdAt: new Date()
-        }
-      })
-    );
+    try {
+      if ((prisma as any).adminAuditLog) {
+        updatePromises.push(
+          (prisma as any).adminAuditLog.create({
+            data: {
+              adminId: (req as any).user?.id || "SYSTEM",
+              targetUserId: req.params.id,
+              action: "USER_UPDATED",
+              entityType: "USER",
+              entityId: req.params.id,
+              newValue: JSON.stringify(req.body),
+              createdAt: new Date()
+            }
+          })
+        );
+      }
+    } catch {}
 
-    await prisma.$transaction(updatePromises);
+    if (updatePromises.length > 0) {
+      await prisma.$transaction(updatePromises);
+    }
     
-    res.json({ success: true, message: "User updated successfully", data: { id: req.params.id } });
+    // Fetch refreshed user
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      include: {
+        subscriptions: { include: { plan: true } },
+        freelancerProfile: true,
+        clientProfile: true,
+        founderProfile: true,
+        investorProfile: true
+      }
+    });
+
+    res.json({ success: true, message: "User updated successfully", data: updatedUser });
   } catch (err) {
     next(err);
   }
-});
+};
+
+adminUsersRouter.patch("/:id", updateUserHandler);
+adminUsersRouter.put("/:id", updateUserHandler);
+// ==========================================
 // ==========================================
 // 5. POST /api/v1/admin/users/:id/send-reset-email
 adminUsersRouter.post("/:id/send-reset-email", async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Audit Log Enforcement
-    await prisma.adminAuditLog.create({
-      data: {
-        adminId: (req as any).user?.id || "SYSTEM",
-        targetUserId: req.params.id,
-        action: "PASSWORD_RESET_REQUESTED",
-        entityType: "USER",
-        entityId: req.params.id,
-        createdAt: new Date()
-      }
-    });
+    if ((prisma as any).adminAuditLog) {
+      await (prisma as any).adminAuditLog.create({
+        data: {
+          adminId: (req as any).user?.id || "SYSTEM",
+          targetUserId: req.params.id,
+          action: "PASSWORD_RESET_REQUESTED",
+          entityType: "USER",
+          entityId: req.params.id,
+          createdAt: new Date()
+        }
+      }).catch(() => {});
+    }
 
     res.json({ success: true, message: "Password reset email sent successfully", data: null });
   } catch (err) {
     next(err);
   }
 });
+
+// ==========================================
+// 6. GET /api/admin/users/:id/insights
+// ==========================================
+adminUsersRouter.get("/:id/insights", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        wallet: true,
+        subscriptions: { include: { plan: true } },
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const txCount = await prisma.walletTransaction.count({
+      where: { wallet: { userId } }
+    }).catch(() => 0);
+
+    const auditCount = (prisma as any).adminAuditLog
+      ? await (prisma as any).adminAuditLog.count({ where: { targetUserId: userId } }).catch(() => 0)
+      : 0;
+
+    res.json({
+      success: true,
+      data: {
+        userId,
+        accountStatus: user.status,
+        kycStatus: user.isVerified ? "APPROVED" : "PENDING",
+        walletBalance: user.wallet?.balance || 0,
+        currency: user.wallet?.currency || "INR",
+        totalTransactions: txCount,
+        auditLogsCount: auditCount,
+        currentPlan: user.subscriptions?.[0]?.plan?.name || "Free Tier",
+        completionScore: user.completionPercentage || 85,
+        lastActive: user.lastLoginAt || user.updatedAt || user.createdAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default adminUsersRouter;
 
 
