@@ -48,7 +48,7 @@ const findOrCreateDm = async (
   });
 };
 
-const resolveTrueUserId = async (targetId: string): Promise<string | null> => {
+export const resolveTrueUserId = async (targetId: string): Promise<string | null> => {
   let user = await prisma.user.findUnique({ where: { id: targetId } }).catch(() => null);
   if (!user) {
     const cp = await prisma.clientProfile.findUnique({ where: { id: targetId } }).catch(() => null);
@@ -69,7 +69,7 @@ const resolveTrueUserId = async (targetId: string): Promise<string | null> => {
   return user ? user.id : null;
 };
 
-const resolveConversation = async (
+export const resolveConversation = async (
   viewerId: string,
   viewerRole: string,
   conversationId?: string,
@@ -96,6 +96,19 @@ const resolveConversation = async (
       });
       // If not connected, DO NOT auto-create a DM conversation
       if (!conn || conn.status !== 'ACTIVE') {
+        const pendingConversation = await prisma.conversation.findFirst({
+          where: {
+            status: 'PENDING',
+            deletedAt: null,
+            OR: [
+              { userA: viewerId, userB: trueUserId },
+              { userA: trueUserId, userB: viewerId }
+            ]
+          }
+        }).catch(() => null);
+        if (pendingConversation) {
+          return pendingConversation;
+        }
         return null;
       }
     }
@@ -115,7 +128,8 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
       deletedAt: null,
       OR: [
         { status: 'active', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
-        { status: 'PENDING', userA: req.user.id },
+        { status: 'ACTIVE', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+        { status: 'PENDING', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
       ],
     };
 
@@ -383,8 +397,9 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
           },
         });
 
+        let newMessage;
         if (trimmedText || attachmentUrl) {
-          await prisma.message.create({
+          newMessage = await prisma.message.create({
             data: {
               conversationId: pendingConversation.id,
               from: 'me',
@@ -418,6 +433,7 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
 
         return res.status(200).json(successResponse('Connection request sent', {
           ...newInvite,
+          id: newMessage?.id || newInvite.id,
           conversationId: pendingConversation.id,
           status: 'PENDING',
           conversationStatus: 'PENDING',

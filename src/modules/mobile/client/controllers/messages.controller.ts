@@ -3,94 +3,12 @@ import path from 'path';
 import { prisma } from '../../../../config/database.js';
 import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
-import { sendMessage as chatSendMessage } from '../../chat/controllers/chat.controller.js';
+import { sendMessage as chatSendMessage, resolveConversation } from '../../chat/controllers/chat.controller.js';
 import { notifyNewMessage } from '../../../../utils/notify-message.js';
 
 const BASE_URL = process.env.BASE_URL || 'https://mobileapi.goexperts.in';
 
-const findOrCreateDm = async (
-  userId: string,
-  role: string,
-  recipientId: string,
-  projectId?: string | null
-) => {
-  const [a, b] = [userId, recipientId].sort();
-  try {
-    const existing = await prisma.conversation.findFirst({
-      where: {
-        deletedAt: null,
-        status: 'active',
-        OR: [
-          { userA: a, userB: b },
-          { userA: b, userB: a },
-        ],
-      } as any,
-    });
-    if (existing) return existing;
-  } catch {
-    // Columns may be missing before migration.
-  }
 
-  const recipient = await prisma.user.findUnique({ where: { id: recipientId } }).catch(() => null);
-  const me = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-  return prisma.conversation.create({
-    data: {
-      name: recipient?.fullName || me?.fullName || 'Chat',
-      role: recipient?.role || role,
-      status: 'active',
-      avatar: recipient?.avatarUrl || null,
-      msg: null,
-      time: new Date().toISOString(),
-      ...({
-        userA: a,
-        userB: b,
-        projectId: projectId || null,
-      } as any),
-    },
-  });
-};
-
-const resolveConversation = async (
-  viewerId: string,
-  viewerRole: string,
-  conversationId?: string,
-  recipientId?: string,
-  projectId?: string
-) => {
-  if (conversationId) {
-    const conv = await prisma.conversation.findFirst({
-      where: { id: conversationId, deletedAt: null },
-    }).catch(() => null);
-    if (conv) return conv;
-  }
-
-  let targetId = recipientId || conversationId;
-  if (!targetId) return null;
-
-  let user = await prisma.user.findUnique({ where: { id: targetId } }).catch(() => null);
-  if (!user) {
-    const cp = await prisma.clientProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-    if (cp) user = await prisma.user.findUnique({ where: { id: cp.userId } }).catch(() => null);
-  }
-  if (!user) {
-    const fp = await prisma.freelancerProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-    if (fp) user = await prisma.user.findUnique({ where: { id: fp.userId } }).catch(() => null);
-  }
-  if (!user) {
-    const founder = await prisma.founderProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-    if (founder) user = await prisma.user.findUnique({ where: { id: founder.userId } }).catch(() => null);
-  }
-  if (!user) {
-    const investor = await prisma.investorProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-    if (investor) user = await prisma.user.findUnique({ where: { id: investor.userId } }).catch(() => null);
-  }
-
-  if (user) {
-    return findOrCreateDm(viewerId, viewerRole, user.id, projectId);
-  }
-
-  return null;
-};
 
 export const listConversations = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -98,9 +16,12 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
     try {
       conversations = await prisma.conversation.findMany({
         where: {
-          status: 'active',
           deletedAt: null,
-          OR: [{ userA: req.user.id }, { userB: req.user.id }],
+          OR: [
+            { status: 'active', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+            { status: 'ACTIVE', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+            { status: 'PENDING', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+          ],
         } as any,
         include: { messages: { take: 1, orderBy: { createdAt: 'desc' } } },
         orderBy: { updatedAt: 'desc' },
@@ -108,7 +29,7 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
       });
     } catch {
       conversations = await prisma.conversation.findMany({
-        where: { status: 'active', deletedAt: null, role: req.user.role },
+        where: { deletedAt: null, role: req.user.role, status: { in: ['active', 'ACTIVE', 'PENDING'] } },
         include: { messages: { take: 1, orderBy: { createdAt: 'desc' } } },
         orderBy: { updatedAt: 'desc' },
         take: 50,
@@ -189,6 +110,8 @@ export const listConversations = async (req: AuthRequest, res: Response, next: N
         lastMessageAt: lastTime,
         unread: unreadCount,
         unreadCount: unreadCount,
+        conversationStatus: c.status,
+        isMuted: c.status === 'PENDING',
         _sortTime: new Date(lastTime).getTime(),
       };
 
@@ -253,6 +176,7 @@ export const getConversation = async (req: AuthRequest, res: Response, next: Nex
       return {
         ...m,
         conversationId: conversation.id,
+        conversationStatus: (conversation as any).status,
         from: isMine ? 'me' : m.from,
         senderId: (m as any).senderId || (isMine
           ? req.user.id

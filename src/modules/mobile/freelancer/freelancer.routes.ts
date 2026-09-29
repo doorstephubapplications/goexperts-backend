@@ -13,7 +13,7 @@ import { listProposals, createProposal, getProposalDetails, updateProposal, with
 import { listContracts, getContractDetails, acceptContract, rejectContract, getContractMilestones, getContractTimeline, getContractDocuments } from './controllers/contracts.controller.js';
 import { listTasks, getTaskDetails, updateTaskStatus, startTimer, stopTimer, manualTimeLog } from './controllers/tasks.controller.js';
 import { listMeetings, scheduleMeeting, getMeetingDetails, getUpcomingMeetings, rescheduleMeeting, cancelMeeting } from './controllers/meetings.controller.js';
-import { listConversations, getConversationDetails, sendMessage, deleteMessage } from './controllers/messages.controller.js';
+import { listConversations, getConversation as getConversationDetails, sendMessage, deleteMessage, markMessageRead, markConversationRead, markConversationUnread, deleteConversation, uploadAttachment } from '../chat/controllers/chat.controller.js';
 import { getWalletSummary, getTransactions, getCredits, getDebits, getPendingPayouts, getPaymentHistory, requestWithdrawal } from './controllers/wallet.controller.js';
 import { getMonthlyEarnings, getYearlyEarnings, getCategoryEarnings, getClientEarnings, downloadStatement } from './controllers/earnings.controller.js';
 import { getReceivedReviews, getAverageRating, getRatingBreakdown, replyToReview } from './controllers/reviews.controller.js';
@@ -196,9 +196,14 @@ router.patch('/meetings/:id/reschedule', rescheduleMeeting);
 router.patch('/meetings/:id/cancel', cancelMeeting);
 
 // ─── Messages ───
-router.get('/messages', listConversations);
-router.get('/messages/:id', getConversationDetails);
-router.post('/messages', sendMessage);
+router.get('/messages/conversations', listConversations);
+router.get('/messages/conversations/:id', getConversationDetails);
+router.post('/messages/send', sendMessage);
+router.patch('/messages/:id/read', markMessageRead);
+router.patch('/messages/conversations/:id/read-all', markConversationRead);
+router.patch('/messages/conversations/:id/unread', markConversationUnread);
+router.delete('/messages/conversations/:id', deleteConversation);
+router.post('/messages/attachments', upload.single('file'), handleUploadError, uploadAttachment);
 router.delete('/messages/:id', deleteMessage);
 
 // ─── Wallet ───
