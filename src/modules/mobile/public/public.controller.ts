@@ -1463,8 +1463,11 @@ const formatStartupResponse = (
     }
   }
 
-  const resolveDisplayName = (value: string | null | undefined) =>
-    isUUID(value) ? industryMap.get(value) || optionMap.get(value) || '' : value || '';
+  const resolveDisplayName = (value: string | null | undefined) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return industryMap.get(raw) || optionMap.get(raw) || raw;
+  };
   const industryValue = resolveDisplayName(idea.industry);
   const categoryValue = resolveDisplayName(idea.category);
   const stageValue = resolveDisplayName(idea.stage);
@@ -1610,22 +1613,31 @@ const loadRelatedDataForIdeas = async (ideas: any[]) => {
     }
   }
 
-  const industryIds = [...new Set(ideas.map(i => i.industry).filter(isUUID))];
+  const allIndustryValues = [...new Set(ideas.map(i => String(i.industry || '').trim()).filter(Boolean))];
+  const industryIds = allIndustryValues.filter(isUUID);
   const industryMap = new Map();
   if (industryIds.length > 0) {
     const rows = await prisma.industry.findMany({ where: { id: { in: industryIds } }, select: { id: true, name: true } });
     rows.forEach(r => industryMap.set(r.id, r.name));
   }
 
-  const optionIds = [...new Set(ideas.flatMap(i => [i.category, i.stage]).filter(isUUID))];
+  const optionIds = [...new Set(ideas.flatMap(i => [i.category, i.stage]).map(v => String(v || '').trim()).filter(Boolean))];
   const optionMap = new Map();
   if (optionIds.length > 0) {
     try {
-      const rows = await (prisma as any).masterOption.findMany({ where: { id: { in: optionIds } }, select: { id: true, label: true } });
-      rows.forEach((r: any) => optionMap.set(r.id, r.label));
+      const rows = await (prisma as any).masterOption.findMany({
+        where: { OR: [{ id: { in: optionIds } }, { value: { in: optionIds } }, { label: { in: optionIds } }] },
+        select: { id: true, label: true, value: true }
+      });
+      rows.forEach((r: any) => {
+        const label = r.label || r.value || '';
+        optionMap.set(r.id, label);
+        if (r.value) optionMap.set(r.value, label);
+        if (r.label) optionMap.set(r.label, label);
+      });
     } catch { }
 
-    const missingIds = optionIds.filter((id: string) => !optionMap.has(id));
+    const missingIds = optionIds.filter((id: string) => isUUID(id) && !optionMap.has(id));
     if (missingIds.length > 0) {
       try {
         const stages = await prisma.startupStage.findMany({ where: { id: { in: missingIds } }, select: { id: true, name: true } });

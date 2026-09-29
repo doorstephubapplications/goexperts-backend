@@ -170,6 +170,7 @@ export async function resolveLabelOrName(val: any): Promise<string> {
   if (!val || typeof val !== 'string') return '';
   const trimmed = val.trim();
   if (!trimmed) return '';
+  const lowerTrimmed = trimmed.toLowerCase();
 
   try {
     // 1. Check industry
@@ -203,10 +204,22 @@ export async function resolveLabelOrName(val: any): Promise<string> {
     try {
       const opt = await (prisma as any).masterOption?.findFirst({
         where: { OR: [{ id: trimmed }, { value: trimmed }, { label: trimmed }] },
-        select: { label: true, value: true }
+        select: { id: true, label: true, value: true }
       });
-      if (opt?.label) return opt.label;
-      if (opt?.value) return opt.value;
+      if (opt?.label || opt?.value) return opt.label || opt.value;
+
+      const allOptions = await (prisma as any).masterOption?.findMany({
+        where: { status: 'active' },
+        select: { id: true, label: true, value: true }
+      }).catch(() => []);
+      const caseInsensitive = (allOptions || []).find((option: any) =>
+        String(option.id || '').trim().toLowerCase() === lowerTrimmed ||
+        String(option.value || '').trim().toLowerCase() === lowerTrimmed ||
+        String(option.label || '').trim().toLowerCase() === lowerTrimmed
+      );
+      if (caseInsensitive?.label || caseInsensitive?.value) {
+        return caseInsensitive.label || caseInsensitive.value;
+      }
     } catch {}
 
     // 5. Direct Raw SQL Fallback
