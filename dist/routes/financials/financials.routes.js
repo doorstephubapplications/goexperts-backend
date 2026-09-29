@@ -7,7 +7,7 @@ purchaseSubscription, renewSubscription, cancelSubscription, upgradeSubscription
 // Usage
 trackUsage, getUsage, 
 // Wallet
-getWallet, creditWallet, debitWallet, addWalletBonus, 
+getWallet, creditWallet, debitWallet, addWalletBonus, getWalletTransactionById, 
 // Payments & Refunds
 listPayments, processRefund, listRefunds, 
 // Coupons
@@ -44,6 +44,7 @@ router.get("/wallet/:userId", getWallet);
 router.post("/wallet/credit", creditWallet);
 router.post("/wallet/debit", debitWallet);
 router.post("/wallet/bonus", addWalletBonus);
+router.get("/wallet-transactions/:id", getWalletTransactionById);
 // ── Payments ──
 router.get("/payments", listPayments);
 router.post("/payments/refund", processRefund);

@@ -1,18 +1,23 @@
 import { prisma } from '../../../../config/database.js';
-import { successResponse, errorResponse } from '../../../../core/response.js';
+import { successResponse } from '../../../../core/response.js';
 import { globalSearch } from '../../../../services/mobile/search.service.js';
 export const search = async (req, res, next) => {
     try {
-        const { query, type, page, limit, city, category, industry, stage, sort, status } = req.query;
-        if (!query || query.trim().length < 2) {
-            return res.status(400).json(errorResponse('Query must be at least 2 characters', 'VALIDATION_ERROR'));
+        const { q, query, type, page, limit, city, category, industry, stage, sort, status } = req.query;
+        const searchQuery = String(query || q || '').trim();
+        if (searchQuery.length < 2) {
+            return res.json(successResponse('Search results', []));
         }
         const results = await globalSearch(req.user?.id || null, {
-            query, type, city, category, industry, stage, sort, status,
+            query: searchQuery, type, city, category, industry, stage, sort, status,
             page: parseInt(page || '1'),
             limit: parseInt(limit || '10')
         });
-        return res.json(successResponse('Search results', results));
+        const flattenedResults = Object.entries(results).flatMap(([group, items]) => items.map((item) => ({
+            ...item,
+            type: group,
+        })));
+        return res.json(successResponse('Search results', flattenedResults));
     }
     catch (error) {
         next(error);

@@ -991,29 +991,77 @@ router.post("/delete-account/verify", verifyDeleteAccountOtp as any);
 
 router.get("/delete-requests", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rows = await prisma.user.findMany({
-      where: {
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.pageSize as string) || 10;
+    const search = (req.query.search as string) || "";
+    
+    let roleFilter = "";
+    let statusFilter = "";
+    if (req.query.filters) {
+      try {
+        const filters = JSON.parse(req.query.filters as string);
+        if (filters.role && filters.role !== "all") roleFilter = filters.role;
+        if (filters.status && filters.status !== "all") statusFilter = filters.status;
+      } catch (e) {}
+    }
+
+    const whereClause: any = {
+      AND: [
+        {
+          OR: [
+            { status: "pending_deletion" },
+            { status: "deleted" },
+            { status: "inactive" },
+            { deletedAt: { not: null } },
+          ],
+        }
+      ]
+    };
+
+    if (search) {
+      whereClause.AND.push({
         OR: [
-          { status: "pending_deletion" },
-          { status: "deleted" },
-          { status: "inactive" },
-          { deletedAt: { not: null } },
-        ],
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        role: true,
-        status: true,
-        avatarUrl: true,
-        createdAt: true,
-        updatedAt: true,
-        deletedAt: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-    res.json({ success: true, rows, total: rows.length, data: rows });
+          { fullName: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" } }
+        ]
+      });
+    }
+
+    if (roleFilter) {
+      whereClause.AND.push({ role: roleFilter });
+    }
+
+    if (statusFilter) {
+      if (statusFilter === "deleted") {
+        // Just the ones completely deleted
+        whereClause.AND.push({ status: "deleted" });
+      } else {
+        whereClause.AND.push({ status: statusFilter });
+      }
+    }
+
+    const [rows, total] = await Promise.all([
+      prisma.user.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          status: true,
+          avatarUrl: true,
+          createdAt: true,
+          updatedAt: true,
+          deletedAt: true,
+        },
+        orderBy: { updatedAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.user.count({ where: whereClause })
+    ]);
+
+    res.json({ success: true, rows, total, data: rows, page, pageSize });
   } catch (err) {
     next(err);
   }

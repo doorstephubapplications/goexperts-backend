@@ -841,7 +841,7 @@ export const inviteFreelancer = async (req, res, next) => {
         // Check if conversation already exists for this project + freelancer
         const existingConv = await prisma.conversation.findFirst({
             where: {
-                contextType: "PROJECT",
+                contextType: 'PROJECT',
                 projectId: project.id,
                 OR: [
                     { userA: userId, userB: freelancerId },
@@ -851,17 +851,38 @@ export const inviteFreelancer = async (req, res, next) => {
         });
         let convId = existingConv?.id;
         if (!convId) {
+            const connection = await prisma.connection.findFirst({
+                where: {
+                    status: 'ACTIVE',
+                    OR: [
+                        { userOneId: userId, userTwoId: freelancerId },
+                        { userOneId: freelancerId, userTwoId: userId },
+                    ],
+                },
+            });
+            const convStatus = connection ? 'active' : 'PENDING';
             const conv = await prisma.conversation.create({
                 data: {
                     name: `Project Invitation: ${project.title}`,
-                    contextType: "PROJECT",
-                    role: "PROJECT",
+                    contextType: 'PROJECT',
+                    role: 'PROJECT',
                     projectId: project.id,
                     userA: userId,
-                    userB: freelancerId
+                    userB: freelancerId,
+                    status: convStatus
                 }
             });
             convId = conv.id;
+            if (!connection) {
+                await prisma.connectionInvitation.create({
+                    data: {
+                        senderId: userId,
+                        receiverId: freelancerId,
+                        firstMessage: messageText,
+                        status: 'PENDING',
+                    },
+                }).catch(() => null);
+            }
         }
         // Send the first message
         await prisma.message.create({

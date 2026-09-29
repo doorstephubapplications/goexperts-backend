@@ -1,90 +1,16 @@
 import { prisma } from '../../../../config/database.js';
-import { successResponse, errorResponse } from '../../../../core/response.js';
-import { notifyNewMessage } from '../../../../utils/notify-message.js';
-import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
-const findOrCreateDm = async (userId, role, recipientId, projectId) => {
-    const [a, b] = [userId, recipientId].sort();
-    const existing = await prisma.conversation.findFirst({
-        where: {
-            deletedAt: null,
-            status: 'active',
-            OR: [
-                { userA: a, userB: b },
-                { userA: b, userB: a },
-            ],
-        },
-    }).catch(() => null);
-    if (existing)
-        return existing;
-    const recipient = await prisma.user.findUnique({ where: { id: recipientId } }).catch(() => null);
-    const me = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-    return prisma.conversation.create({
-        data: {
-            name: recipient?.fullName || me?.fullName || 'Chat',
-            role: recipient?.role || role,
-            status: 'active',
-            avatar: recipient?.avatarUrl || null,
-            msg: null,
-            time: new Date().toISOString(),
-            ...{
-                userA: a,
-                userB: b,
-                projectId: projectId || null,
-            },
-        },
-    });
-};
-const resolveConversation = async (viewerId, viewerRole, conversationId, recipientId, projectId) => {
-    // 1. If conversationId is supplied, check if it's already a valid conversation
-    if (conversationId) {
-        const conv = await prisma.conversation.findFirst({
-            where: { id: conversationId, deletedAt: null },
-        }).catch(() => null);
-        if (conv)
-            return conv;
-    }
-    // 2. Otherwise, conversationId or recipientId might be a target user ID or profile ID
-    let targetId = recipientId || conversationId;
-    if (!targetId)
-        return null;
-    // Check if targetId is an existing user
-    let user = await prisma.user.findUnique({ where: { id: targetId } }).catch(() => null);
-    if (!user) {
-        // Check if targetId is a clientProfile ID
-        const cp = await prisma.clientProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-        if (cp)
-            user = await prisma.user.findUnique({ where: { id: cp.userId } }).catch(() => null);
-    }
-    if (!user) {
-        // Check if targetId is a freelancerProfile ID
-        const fp = await prisma.freelancerProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-        if (fp)
-            user = await prisma.user.findUnique({ where: { id: fp.userId } }).catch(() => null);
-    }
-    if (!user) {
-        // Check if targetId is a founderProfile ID
-        const founder = await prisma.founderProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-        if (founder)
-            user = await prisma.user.findUnique({ where: { id: founder.userId } }).catch(() => null);
-    }
-    if (!user) {
-        // Check if targetId is an investorProfile ID
-        const investor = await prisma.investorProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-        if (investor)
-            user = await prisma.user.findUnique({ where: { id: investor.userId } }).catch(() => null);
-    }
-    if (user) {
-        return findOrCreateDm(viewerId, viewerRole, user.id, projectId);
-    }
-    return null;
-};
+import { successResponse } from '../../../../core/response.js';
+import { sendMessage as chatSendMessage, resolveConversation } from '../../chat/controllers/chat.controller.js';
 export const listConversations = async (req, res, next) => {
     try {
         const conversations = await prisma.conversation.findMany({
             where: {
-                status: 'active',
                 deletedAt: null,
-                OR: [{ userA: req.user.id }, { userB: req.user.id }],
+                OR: [
+                    { status: 'active', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+                    { status: 'ACTIVE', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+                    { status: 'PENDING', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+                ],
             },
             include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 } },
             orderBy: { updatedAt: 'desc' },
@@ -160,6 +86,8 @@ export const listConversations = async (req, res, next) => {
                 lastMessageAt: lastTime,
                 unread: unreadCount,
                 unreadCount: unreadCount,
+                conversationStatus: c.status,
+                isMuted: c.status === 'PENDING',
                 _sortTime: new Date(lastTime).getTime(),
             };
             delete result.userA;
@@ -215,6 +143,7 @@ export const getConversationDetails = async (req, res, next) => {
             return {
                 ...m,
                 conversationId: conv.id,
+                conversationStatus: conv.status,
                 from: isMine ? 'me' : m.from,
                 senderId: senderId || (isMine
                     ? req.user.id
@@ -229,92 +158,7 @@ export const getConversationDetails = async (req, res, next) => {
         next(error);
     }
 };
-export const sendMessage = async (req, res, next) => {
-    try {
-        const { conversationId, text, recipientId, projectId, attachmentUrl } = req.body || {};
-        const trimmedText = String(text || '').trim();
-        // If empty text & no attachment, find/create conversation ready state
-        if (!trimmedText && !attachmentUrl && (recipientId || conversationId)) {
-            const conv = await resolveConversation(req.user.id, req.user.role, conversationId, recipientId, projectId);
-            if (conv) {
-                return res.status(200).json(successResponse('Conversation ready', {
-                    id: '',
-                    conversationId: conv.id,
-                    from: 'me',
-                    senderId: req.user.id,
-                    isMine: true,
-                    text: '',
-                    time: new Date().toISOString(),
-                }));
-            }
-        }
-        if (!trimmedText && !attachmentUrl) {
-            return res.status(400).json(errorResponse('text is required', 'VALIDATION_ERROR'));
-        }
-        const conv = await resolveConversation(req.user.id, req.user.role, conversationId, recipientId, projectId);
-        if (!conv) {
-            return res.status(400).json(errorResponse('conversationId or recipientId is required', 'VALIDATION_ERROR'));
-        }
-        const message = await prisma.message.create({
-            data: {
-                conversationId: conv.id,
-                from: 'me',
-                text: trimmedText || (attachmentUrl ? '[Attachment]' : ''),
-                time: new Date().toISOString(),
-                ...{
-                    senderId: req.user.id,
-                    attachmentUrl: attachmentUrl || null,
-                },
-            }
-        });
-        const updatedConv = await prisma.conversation.update({
-            where: { id: conv.id },
-            data: {
-                msg: message.text,
-                time: new Date().toISOString(),
-                unread: { increment: 1 },
-                updatedAt: new Date(),
-            },
-        }).catch(() => null);
-        const payload = {
-            ...message,
-            conversationId: conv.id,
-            from: message.from,
-            senderId: req.user.id,
-            isMine: false,
-        };
-        await notifyNewMessage(conv.id, payload).catch(() => null);
-        try {
-            const receiverId = updatedConv && updatedConv.userA === req.user.id ? updatedConv.userB : updatedConv?.userA;
-            if (receiverId) {
-                await NotificationEngine.queueNotification({
-                    userId: receiverId,
-                    type: 'new_message',
-                    title: `New message from ${req.user.fullName || 'User'}`,
-                    message: trimmedText ? (trimmedText.length > 50 ? trimmedText.substring(0, 50) + '...' : trimmedText) : 'Sent an attachment',
-                    channel: 'all',
-                    payload: {
-                        conversationId: conv.id,
-                        messageId: message.id,
-                    },
-                });
-            }
-        }
-        catch {
-            /* ignore */
-        }
-        return res.status(201).json(successResponse('Message sent', {
-            ...message,
-            conversationId: conv.id,
-            from: 'me',
-            senderId: req.user.id,
-            isMine: true,
-        }));
-    }
-    catch (error) {
-        next(error);
-    }
-};
+export const sendMessage = chatSendMessage;
 export const deleteMessage = async (req, res, next) => {
     try {
         await prisma.message.delete({ where: { id: req.params.id } });

@@ -3,6 +3,7 @@ import { authMiddleware as authenticate } from "../../middlewares/auth.middlewar
 import { listWithdrawals, approveWithdrawal, rejectWithdrawal, creditWallet } from "../../controllers/admin/withdrawals.controller.js";
 const router = Router();
 router.use(authenticate);
+router.get("/", listWithdrawals);
 router.get("/pending", listWithdrawals);
 router.get("/all", listWithdrawals);
 router.post("/:id/approve", approveWithdrawal);

@@ -486,6 +486,44 @@ export async function getWallet(req: Request, res: Response) {
   }
 }
 
+export async function getWalletTransactionById(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const txn = await prisma.walletTransaction.findUnique({
+      where: { id },
+      include: {
+        wallet: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                role: true,
+                phone: true,
+                avatarUrl: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!txn) return res.status(404).json({ success: false, message: "Transaction not found" });
+
+    // Fetch the 5 most recent transactions in the same wallet for context
+    const recentTxns = await prisma.walletTransaction.findMany({
+      where: { walletId: txn.walletId, id: { not: id } },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
+
+    res.json({ success: true, data: { transaction: txn, recentTransactions: recentTxns } });
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+}
+
 export async function creditWallet(req: Request, res: Response) {
   try {
     const { userId, amount, type, description } = req.body;

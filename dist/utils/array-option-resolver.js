@@ -151,6 +151,7 @@ export async function resolveLabelOrName(val) {
     const trimmed = val.trim();
     if (!trimmed)
         return '';
+    const lowerTrimmed = trimmed.toLowerCase();
     try {
         // 1. Check industry
         try {
@@ -186,12 +187,20 @@ export async function resolveLabelOrName(val) {
         try {
             const opt = await prisma.masterOption?.findFirst({
                 where: { OR: [{ id: trimmed }, { value: trimmed }, { label: trimmed }] },
-                select: { label: true, value: true }
+                select: { id: true, label: true, value: true }
             });
-            if (opt?.label)
-                return opt.label;
-            if (opt?.value)
-                return opt.value;
+            if (opt?.label || opt?.value)
+                return opt.label || opt.value;
+            const allOptions = await prisma.masterOption?.findMany({
+                where: { status: 'active' },
+                select: { id: true, label: true, value: true }
+            }).catch(() => []);
+            const caseInsensitive = (allOptions || []).find((option) => String(option.id || '').trim().toLowerCase() === lowerTrimmed ||
+                String(option.value || '').trim().toLowerCase() === lowerTrimmed ||
+                String(option.label || '').trim().toLowerCase() === lowerTrimmed);
+            if (caseInsensitive?.label || caseInsensitive?.value) {
+                return caseInsensitive.label || caseInsensitive.value;
+            }
         }
         catch { }
         // 5. Direct Raw SQL Fallback

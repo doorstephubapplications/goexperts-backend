@@ -975,3 +975,90 @@ export const sendSubscriptionReminderEmail = (to, name, planName, daysLeft, form
   `;
     return sendEmail(to, `Your subscription expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`, shell(`Your ${planName} expires soon! Renew now.`, body));
 };
+export const sendKycReminderEmail = (to, name) => {
+    const firstName = (name || 'User').split(' ')[0];
+    const kycLink = `${FRONTEND_URL}/kyc`;
+    const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Verification Required</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;line-height:1.2;">Complete Your KYC Verification 📋</h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+
+    ${alertBox('⚠️', 'KYC Pending', 'We noticed that your KYC verification is incomplete. Submitting your verification documents is required to fully activate your account.', '#fffbeb', '#f59e0b', '#b45309', '#92400e')}
+
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      To keep Go Experts secure and trustworthy for all members, verified KYC is required to unlock all platform privileges:
+    </p>
+
+    ${featureList([
+        { icon: '🛡️', text: 'Get the Verified badge on your profile' },
+        { icon: '💼', text: 'Apply for projects, submit proposals, or connect with partners' },
+        { icon: '💳', text: 'Enable secure escrow payments and instant payouts' },
+    ], '#f59e0b')}
+
+    ${ctaButton(kycLink, 'Complete KYC Verification →', '#E30613')}
+
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
+      Need help with documents? Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
+    </p>
+    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+    return sendEmail(to, '⚠️ Action Required: Complete Your KYC on Go Experts', shell(`Hi ${firstName}, please complete your KYC verification on Go Experts.`, body));
+};
+export const sendProfileReminderEmail = (to, name) => {
+    const firstName = (name || 'User').split(' ')[0];
+    const profileLink = `${FRONTEND_URL}/dashboard/profile`;
+    const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Profile Incomplete</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;line-height:1.2;">Finish Setting Up Your Profile 🚀</h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+
+    ${alertBox('💡', 'Profile Action Needed', 'Your profile is currently incomplete. Completing your profile details significantly improves your visibility and matching rate.', '#eff6ff', '#3b82f6', '#1d4ed8', '#1e40af')}
+
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      Profiles with complete details and portfolio items receive up to <strong>5x more engagement</strong> and opportunities on Go Experts.
+    </p>
+
+    ${featureList([
+        { icon: '✨', text: 'Stand out with full skills and bio information' },
+        { icon: '🎯', text: 'Receive personalized recommendations matched to your expertise' },
+        { icon: '📈', text: 'Increase visibility to clients, investors, and partners' },
+    ], '#3b82f6')}
+
+    ${ctaButton(profileLink, 'Complete My Profile →', '#E30613')}
+
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
+      Have questions? Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
+    </p>
+    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+    return sendEmail(to, 'Action Required: Complete Your Go Experts Profile', shell(`Hi ${firstName}, please complete your profile details on Go Experts.`, body));
+};
+export const sendRegistrationReminderEmail = (to, name) => {
+    const firstName = (name || 'User').split(' ')[0];
+    const loginLink = `${FRONTEND_URL}/login`;
+    const body = `
+    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Account Setup</p>
+    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;line-height:1.2;">Complete Your Registration 🌟</h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
+
+    ${alertBox('🔔', 'Registration Incomplete', 'We noticed that your registration on Go Experts is pending. Please complete your registration to activate your account and start using the platform.', '#f8fafc', '#64748b', '#334155', '#475569')}
+
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
+      Completing your registration gives you immediate access to top talent, verified partners, and tailored opportunities.
+    </p>
+
+    ${featureList([
+        { icon: '🔑', text: 'Activate your secure Go Experts login' },
+        { icon: '🌐', text: 'Connect with verified professionals and clients worldwide' },
+        { icon: '🚀', text: 'Unlock your 90-day platform access' },
+    ], '#64748b')}
+
+    ${ctaButton(loginLink, 'Resume Registration →', '#E30613')}
+
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
+      Need help? Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
+    </p>
+    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
+  `;
+    return sendEmail(to, 'Action Required: Complete Your Go Experts Registration', shell(`Hi ${firstName}, please finish your registration on Go Experts.`, body));
+};

@@ -288,7 +288,8 @@ export function createCrudRouter(
       if (!row) {
         return res.status(404).json({ success: false, message: "Record not found" });
       }
-      const formatted = formatRecord(row);
+      const mappedRows = await applyCustomMappings(String(modelName), [row]);
+      const formatted = formatRecord(mappedRows[0] || row);
       res.json({ success: true, data: formatted, row: formatted });
     } catch (err) {
       next(err);
@@ -407,7 +408,9 @@ function ensureBlogAdminAuthor(modelName: string, data: any, req: AuthenticatedR
           }
         }
 
-        res.json({ success: true, data: row });
+        const mappedRows = await applyCustomMappings(String(modelName), [row]);
+        const formatted = formatRecord(mappedRows[0] || row);
+        res.json({ success: true, data: formatted });
       } catch (err) {
         next(err);
       }

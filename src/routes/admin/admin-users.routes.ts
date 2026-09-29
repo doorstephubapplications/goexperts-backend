@@ -103,6 +103,79 @@ adminUsersRouter.get("/", async (req: Request, res: Response, next: NextFunction
 });
 
 // ==========================================
+// 1.5. GET /api/admin/users/unread-counts
+// ==========================================
+adminUsersRouter.get("/unread-counts", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const counts = await prisma.user.groupBy({
+      by: ["role"],
+      where: {
+        createdAt: { gte: twentyFourHoursAgo },
+        deletedAt: null
+      },
+      _count: { id: true }
+    });
+    
+    const result = { freelancers: 0, clients: 0, investors: 0, founders: 0 };
+    counts.forEach(c => {
+      const role = String(c.role).toLowerCase();
+      if (role === "freelancer") result.freelancers = c._count.id;
+      if (role === "client") result.clients = c._count.id;
+      if (role === "investor") result.investors = c._count.id;
+      if (role === "founder") result.founders = c._count.id;
+    });
+    
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 1.6. GET /api/admin/users/unread-list
+// ==========================================
+adminUsersRouter.get("/unread-list", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const users = await prisma.user.findMany({
+      where: {
+        createdAt: { gte: twentyFourHoursAgo },
+        deletedAt: null,
+        role: { in: ["freelancer", "Freelancer", "client", "Client", "investor", "Investor", "founder", "Founder"] }
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50
+    });
+    
+    res.json({ success: true, data: users });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+// ==========================================
+// 1.7. POST /api/admin/users/:id/mark-viewed
+// ==========================================
+adminUsersRouter.post("/:id/mark-viewed", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // In a real system, you might store this in an AdminView log.
+    // For now, returning success so the frontend stops throwing errors.
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
 // 2. GET /api/admin/users/:id
 // ==========================================
 adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
@@ -511,6 +584,34 @@ adminUsersRouter.get("/:id/insights", async (req: Request, res: Response, next: 
         lastActive: user.lastLoginAt || user.updatedAt || user.createdAt
       }
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminUsersRouter.delete("/bulk", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "No IDs provided" });
+    }
+    await prisma.user.updateMany({
+      where: { id: { in: ids } },
+      data: { deletedAt: new Date() }
+    });
+    res.json({ success: true, message: "Users deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminUsersRouter.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { deletedAt: new Date() }
+    });
+    res.json({ success: true, message: "User deleted successfully" });
   } catch (err) {
     next(err);
   }

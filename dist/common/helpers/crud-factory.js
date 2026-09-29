@@ -31,71 +31,31 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
         let finalRows = [...rows];
         if (String(mName).toLowerCase() === "project") {
             const clientIds = Array.from(new Set(rows.map((r) => r.client).filter(Boolean)));
-            const clients = await prisma.user.findMany({ where: { id: { in: clientIds } }, select: { id: true, fullName: true, email: true } });
-            const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.fullName || c.email]));
-            const projIds = rows.map((r) => r.id);
-            const [contracts, acceptedProposals] = await Promise.all([
-                prisma.contract.findMany({ where: { projectId: { in: projIds } }, select: { projectId: true, freelancerId: true } }),
-                prisma.proposal.findMany({ where: { projectId: { in: projIds }, status: "accepted" }, select: { projectId: true, freelancerId: true } })
-            ]);
-            const projectContractMap = {};
-            contracts.forEach(c => { if (c.freelancerId)
-                projectContractMap[c.projectId] = c.freelancerId; });
-            acceptedProposals.forEach(p => { if (p.freelancerId)
-                projectContractMap[p.projectId] = p.freelancerId; });
-            const allFreelancerIds = Array.from(new Set([
-                ...rows.map((r) => r.freelancer).filter(Boolean),
-                ...Object.values(projectContractMap)
-            ]));
-            const freelancers = await prisma.user.findMany({ where: { id: { in: allFreelancerIds } }, select: { id: true, fullName: true, email: true } });
-            const freelancerMap = Object.fromEntries(freelancers.map((f) => [f.id, f.fullName || f.email]));
+            const clients = await prisma.user.findMany({ where: { id: { in: clientIds } }, select: { id: true, fullName: true } });
+            const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.fullName]));
             const catIds = Array.from(new Set(rows.map((r) => r.category).filter(Boolean)));
-            const [cats, industries] = await Promise.all([
-                prisma.skillCategory.findMany({ where: { id: { in: catIds } }, select: { id: true, name: true } }),
-                prisma.industry.findMany({ where: { id: { in: catIds } }, select: { id: true, name: true } })
-            ]);
+            const cats = await prisma.skillCategory.findMany({ where: { id: { in: catIds } }, select: { id: true, name: true } });
             const catMap = Object.fromEntries(cats.map((c) => [c.id, c.name]));
-            const indMap = Object.fromEntries(industries.map((c) => [c.id, c.name]));
-            const techIds = Array.from(new Set(rows.flatMap((r) => (Array.isArray(r.technology) ? r.technology : (r.technology || "").split(","))).map((s) => s.trim()).filter(Boolean)));
+            const techIds = Array.from(new Set(rows.flatMap((r) => (r.technology || "").split(",")).filter(Boolean)));
             const techs = await prisma.skill.findMany({ where: { id: { in: techIds } }, select: { id: true, name: true } });
             const techMap = Object.fromEntries(techs.map((c) => [c.id, c.name]));
             const moIds = Array.from(new Set(rows.flatMap((r) => [r.budgetRangeId, r.workMode]).filter(Boolean)));
-            const [mos, wms] = await Promise.all([
-                prisma.masterOption.findMany({ where: { id: { in: moIds } }, select: { id: true, label: true } }),
-                prisma.workMode.findMany({ where: { id: { in: moIds } }, select: { id: true, name: true } })
-            ]);
+            const mos = await prisma.masterOption.findMany({ where: { id: { in: moIds } }, select: { id: true, label: true } });
             const moMap = Object.fromEntries(mos.map((m) => [m.id, m.label]));
-            const wmMap = Object.fromEntries(wms.map((w) => [w.id, w.name]));
             const mapExp = (slug) => slug === "mo_experience_level_intermediate" ? "Intermediate" :
                 slug === "mo_experience_level_expert" ? "Expert" :
                     slug === "mo_experience_level_entry" ? "Entry Level" : slug;
-            finalRows = rows.map((r) => {
-                const rawTech = Array.isArray(r.technology) ? r.technology : (r.technology || "").split(",").map((s) => s.trim()).filter(Boolean);
-                const resolvedTech = rawTech.map((id) => techMap[id] || id);
-                let parsedAttachments = r.attachments;
-                if (typeof r.attachments === "string" && r.attachments.startsWith("[")) {
-                    try {
-                        parsedAttachments = JSON.parse(r.attachments);
-                    }
-                    catch { }
-                }
-                const effectiveFreelancerId = r.freelancer || projectContractMap[r.id];
-                const resolvedFreelancer = freelancerMap[effectiveFreelancerId] || (effectiveFreelancerId && effectiveFreelancerId.length < 20 ? effectiveFreelancerId : null);
-                return {
-                    ...r,
-                    client: clientMap[r.client] || r.client,
-                    freelancer: resolvedFreelancer,
-                    category: catMap[r.category] || indMap[r.category] || r.category,
-                    technology: resolvedTech,
-                    technologyText: resolvedTech.join(", "),
-                    budgetRangeId: moMap[r.budgetRangeId] || r.budgetRangeId,
-                    workMode: wmMap[r.workMode] || moMap[r.workMode] || r.workMode,
-                    experienceLevel: r.experienceLevel ? mapExp(r.experienceLevel) : r.experienceLevel,
-                    attachments: parsedAttachments,
-                };
-            });
+            finalRows = rows.map((r) => ({
+                ...r,
+                client: clientMap[r.client] || r.client,
+                category: catMap[r.category] || r.category,
+                technology: (r.technology || "").split(",").map((id) => techMap[id] || id).join(", "),
+                budgetRangeId: moMap[r.budgetRangeId] || r.budgetRangeId,
+                workMode: moMap[r.workMode] || r.workMode,
+                experienceLevel: r.experienceLevel ? mapExp(r.experienceLevel) : r.experienceLevel
+            }));
         }
-        else if (String(mName).toLowerCase() === "startupidea") {
+        else if (String(mName) === "StartupIdea") {
             const founderIds = Array.from(new Set(rows.map((r) => r.founder).filter(v => v && v.length > 20)));
             const founders = await prisma.user.findMany({ where: { id: { in: founderIds } }, select: { id: true, fullName: true, email: true } });
             const founderMap = Object.fromEntries(founders.map((c) => [c.id, c.fullName || c.email]));
@@ -116,64 +76,18 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
                 stage: stageMap[r.stage] || r.stage,
             }));
         }
-        else if (String(mName).toLowerCase() === "investment") {
+        else if (String(mName) === "Investment") {
             const investorIds = Array.from(new Set(rows.map((r) => r.investor).filter(v => v && v.length > 20)));
-            const [investors, adminUsers] = await Promise.all([
-                prisma.user.findMany({ where: { id: { in: investorIds } }, select: { id: true, fullName: true, email: true } }),
-                prisma.adminUser.findMany({ where: { id: { in: investorIds } }, select: { id: true, fullName: true, email: true } })
-            ]);
-            const investorMap = Object.fromEntries([
-                ...investors.map((c) => [c.id, c.fullName || c.email]),
-                ...adminUsers.map((a) => [a.id, a.fullName || a.email])
-            ]);
+            const investors = await prisma.user.findMany({ where: { id: { in: investorIds } }, select: { id: true, fullName: true, email: true } });
+            const investorMap = Object.fromEntries(investors.map((c) => [c.id, c.fullName || c.email]));
             const startupIds = Array.from(new Set(rows.map((r) => r.startup).filter(v => v && v.length > 20)));
             const startups = await prisma.startupIdea.findMany({ where: { id: { in: startupIds } }, select: { id: true, startup: true } });
             const startupMap = Object.fromEntries(startups.map((c) => [c.id, c.startup]));
-            finalRows = rows.map((r) => {
-                const isInvUuid = typeof r.investor === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.investor);
-                const isStartupUuid = typeof r.startup === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.startup);
-                return {
-                    ...r,
-                    investor: investorMap[r.investor] || (isInvUuid ? "Angel Investor" : (r.investor || "Investor")),
-                    startup: startupMap[r.startup] || (isStartupUuid ? "Target Venture" : (r.startup || "Startup Venture")),
-                };
-            });
-        }
-        else if (String(mName).toLowerCase() === "task") {
-            const userIds = Array.from(new Set(rows.map((r) => r.assignedTo).filter(v => v && v.length > 20)));
-            const [users, adminUsers] = await Promise.all([
-                prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true, email: true } }),
-                prisma.adminUser.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true, email: true } })
-            ]);
-            const userMap = Object.fromEntries([
-                ...users.map((u) => [u.id, u.fullName || u.email]),
-                ...adminUsers.map((a) => [a.id, a.fullName || a.email])
-            ]);
-            // Resolve Project Categories for tasks having project relation
-            const projCatIds = Array.from(new Set(rows.map((r) => r.project?.category).filter(v => v && v.length > 20)));
-            const [projCats, projInds] = await Promise.all([
-                prisma.skillCategory.findMany({ where: { id: { in: projCatIds } }, select: { id: true, name: true } }),
-                prisma.industry.findMany({ where: { id: { in: projCatIds } }, select: { id: true, name: true } })
-            ]);
-            const projCatMap = Object.fromEntries([
-                ...projCats.map((c) => [c.id, c.name]),
-                ...projInds.map((i) => [i.id, i.name])
-            ]);
-            finalRows = rows.map((r) => {
-                let hydratedProject = r.project;
-                if (r.project) {
-                    hydratedProject = {
-                        ...r.project,
-                        categoryName: projCatMap[r.project.category] || r.project.category || "General",
-                        category: projCatMap[r.project.category] || r.project.category || "General",
-                    };
-                }
-                return {
-                    ...r,
-                    project: hydratedProject,
-                    assignedTo: userMap[r.assignedTo] || (r.assignedTo ? (r.assignedTo.length > 20 ? "Unassigned" : r.assignedTo) : "Unassigned"),
-                };
-            });
+            finalRows = rows.map((r) => ({
+                ...r,
+                investor: investorMap[r.investor] || r.investor,
+                startup: startupMap[r.startup] || r.startup,
+            }));
         }
         else if (String(mName) === "Meeting") {
             const participantIds = Array.from(new Set(rows.flatMap((r) => [r.founder, r.investor]).filter(v => v && v.length > 20)));
@@ -201,61 +115,6 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
                 ...r,
                 user: userMap[r.userId] || null,
             }));
-        }
-        // Hydrate Meetings history for entities (StartupIdea, Investment, Task, Project)
-        if (["startupidea", "investment", "task", "project"].includes(String(mName).toLowerCase())) {
-            try {
-                const allMeetings = await prisma.meeting.findMany({
-                    where: { deletedAt: null },
-                    orderBy: { createdAt: "desc" }
-                });
-                const participantIds = Array.from(new Set([
-                    ...allMeetings.map((m) => m.founder),
-                    ...allMeetings.map((m) => m.investor),
-                    ...allMeetings.map((m) => m.createdBy)
-                ].filter((v) => v && v.length > 20)));
-                const [mUsers, mAdmins] = await Promise.all([
-                    prisma.user.findMany({ where: { id: { in: participantIds } }, select: { id: true, fullName: true, email: true } }),
-                    prisma.adminUser.findMany({ where: { id: { in: participantIds } }, select: { id: true, fullName: true, email: true } })
-                ]);
-                const mUserMap = Object.fromEntries([
-                    ...mUsers.map((u) => [u.id, u.fullName || u.email]),
-                    ...mAdmins.map((a) => [a.id, a.fullName || a.email])
-                ]);
-                const hydratedMeetings = allMeetings.map((m) => ({
-                    ...m,
-                    founderName: mUserMap[m.founder] || (m.founder && m.founder.length < 20 ? m.founder : "Host / Founder"),
-                    investorName: mUserMap[m.investor] || (m.investor && m.investor.length < 20 ? m.investor : "Attendee / Investor"),
-                }));
-                finalRows = finalRows.map((r) => {
-                    let matchingMeetings = [];
-                    const lowerModel = String(mName).toLowerCase();
-                    if (lowerModel === "startupidea") {
-                        matchingMeetings = hydratedMeetings.filter((m) => m.founder === r.founder || m.founder === r.id || m.investor === r.founder || m.createdBy === r.founder || (r.founder && (m.founderName === r.founder || m.investorName === r.founder)));
-                    }
-                    else if (lowerModel === "investment") {
-                        matchingMeetings = hydratedMeetings.filter((m) => m.investor === r.investor || m.founder === r.investor || m.founder === r.startup || m.investor === r.startup || m.createdBy === r.investor ||
-                            (r.investor && (m.investorName === r.investor || m.founderName === r.investor)));
-                    }
-                    else if (lowerModel === "task") {
-                        matchingMeetings = hydratedMeetings.filter((m) => m.founder === r.assignedTo || m.investor === r.assignedTo || m.createdBy === r.assignedTo ||
-                            (r.assignedTo && (m.founderName === r.assignedTo || m.investorName === r.assignedTo)) ||
-                            (r.project && (m.founder === r.project.client || m.investor === r.project.client || m.founder === r.project.freelancer || m.investor === r.project.freelancer)));
-                    }
-                    else if (lowerModel === "project") {
-                        matchingMeetings = hydratedMeetings.filter((m) => m.founder === r.client || m.investor === r.client || m.founder === r.freelancer || m.investor === r.freelancer ||
-                            (r.client && (m.founderName === r.client || m.investorName === r.client)) ||
-                            (r.freelancer && (m.founderName === r.freelancer || m.investorName === r.freelancer)));
-                    }
-                    return {
-                        ...r,
-                        meetings: matchingMeetings,
-                    };
-                });
-            }
-            catch (e) {
-                console.error("Failed to hydrate meetings:", e);
-            }
         }
         return finalRows;
     };
@@ -396,8 +255,8 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
             if (!row) {
                 return res.status(404).json({ success: false, message: "Record not found" });
             }
-            const [mapped] = await applyCustomMappings(String(modelName), [row]);
-            const formatted = formatRecord(mapped || row);
+            const mappedRows = await applyCustomMappings(String(modelName), [row]);
+            const formatted = formatRecord(mappedRows[0] || row);
             res.json({ success: true, data: formatted, row: formatted });
         }
         catch (err) {
@@ -496,7 +355,9 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
                     console.warn("[ADMIN] Failed to trigger welcome email:", err);
                 }
             }
-            res.json({ success: true, data: row });
+            const mappedRows = await applyCustomMappings(String(modelName), [row]);
+            const formatted = formatRecord(mappedRows[0] || row);
+            res.json({ success: true, data: formatted });
         }
         catch (err) {
             next(err);

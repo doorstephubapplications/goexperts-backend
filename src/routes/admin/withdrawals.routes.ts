@@ -11,6 +11,7 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get("/", listWithdrawals as any);
 router.get("/pending", listWithdrawals as any);
 router.get("/all", listWithdrawals as any);
 router.post("/:id/approve", approveWithdrawal as any);

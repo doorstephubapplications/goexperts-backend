@@ -11,7 +11,7 @@ import { listContracts, getContract, createContract, activateContract, completeC
 import { listTasks, createTask, getTask, updateTask, updateTaskStatus, addTaskComment, addTaskAttachment, getTaskTimeLogs } from './controllers/tasks.controller.js';
 import { listMilestones, getMilestone, approveMilestone, rejectMilestone, releasePayment } from './controllers/milestones.controller.js';
 import { listMeetings, scheduleMeeting, getMeeting, rescheduleMeeting, cancelMeeting, addMeetingNotes } from './controllers/meetings.controller.js';
-import { listConversations, getConversation, sendMessage, markMessageRead, markConversationRead, markConversationUnread, deleteMessage, deleteConversation, uploadAttachment } from './controllers/messages.controller.js';
+import { listConversations, getConversation, sendMessage, markMessageRead, markConversationRead, markConversationUnread, deleteMessage, deleteConversation, uploadAttachment } from '../chat/controllers/chat.controller.js';
 import { upload, chatUpload, handleUploadError } from '../../../middleware/upload.js';
 import { rejectLocalFilePaths } from '../../../middlewares/reject-local-file-paths.middleware.js';
 import { listPayments, getPayment, initiatePayment, verifyPayment, getPaymentHistory } from './controllers/payments.controller.js';

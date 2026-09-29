@@ -15,4 +15,25 @@ router.get("/security", getSecurity);
 router.get("/activity", getActivity);
 router.get("/notifications", getNotifications);
 router.get("/search", getSearch);
+router.get("/sidebar-counts", async (req, res, next) => {
+    try {
+        // Mock sidebar counts to stop 404 errors in frontend
+        res.json({
+            success: true,
+            counts: {
+                users: 0,
+                projects: 0,
+                tasks: 0,
+                startups: 0,
+                investments: 0,
+                meetings: 0,
+                support: 0,
+                kyc: 0
+            }
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 export default router;

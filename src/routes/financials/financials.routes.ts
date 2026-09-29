@@ -8,7 +8,7 @@ import {
   // Usage
   trackUsage, getUsage,
   // Wallet
-  getWallet, creditWallet, debitWallet, addWalletBonus,
+  getWallet, creditWallet, debitWallet, addWalletBonus, getWalletTransactionById,
   // Payments & Refunds
   listPayments, processRefund, listRefunds,
   // Coupons
@@ -52,6 +52,7 @@ router.get("/wallet/:userId", getWallet as any);
 router.post("/wallet/credit", creditWallet as any);
 router.post("/wallet/debit", debitWallet as any);
 router.post("/wallet/bonus", addWalletBonus as any);
+router.get("/wallet-transactions/:id", getWalletTransactionById as any);
 
 // ── Payments ──
 router.get("/payments", listPayments as any);

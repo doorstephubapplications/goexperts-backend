@@ -316,12 +316,12 @@ const searchColumnsMapping = {
     City: ["name"],
     User: ["fullName", "email", "country"],
     Project: ["title", "client", "freelancer", "category", "technology", "timeline", "status"],
-    Task: ["title", "assignedTo", "priority", "status"],
+    Task: ["title", "assignedTo"],
     HelpCategory: ["name", "slug", "shortDescription"],
     HelpArticle: ["title", "slug", "excerpt", "content"],
     HelpVideoGuide: ["title", "description"],
-    StartupIdea: ["startup", "founder", "industry", "category", "stage"],
-    Investment: ["investor", "startup", "status", "docs"],
+    StartupIdea: ["startup", "founder", "industry"],
+    Investment: ["investor", "startup"],
     Meeting: ["founder", "investor"],
     Subscription: ["plan", "user"],
     Payment: ["user", "gateway", "invoice"],
@@ -2164,47 +2164,11 @@ router.use("/admin/content/footer", authMiddleware, footerAdminRouter);
 // Custom Override for Project By ID to hydrate Relational Data
 router.get("/admin/projects/:id", authMiddleware, async (req, res, next) => {
     try {
-        const project = await prisma.project.findUnique({
-            where: { id: req.params.id },
-            include: {
-                milestones: true,
-                tasks: {
-                    select: {
-                        id: true,
-                        title: true,
-                        status: true,
-                        priority: true,
-                        progress: true,
-                        assignedTo: true,
-                        dueDate: true,
-                    }
-                },
-                proposals: {
-                    include: {
-                        freelancer: {
-                            select: {
-                                id: true,
-                                fullName: true,
-                                email: true,
-                                avatarUrl: true
-                            }
-                        }
-                    },
-                    orderBy: { createdAt: "desc" }
-                },
-                _count: {
-                    select: {
-                        proposals: true,
-                        milestones: true,
-                        tasks: true
-                    }
-                }
-            }
-        });
+        const project = await prisma.project.findUnique({ where: { id: req.params.id } });
         if (!project)
             return res.status(404).json({ success: false, message: "Project not found" });
         // Hydrate Client
-        let clientObj = project.client;
+        let clientObj = null;
         if (project.client) {
             const user = await prisma.user.findUnique({
                 where: { id: project.client },
@@ -2221,175 +2185,32 @@ router.get("/admin/projects/:id", authMiddleware, async (req, res, next) => {
         }
         // Hydrate Freelancer
         let freelancerObj = null;
-        let targetFreelancerId = project.freelancer;
-        if (!targetFreelancerId) {
-            const contract = await prisma.contract.findFirst({
-                where: { projectId: project.id },
-                select: { freelancerId: true }
-            });
-            if (contract?.freelancerId) {
-                targetFreelancerId = contract.freelancerId;
-            }
-            else {
-                const acceptedProp = await prisma.proposal.findFirst({
-                    where: { projectId: project.id, status: "accepted" },
-                    select: { freelancerId: true }
-                });
-                if (acceptedProp?.freelancerId) {
-                    targetFreelancerId = acceptedProp.freelancerId;
-                }
-            }
-        }
-        if (targetFreelancerId) {
+        if (project.freelancer) {
             const user = await prisma.user.findUnique({
-                where: { id: targetFreelancerId },
-                select: { id: true, fullName: true, email: true, freelancerProfile: { select: { titleHeadline: true } } }
+                where: { id: project.freelancer },
+                select: { id: true, fullName: true, email: true }
             });
             if (user) {
                 freelancerObj = {
                     id: user.id,
                     fullName: user.fullName,
-                    email: user.email,
-                    title: user.freelancerProfile?.titleHeadline || "Assigned Specialist"
-                };
-            }
-            else if (typeof targetFreelancerId === "string" && targetFreelancerId.length < 20) {
-                freelancerObj = {
-                    id: targetFreelancerId,
-                    fullName: targetFreelancerId,
-                    email: "",
-                    title: "Assigned Specialist"
+                    email: user.email
                 };
             }
         }
-        // Hydrate Category
-        let resolvedCategory = project.category;
-        if (project.category) {
-            const [cat, ind] = await Promise.all([
-                prisma.skillCategory.findUnique({ where: { id: project.category } }).catch(() => null),
-                prisma.industry.findUnique({ where: { id: project.category } }).catch(() => null)
-            ]);
-            resolvedCategory = cat?.name || ind?.name || project.category;
-        }
-        // Hydrate Technology Skills
+        // Convert Technology
         let techArray = [];
         if (project.technology) {
-            const rawIds = project.technology.split(",").map((s) => s.trim()).filter(Boolean);
-            const skills = await prisma.skill.findMany({ where: { id: { in: rawIds } }, select: { id: true, name: true } });
-            const skillMap = Object.fromEntries(skills.map(s => [s.id, s.name]));
-            techArray = rawIds.map(id => skillMap[id] || id);
-        }
-        // Hydrate Work Mode
-        let resolvedWorkMode = project.workMode;
-        if (project.workMode) {
-            const [wm, mo] = await Promise.all([
-                prisma.workMode.findUnique({ where: { id: project.workMode } }).catch(() => null),
-                prisma.masterOption.findUnique({ where: { id: project.workMode } }).catch(() => null)
-            ]);
-            resolvedWorkMode = wm?.name || mo?.label || project.workMode;
-        }
-        // Hydrate Budget Range
-        let resolvedBudgetRange = project.budgetRangeId;
-        if (project.budgetRangeId) {
-            const br = await prisma.masterOption.findUnique({ where: { id: project.budgetRangeId } }).catch(() => null);
-            if (br?.label)
-                resolvedBudgetRange = br.label;
-        }
-        // Format Experience Level
-        let resolvedExp = project.experienceLevel;
-        if (project.experienceLevel) {
-            if (project.experienceLevel === "mo_experience_level_intermediate")
-                resolvedExp = "Intermediate";
-            else if (project.experienceLevel === "mo_experience_level_expert")
-                resolvedExp = "Expert";
-            else if (project.experienceLevel === "mo_experience_level_entry")
-                resolvedExp = "Entry Level";
-        }
-        // Parse Attachments array if JSON
-        let parsedAttachments = project.attachments;
-        if (project.attachments) {
-            try {
-                parsedAttachments = JSON.parse(project.attachments);
-            }
-            catch {
-                parsedAttachments = project.attachments;
-            }
-        }
-        // Hydrate Task Assignees inside project.tasks
-        const taskAssigneeIds = Array.from(new Set((project.tasks || []).map((t) => t.assignedTo).filter((v) => v && v.length > 20)));
-        const [taskUsers, taskAdmins] = await Promise.all([
-            prisma.user.findMany({ where: { id: { in: taskAssigneeIds } }, select: { id: true, fullName: true, email: true } }),
-            prisma.adminUser.findMany({ where: { id: { in: taskAssigneeIds } }, select: { id: true, fullName: true, email: true } })
-        ]);
-        const taskUserMap = Object.fromEntries([
-            ...taskUsers.map((u) => [u.id, u.fullName || u.email]),
-            ...taskAdmins.map((a) => [a.id, a.fullName || a.email])
-        ]);
-        const hydratedTasks = (project.tasks || []).map((t) => ({
-            ...t,
-            assignedTo: taskUserMap[t.assignedTo] || (t.assignedTo && t.assignedTo.length > 20 ? "Unassigned" : (t.assignedTo || "Unassigned")),
-        }));
-        // Hydrate Proposals with parsed attachments
-        const hydratedProposals = (project.proposals || []).map((p) => {
-            let parsedAtt = p.attachments;
-            if (typeof p.attachments === "string" && p.attachments.startsWith("[")) {
-                try {
-                    parsedAtt = JSON.parse(p.attachments);
-                }
-                catch { }
-            }
-            return {
-                ...p,
-                attachments: parsedAtt,
-            };
-        });
-        // Hydrate Meetings for Project
-        const projUserIds = [
-            typeof clientObj === "object" ? clientObj?.id : project.client,
-            typeof freelancerObj === "object" ? freelancerObj?.id : project.freelancer,
-            ...project.proposals.map(p => p.freelancerId)
-        ].filter(Boolean);
-        let hydratedMeetings = [];
-        if (projUserIds.length > 0) {
-            const pMeetings = await prisma.meeting.findMany({
-                where: {
-                    deletedAt: null,
-                    OR: [
-                        { founder: { in: projUserIds } },
-                        { investor: { in: projUserIds } },
-                        { createdBy: { in: projUserIds } }
-                    ]
-                },
-                orderBy: { createdAt: "desc" }
-            });
-            const mUserIds = Array.from(new Set([
-                ...pMeetings.map(m => m.founder),
-                ...pMeetings.map(m => m.investor),
-            ].filter(v => v && v.length > 20)));
-            const mUsers = await prisma.user.findMany({ where: { id: { in: mUserIds } }, select: { id: true, fullName: true, email: true } });
-            const mUserMap = Object.fromEntries(mUsers.map(u => [u.id, u.fullName || u.email]));
-            hydratedMeetings = pMeetings.map(m => ({
-                ...m,
-                founderName: mUserMap[m.founder] || (m.founder && m.founder.length < 20 ? m.founder : "Host"),
-                investorName: mUserMap[m.investor] || (m.investor && m.investor.length < 20 ? m.investor : "Attendee"),
-            }));
+            techArray = project.technology.split(",").map((s) => s.trim()).filter(Boolean);
         }
         res.json({
             success: true,
             data: {
                 ...project,
-                client: clientObj,
-                freelancer: freelancerObj,
-                category: resolvedCategory,
+                client: clientObj || project.client,
+                freelancer: freelancerObj || project.freelancer,
                 technology: techArray,
-                technologyText: techArray.join(", "),
-                workMode: resolvedWorkMode,
-                budgetRangeId: resolvedBudgetRange,
-                experienceLevel: resolvedExp,
-                attachments: parsedAttachments,
-                tasks: hydratedTasks,
-                proposals: hydratedProposals,
-                meetings: hydratedMeetings,
+                technologyText: project.technology
             }
         });
     }
@@ -2403,37 +2224,19 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
         return;
     console.log("Mounting CRUD router for:", tableName, modelName);
     const searchCols = searchColumnsMapping[modelName] || ["name"];
-    const include = modelName === "Project"
-        ? {
-            milestones: true,
-            tasks: { select: { id: true, title: true, status: true, priority: true, progress: true, assignedTo: true, dueDate: true } },
-            proposals: {
-                include: {
-                    freelancer: { select: { id: true, fullName: true, email: true, avatarUrl: true } }
-                },
-                orderBy: { createdAt: "desc" }
-            },
-            _count: { select: { proposals: true, milestones: true, tasks: true } }
-        }
-        : modelName === "Task"
-            ? {
-                attachments: true,
-                checklists: true,
-                timeLogs: true,
-                comments: { orderBy: { createdAt: "desc" } },
-                project: { select: { id: true, title: true, category: true, budget: true, status: true } }
-            }
-            : modelName === "SkillCategory"
-                ? { _count: { select: { skills: true } } }
-                : modelName === "Skill"
-                    ? { category: { select: { id: true, name: true } } }
-                    : modelName === "City"
-                        ? { country: { select: { id: true, name: true } } }
-                        : modelName === "WalletTransaction"
-                            ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
-                            : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
-                                ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
-                                : undefined;
+    const include = modelName === "Task"
+        ? { attachments: true, project: { select: { id: true, title: true, category: true } } }
+        : modelName === "SkillCategory"
+            ? { _count: { select: { skills: true } } }
+            : modelName === "Skill"
+                ? { category: { select: { id: true, name: true } } }
+                : modelName === "City"
+                    ? { country: { select: { id: true, name: true } } }
+                    : modelName === "WalletTransaction"
+                        ? { wallet: { include: { user: { select: { id: true, fullName: true, email: true, role: true } } } } }
+                        : modelName === "Invoice" || modelName === "Subscription" || modelName === "Payment"
+                            ? { user: { select: { id: true, fullName: true, email: true, role: true } } }
+                            : undefined;
     // Create router using factory
     const crudRouter = createCrudRouter(modelName, searchCols, include ? { include } : {});
     // We wrap list get request to auto inject default role query filters for user roles

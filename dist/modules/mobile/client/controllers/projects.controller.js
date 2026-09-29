@@ -545,7 +545,6 @@ export const inviteFreelancer = async (req, res, next) => {
         let conv = await prisma.conversation.findFirst({
             where: {
                 deletedAt: null,
-                status: 'active',
                 OR: [
                     { userA: userId, userB: freelancerId },
                     { userA: freelancerId, userB: userId },
@@ -553,6 +552,16 @@ export const inviteFreelancer = async (req, res, next) => {
             },
         });
         if (!conv) {
+            const connection = await prisma.connection.findFirst({
+                where: {
+                    status: 'ACTIVE',
+                    OR: [
+                        { userOneId: userId, userTwoId: freelancerId },
+                        { userOneId: freelancerId, userTwoId: userId },
+                    ],
+                },
+            });
+            const convStatus = connection ? 'active' : 'PENDING';
             conv = await prisma.conversation.create({
                 data: {
                     userA: userId,
@@ -562,9 +571,19 @@ export const inviteFreelancer = async (req, res, next) => {
                     role: 'freelancer',
                     msg: messageText,
                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    status: 'active',
+                    status: convStatus,
                 },
             });
+            if (!connection) {
+                await prisma.connectionInvitation.create({
+                    data: {
+                        senderId: userId,
+                        receiverId: freelancerId,
+                        firstMessage: messageText,
+                        status: 'PENDING',
+                    },
+                }).catch(() => null);
+            }
         }
         if (conv.name?.startsWith('Project Invitation')) {
             await prisma.conversation.update({

@@ -4,6 +4,7 @@ import { successResponse } from '../../../../core/response.js';
 let configCache = {};
 let lastCacheUpdate = 0;
 const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.doorstephub.goexperts&hl=en';
 const fetchConfigsByCategory = async (category) => {
     const settings = await prisma.setting.findMany({ where: { category } });
     const map = {};
@@ -74,12 +75,19 @@ export const getRemoteConfig = async (req, res, next) => {
 export const getVersion = async (req, res, next) => {
     try {
         await refreshCache();
+        const latestVersion = configCache.app?.latestVersion || configCache.app?.currentVersion || '1.0.1';
         const vInfo = {
-            currentVersion: configCache.app?.currentVersion || '1.0.0',
+            currentVersion: latestVersion,
+            latestVersion,
+            version: latestVersion,
             minVersion: configCache.app?.minSupportedVersion || '1.0.0',
             forceUpdate: configCache.app?.forceUpdate || false,
-            releaseNotes: configCache.app?.releaseNotes || 'Bug fixes and performance improvements.',
-            apkUrl: configCache.app?.apkUrl || '',
+            softMessage: configCache.app?.softMessage || 'A new version of the app is available with improvements, new features and a better experience.',
+            forceMessage: configCache.app?.forceMessage || 'Please update to the latest version to continue using Go Experts.',
+            releaseNotes: configCache.app?.releaseNotes || 'Bug fixes, performance improvements and security updates.',
+            storeUrl: configCache.app?.storeUrl || configCache.app?.androidUrl || PLAY_STORE_URL,
+            androidUrl: configCache.app?.androidUrl || configCache.app?.storeUrl || PLAY_STORE_URL,
+            apkUrl: configCache.app?.apkUrl || PLAY_STORE_URL,
             ipaUrl: configCache.app?.ipaUrl || ''
         };
         return res.json(successResponse('Version Info', vInfo));

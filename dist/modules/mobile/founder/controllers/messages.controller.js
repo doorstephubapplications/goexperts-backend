@@ -1,81 +1,21 @@
 import path from 'path';
 import { prisma } from '../../../../config/database.js';
 import { successResponse, errorResponse } from '../../../../core/response.js';
-import { sendMessage as chatSendMessage } from '../../chat/controllers/chat.controller.js';
+import { sendMessage as chatSendMessage, resolveConversation } from '../../chat/controllers/chat.controller.js';
 import { uploadedFileUrl } from '../../../../utils/uploaded-file.js';
 const BASE_URL = process.env.BASE_URL || 'https://mobileapi.goexperts.in';
-const findOrCreateDm = async (userId, role, recipientId, projectId) => {
-    const [a, b] = [userId, recipientId].sort();
-    try {
-        const existing = await prisma.conversation.findFirst({
-            where: {
-                deletedAt: null,
-                status: 'active',
-                OR: [
-                    { userA: a, userB: b },
-                    { userA: b, userB: a },
-                ],
-            },
-        });
-        if (existing)
-            return existing;
-    }
-    catch {
-        /* pre-migration */
-    }
-    const recipient = await prisma.user.findUnique({ where: { id: recipientId } }).catch(() => null);
-    const me = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-    return prisma.conversation.create({
-        data: {
-            name: recipient?.fullName || me?.fullName || 'Chat',
-            role: recipient?.role || role,
-            status: 'active',
-            avatar: recipient?.avatarUrl || null,
-            time: new Date().toISOString(),
-            ...{
-                userA: a,
-                userB: b,
-                projectId: projectId || null,
-            },
-        },
-    });
-};
-const resolveConversation = async (viewerId, viewerRole, conversationId, recipientId, projectId) => {
-    if (conversationId) {
-        const conv = await prisma.conversation.findFirst({
-            where: { id: conversationId, deletedAt: null },
-        }).catch(() => null);
-        if (conv)
-            return conv;
-    }
-    let targetId = recipientId || conversationId;
-    if (!targetId)
-        return null;
-    let user = await prisma.user.findUnique({ where: { id: targetId } }).catch(() => null);
-    if (!user) {
-        const cp = await prisma.clientProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-        if (cp)
-            user = await prisma.user.findUnique({ where: { id: cp.userId } }).catch(() => null);
-    }
-    if (!user) {
-        const fp = await prisma.freelancerProfile.findUnique({ where: { id: targetId } }).catch(() => null);
-        if (fp)
-            user = await prisma.user.findUnique({ where: { id: fp.userId } }).catch(() => null);
-    }
-    if (user) {
-        return findOrCreateDm(viewerId, viewerRole, user.id, projectId);
-    }
-    return null;
-};
 export const listConversations = async (req, res, next) => {
     try {
         let conversations;
         try {
             conversations = await prisma.conversation.findMany({
                 where: {
-                    status: 'active',
                     deletedAt: null,
-                    OR: [{ userA: req.user.id }, { userB: req.user.id }],
+                    OR: [
+                        { status: 'active', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+                        { status: 'ACTIVE', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+                        { status: 'PENDING', OR: [{ userA: req.user.id }, { userB: req.user.id }] },
+                    ],
                 },
                 include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 } },
                 take: 50,
@@ -85,7 +25,7 @@ export const listConversations = async (req, res, next) => {
         catch {
             try {
                 conversations = await prisma.conversation.findMany({
-                    where: { status: 'active' },
+                    where: { deletedAt: null, status: { in: ['active', 'ACTIVE', 'PENDING'] } },
                     include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 } },
                     take: 50,
                 });
@@ -166,6 +106,8 @@ export const listConversations = async (req, res, next) => {
                 lastMessageAt: lastTime,
                 unread: unreadCount,
                 unreadCount: unreadCount,
+                conversationStatus: c.status,
+                isMuted: c.status === 'PENDING',
                 _sortTime: new Date(lastTime).getTime(),
             };
             delete result.userA;
