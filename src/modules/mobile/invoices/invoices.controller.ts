@@ -56,3 +56,39 @@ export const downloadInvoice = async (req: AuthRequest, res: Response, next: Nex
     }
   } catch (error) { next(error); }
 };
+
+export const downloadOwnedInvoice = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const invoice = await prisma.invoice.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+    if (!invoice) return res.status(404).json(errorResponse('Invoice not found', 'NOT_FOUND'));
+
+    if (invoice.pdfPath) {
+      return res.json(successResponse('Invoice download link', {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        url: buildPublicFileUrl(invoice.pdfPath, req),
+        downloadAvailable: true,
+      }));
+    }
+
+    try {
+      const { publicPath } = await generateInvoicePdf(invoice.id) as any;
+      return res.json(successResponse('Invoice download link generated', {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        url: buildPublicFileUrl(publicPath, req),
+        downloadAvailable: true,
+      }));
+    } catch (error) {
+      console.error('Failed to generate mobile invoice PDF:', error);
+      return res.json(successResponse('Invoice PDF is not available yet', {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        url: null,
+        downloadAvailable: false,
+      }));
+    }
+  } catch (error) {
+    next(error);
+  }
+};

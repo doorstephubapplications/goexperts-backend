@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { prisma } from '../../../../config/database.js';
 import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
-import { buildPublicFileUrl } from '../../../../utils/public-url.js';
+import { downloadOwnedInvoice } from '../../invoices/invoices.controller.js';
 
 export const listInvoices = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -30,16 +30,5 @@ export const getInvoice = async (req: AuthRequest, res: Response, next: NextFunc
 };
 
 export const downloadInvoice = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const invoice = await prisma.invoice.findFirst({ where: { id: req.params.id, userId: req.user.id } });
-    if (!invoice) return res.status(404).json(errorResponse('Invoice not found', 'NOT_FOUND'));
-    return res.json(successResponse('Invoice download link', {
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      url: buildPublicFileUrl(invoice.pdfPath, req),
-      downloadAvailable: Boolean(invoice.pdfPath),
-    }));
-  } catch (error) {
-    next(error);
-  }
+  return downloadOwnedInvoice(req, res, next);
 };
