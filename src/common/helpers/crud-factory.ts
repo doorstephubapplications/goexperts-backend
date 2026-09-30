@@ -330,7 +330,9 @@ function ensureBlogAdminAuthor(modelName: string, data: any, req: AuthenticatedR
   }
 
   if (!nextData.slug && nextData.title) {
-    nextData.slug = String(nextData.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const baseSlug = String(nextData.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const randomSuffix = Math.random().toString(36).substring(2, 6);
+    nextData.slug = `${baseSlug}-${randomSuffix}`;
   }
 
   return nextData;

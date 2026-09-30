@@ -97,11 +97,7 @@ async function buildCategoryDistribution() {
   });
 
   if (stats.length === 0) {
-    return [
-      { name: "Web Development", value: 0 },
-      { name: "Mobile App", value: 0 },
-      { name: "UI/UX Design", value: 0 },
-    ];
+    return [];
   }
 
   return stats.map(item => ({ name: item.category || "General", value: item._count }));
@@ -257,55 +253,7 @@ export class InsightsService {
       }));
     }
 
-    const [paymentsCount, usersCount, subscriptionsCount, investmentsCount] = await Promise.all([
-      prisma.payment.count(),
-      prisma.user.count(),
-      prisma.subscription.count(),
-      prisma.investment.count(),
-    ]);
-
-    return [
-      {
-        id: "REP-01",
-        name: "Monthly Revenue Report",
-        category: "Finance",
-        format: "Excel",
-        createdBy: "System",
-        status: "active",
-        schedule: "Monthly",
-        recordCount: paymentsCount,
-      },
-      {
-        id: "REP-02",
-        name: "User Cohort Growth Report",
-        category: "Users",
-        format: "PDF",
-        createdBy: "System",
-        status: "active",
-        schedule: "Weekly",
-        recordCount: usersCount,
-      },
-      {
-        id: "REP-03",
-        name: "Subscription Cancellation Analytics",
-        category: "Billing",
-        format: "CSV",
-        createdBy: "System",
-        status: "active",
-        schedule: "Daily",
-        recordCount: subscriptionsCount,
-      },
-      {
-        id: "REP-04",
-        name: "Startup Funding Pipeline Overview",
-        category: "Investment",
-        format: "PDF",
-        createdBy: "System",
-        status: "active",
-        schedule: "Weekly",
-        recordCount: investmentsCount,
-      },
-    ];
+    return [];
   }
 
   static async getAnalyticsOverview() {
