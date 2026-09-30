@@ -332,6 +332,8 @@ model Project {
   deletedAt       DateTime?      @map("deleted_at")
   industryId      String?        @map("industry_id")
   creatorRole     String?        @map("creator_role")
+  avatar          String?        @db.Text
+  coverImage      String?        @map("cover_image") @db.Text
   contracts       Contract[]
   conversations   Conversation[]
   invitations     Invitation[]

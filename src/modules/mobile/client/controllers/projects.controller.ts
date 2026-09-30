@@ -251,7 +251,7 @@ export const createProject = async (req: AuthRequest, res: Response, next: NextF
       workModeId,
       experienceLevel,
       budgetRangeId,
-      attachments,
+      attachments, avatar, coverImage,
     } = req.body;
 
     const resolvedIndustry = await resolveIndustryInput(industryId ?? industry);
@@ -289,7 +289,7 @@ export const createProject = async (req: AuthRequest, res: Response, next: NextF
       return res.status(400).json(errorResponse('Title and budget are required', 'VALIDATION_ERROR'));
     }
 
-    const project = await prisma.project.create({
+    const project = await (prisma.project.create as any)({
       data: {
         title,
         client: req.user.id,
@@ -306,6 +306,8 @@ export const createProject = async (req: AuthRequest, res: Response, next: NextF
         workMode: workModeValue,
         experienceLevel: level ?? 'intermediate',
         attachments: serializeAttachments(attachments),
+        avatar: avatar || null,
+        coverImage: coverImage || null,
         status: 'open',
       },
     });
@@ -385,7 +387,7 @@ export const updateProject = async (req: AuthRequest, res: Response, next: NextF
       experienceLevel,
       experienceLevelId,
       budgetRangeId,
-      attachments,
+      attachments, avatar, coverImage,
       status,
     } = req.body;
 
@@ -439,9 +441,11 @@ export const updateProject = async (req: AuthRequest, res: Response, next: NextF
     if (workModeValue != null) data.workMode = workModeValue;
     if (level !== undefined) data.experienceLevel = level;
     if (attachments != null) data.attachments = serializeAttachments(attachments);
+    if (avatar !== undefined) data.avatar = avatar;
+    if (coverImage !== undefined) data.coverImage = coverImage;
     if (status != null) data.status = status;
 
-    const project = await prisma.project.update({
+    const project = await (prisma.project.update as any)({
       where: { id: existing.id },
       data,
     });
@@ -505,7 +509,7 @@ export const addAttachment = async (req: AuthRequest, res: Response, next: NextF
       ...JSON.parse(current || '[]'),
       ...(Array.isArray(incoming) ? incoming : [incoming]).filter(Boolean),
     ];
-    const project = await prisma.project.update({
+    const project = await (prisma.project.update as any)({
       where: { id: existing.id },
       data: { attachments: JSON.stringify(merged) },
     });
