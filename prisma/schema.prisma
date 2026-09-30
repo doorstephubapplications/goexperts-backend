@@ -317,7 +317,7 @@ model Project {
   budgetMax       Float?         @map("budget_max")
   budgetRangeId   String?        @map("budget_range_id")
   category        String
-  technology      String
+  technology      String         @db.Text
   timeline        String?
   startDate       DateTime?      @map("start_date")
   endDate         DateTime?      @map("end_date")
