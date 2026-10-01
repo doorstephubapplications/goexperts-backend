@@ -36,6 +36,16 @@ router.post('/:id/publish', async (req, res) => {
   }
 });
 
+// POST /api/admin/content/footer/:id/unpublish — unpublish (status off)
+router.post('/:id/unpublish', async (req, res) => {
+  try {
+    const result = await service.unpublish(req.params.id);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 // Column routes
 router.post('/:id/columns', async (req, res) => {
   try {

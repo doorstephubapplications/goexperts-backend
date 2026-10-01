@@ -15,6 +15,7 @@ router.get('/', faqController.getAdminFaqs);
 router.post('/', faqController.createFaq);
 router.get('/:id', faqController.getAdminFaqById);
 router.put('/:id', faqController.updateFaq);
+router.delete('/:id', faqController.deleteFaq);
 // Quick Actions
 router.post('/:id/publish', faqController.publishFaq);
 router.post('/:id/unpublish', faqController.unpublishFaq);

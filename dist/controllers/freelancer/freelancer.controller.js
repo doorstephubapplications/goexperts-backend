@@ -32,6 +32,22 @@ function filled(...values) {
         return Boolean(v);
     }).length;
 }
+function optionText(value) {
+    if (value == null || value === "")
+        return null;
+    if (typeof value === "object") {
+        const resolved = value.industryId ??
+            value.id ??
+            value.industryName ??
+            value.name ??
+            value.label ??
+            value.value;
+        return resolved != null && String(resolved).trim()
+            ? String(resolved).trim()
+            : null;
+    }
+    return String(value).trim() || null;
+}
 const PORTFOLIO_STATUSES = ["Published", "Featured", "Case Study", "Draft", "Archived"];
 function parsePortfolioJson(raw) {
     if (!raw)
@@ -1073,11 +1089,13 @@ export const updateFreelancerProfile = async (req, res, next) => {
                 status,
             },
         });
-        const industry = body.title != null
-            ? String(body.title).trim() || null
+        const industry = body.industryId != null
+            ? optionText(body.industryId)
             : body.industry != null
-                ? String(body.industry).trim() || null
-                : existing.freelancerProfile?.industry ?? null;
+                ? optionText(body.industry)
+                : body.category != null
+                    ? optionText(body.category)
+                    : existing.freelancerProfile?.industry ?? null;
         const experience = body.experience != null
             ? String(body.experience).trim() || null
             : existing.freelancerProfile?.experience ?? null;

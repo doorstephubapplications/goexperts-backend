@@ -194,6 +194,18 @@ export class FooterAdminService {
         footerCacheTime = 0;
         return result;
     }
+    // Unpublish: marks current config as DRAFT (status off)
+    async unpublish(id) {
+        const result = await prisma.footerConfig.update({
+            where: { id },
+            data: {
+                status: 'DRAFT',
+            },
+        });
+        footerCache = null;
+        footerCacheTime = 0;
+        return result;
+    }
     // Column management
     async addColumn(configId, data) {
         return prisma.footerColumn.create({

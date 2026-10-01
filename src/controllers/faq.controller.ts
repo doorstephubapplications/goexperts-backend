@@ -39,19 +39,30 @@ export class FaqController {
 
   public async getAdminFaqs(req: Request, res: Response) {
     try {
-      const { role, categoryId, search, status, featured } = req.query;
+      const { role, categoryId, search, status, featured, page, pageSize } = req.query;
       
       const data = await faqService.getAdminFaqs({
         role: role as any,
         categoryId: categoryId as string,
         search: search as string,
         status: status as string,
-        featured: featured === 'true' ? true : featured === 'false' ? false : undefined
+        featured: featured === 'true' ? true : featured === 'false' ? false : undefined,
+        page: page !== undefined ? Number(page) : undefined,
+        pageSize: pageSize !== undefined ? Number(pageSize) : undefined
       });
       
       res.json({ success: true, data });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  }
+  
+  public async deleteFaq(req: Request, res: Response) {
+    try {
+      const data = await faqService.deleteFaq(req.params.id);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
     }
   }
   
@@ -127,7 +138,14 @@ export class FaqController {
 
   public async getAdminCategories(req: Request, res: Response) {
     try {
-      const data = await faqService.getAdminCategories();
+      const { search, role, isActive, page, pageSize } = req.query;
+      const data = await faqService.getAdminCategories({
+        search: search as string,
+        role: role as any,
+        isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+        page: page !== undefined ? Number(page) : undefined,
+        pageSize: pageSize !== undefined ? Number(pageSize) : undefined
+      });
       res.json({ success: true, data });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });

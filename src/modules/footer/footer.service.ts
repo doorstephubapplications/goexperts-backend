@@ -1,4 +1,4 @@
-﻿import { prisma } from '../../config/database.js';
+import { prisma } from '../../config/database.js';
 
 // Route allowlist for internal link validation
 export const INTERNAL_ROUTE_ALLOWLIST = new Set([
@@ -198,6 +198,19 @@ export class FooterAdminService {
       },
     });
     // Invalidate public cache
+    footerCache = null;
+    footerCacheTime = 0;
+    return result;
+  }
+
+  // Unpublish: marks current config as DRAFT (status off)
+  public async unpublish(id: string) {
+    const result = await prisma.footerConfig.update({
+      where: { id },
+      data: {
+        status: 'DRAFT',
+      },
+    });
     footerCache = null;
     footerCacheTime = 0;
     return result;

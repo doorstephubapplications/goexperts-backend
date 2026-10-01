@@ -266,18 +266,48 @@ router.put("/admin/legal-policies/:policyId", async (req, res, next) => {
     if (!dbName) return res.status(400).json({ success: false, message: "Invalid policy ID" });
 
     const existing = await prisma.cmsPage.findFirst({ where: { name: dbName } });
+    let resultData;
     if (existing) {
-      const updated = await prisma.cmsPage.update({
+      resultData = await prisma.cmsPage.update({
         where: { id: existing.id },
         data: req.body,
       });
-      res.json({ success: true, data: updated });
     } else {
-      const created = await prisma.cmsPage.create({
+      resultData = await prisma.cmsPage.create({
         data: { name: dbName, category: "legal", ...req.body },
       });
-      res.json({ success: true, data: created });
     }
+
+    // Sync matching footer legal links so footer automatically reflects the new policy title
+    try {
+      let parsed = null;
+      if (req.body.draftJson) {
+        parsed = typeof req.body.draftJson === "string" ? JSON.parse(req.body.draftJson) : req.body.draftJson;
+      } else if (req.body.publishedJson) {
+        parsed = typeof req.body.publishedJson === "string" ? JSON.parse(req.body.publishedJson) : req.body.publishedJson;
+      }
+      if (parsed?.title && typeof parsed.title === "string") {
+        const defaultLabels: Record<string, string[]> = {
+          legal: ["Terms & Conditions", "Terms and Conditions", "Terms of Service", "Legal"],
+          privacy: ["Privacy Policy", "Privacy"],
+          "refund-policy": ["Refund Policy", "Refund & Cancellation", "Refund & Cancellation Policy"],
+        };
+        const labelsToMatch = defaultLabels[policyId] || [];
+        await prisma.footerLegalLink.updateMany({
+          where: {
+            OR: [
+              { label: { in: labelsToMatch } },
+              { href: { contains: policyId } },
+            ],
+          },
+          data: { label: parsed.title },
+        });
+      }
+    } catch (syncErr) {
+      console.warn("Failed to sync footer legal link title:", syncErr);
+    }
+
+    res.json({ success: true, data: resultData });
   } catch (e) {
     next(e);
   }

@@ -2120,9 +2120,53 @@ export const getById = (modelName) => async (req, res, next) => {
                 return res.status(404).json({ success: false, message: 'Freelancer not found' });
             }
             const reg = parseRegData(user.registrationData);
-            const indArr = Array.isArray(reg.industry) ? reg.industry : (user.freelancerProfile?.industry ? String(user.freelancerProfile.industry).split(",").map(s => s.trim()) : (reg.industryIds || (reg.industry ? [String(reg.industry)] : [])));
-            const sklArr = Array.isArray(reg.skills) ? reg.skills : (user.freelancerProfile?.skills ? String(user.freelancerProfile.skills).split(",").map(s => s.trim()) : (reg.skillsIds || reg.skillIds || (reg.skills ? [String(reg.skills)] : [])));
-            const wmArr = Array.isArray(reg.workMode) ? reg.workMode : (user.freelancerProfile?.workMode ? String(user.freelancerProfile.workMode).split(",").map(s => s.trim()) : (reg.workModeIds || (reg.workMode ? [String(reg.workMode)] : [])));
+            const normalizeOptionList = (value, keys = ['id', 'name', 'label', 'value']) => {
+                if (value == null)
+                    return [];
+                const values = Array.isArray(value) ? value : String(value).includes(',') && typeof value !== 'object' ? String(value).split(',') : [value];
+                return values.map((item) => {
+                    if (item && typeof item === 'object') {
+                        for (const key of keys) {
+                            const resolved = item[key];
+                            if (resolved != null && String(resolved).trim())
+                                return String(resolved).trim();
+                        }
+                        return '';
+                    }
+                    return String(item || '').trim();
+                }).filter(Boolean);
+            };
+            const normalizeIndustryList = (value) => {
+                if (value == null)
+                    return [];
+                const values = Array.isArray(value) ? value : typeof value !== 'object' && String(value).includes(',') ? String(value).split(',') : [value];
+                const seen = new Set();
+                const result = [];
+                values.forEach((item) => {
+                    const candidates = item && typeof item === 'object'
+                        ? [item.industryName, item.name, item.label, item.value, item.industryId, item.id]
+                        : [item];
+                    candidates.forEach((candidate) => {
+                        const text = String(candidate || '').trim();
+                        const key = text.toLowerCase();
+                        if (text && !seen.has(key)) {
+                            seen.add(key);
+                            result.push(text);
+                        }
+                    });
+                });
+                return result;
+            };
+            const profileIndustryValue = user.freelancerProfile?.industry;
+            const titleValue = user.freelancerProfile?.titleHeadline || reg.titleHeadline || reg.title || '';
+            const normalizedProfileIndustry = String(profileIndustryValue || '').trim().toLowerCase();
+            const normalizedTitle = String(titleValue || '').trim().toLowerCase();
+            const industrySource = normalizedProfileIndustry && normalizedProfileIndustry !== normalizedTitle
+                ? profileIndustryValue
+                : (reg.industryIds || reg.industry);
+            const indArr = normalizeIndustryList(industrySource);
+            const sklArr = normalizeOptionList(user.freelancerProfile?.skills || reg.skillsIds || reg.skillIds || reg.skills, ['skillId', 'id', 'skillName', 'name', 'label', 'value']);
+            const wmArr = normalizeOptionList(user.freelancerProfile?.workMode || reg.workModeIds || reg.workMode, ['workModeId', 'id', 'workModeName', 'name', 'label', 'value']);
             const stId = reg.stateId || user.state || reg.state || "";
             const rawC = reg.countryId || user.country || reg.country || "";
             const cntryId = rawC ? (rawC.length === 2 ? rawC.toUpperCase() : (rawC.toLowerCase() === "india" ? "IN" : (rawC.toLowerCase() === "united states" || rawC.toLowerCase() === "usa" ? "US" : rawC))) : "IN";
@@ -2156,14 +2200,16 @@ export const getById = (modelName) => async (req, res, next) => {
             });
             const formattedIndustries = indArr.map((key) => {
                 const found = indIdMap.get(key) || indNameMap.get(key.toLowerCase().trim());
-                const realId = found ? found.id : key;
+                const realId = found ? found.id : '';
                 const realName = found ? found.name : (/^[0-9a-f-]{36}$/i.test(key) ? '' : key);
                 return {
                     id: realId,
                     name: realName || 'General',
+                    industryId: realId,
+                    industryName: realName || 'General',
                 };
             });
-            const primaryInd = formattedIndustries[0] || { id: '', name: 'General' };
+            const primaryInd = formattedIndustries[0] || { id: '', name: 'General', industryId: '', industryName: 'General' };
             const dbWorkModes = await prisma.workMode.findMany({
                 where: { OR: [{ id: { in: wmArr } }, { name: { in: wmArr } }] }
             }).catch(() => []);
@@ -2273,7 +2319,10 @@ export const getById = (modelName) => async (req, res, next) => {
                 location: locationStr || 'Remote',
                 skills: formattedSkills,
                 industry: primaryInd,
+                industryName: primaryInd.name,
+                industries: formattedIndustries,
                 workMode: primaryWm,
+                workModes: finalWorkModes,
                 hourlyRate: user.freelancerProfile?.hourlyRate ?? reg.hourlyRate ?? null,
                 experienceLevel: expObj,
                 yearsOfExperience: user.freelancerProfile?.yearsOfExperience || reg.yearsOfExperience || reg.yearsExperience || reg.years || null,
