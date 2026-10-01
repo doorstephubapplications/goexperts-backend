@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../config/database.js';
-import { sendEmail, shell } from '../services/mobile/email.service.js';
+import { sendEmail } from '../services/mobile/email.service.js';
+import { renderEmailTemplate } from '../services/settings/settings.service.js';
 
 export function startUnreadMessageDigestCron() {
   console.log('[JOB] Initializing Unread Message Digest cron...');
@@ -151,18 +152,21 @@ export function startUnreadMessageDigestCron() {
 
         // 5. Send Email
         try {
-          const emailBody = `
-            <p>Hi ${user.fullName},</p>
-            <p>You have <strong>${numMsgs} unread message${numMsgs > 1 ? 's' : ''}</strong> from <strong>${numConvs} conversation${numConvs > 1 ? 's' : ''}</strong> waiting for you on GoExperts.</p>
-            <p>Stay responsive to keep your connections engaged!</p>
-            <br/>
-            <p><a href="https://goexperts.in/dashboard/messages" style="display:inline-block;padding:10px 20px;background:#10B981;color:#fff;text-decoration:none;border-radius:5px;font-weight:bold;">View Messages</a></p>
-          `;
+          const rendered = await renderEmailTemplate("tpl_unread_digest", {
+            full_name: user.fullName || 'there',
+            unread_count: numMsgs,
+            conversation_count: numConvs,
+            messages_url: `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/messages`,
+            app_url: process.env.FRONTEND_URL || 'https://goexperts.in',
+          }).catch(() => ({
+            subject: "You have unread messages on GoExperts",
+            html: `<p>Hi ${user.fullName},</p><p>You have <strong>${numMsgs} unread message${numMsgs > 1 ? 's' : ''}</strong> from <strong>${numConvs} conversation${numConvs > 1 ? 's' : ''}</strong> on GoExperts.</p>`,
+          }));
 
           await sendEmail(
             user.email,
-            "You have unread messages on GoExperts",
-            shell("Unread Messages Summary", emailBody)
+            rendered.subject,
+            rendered.html
           );
 
           // Mark as SENT

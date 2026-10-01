@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { renderEmailTemplate } from '../settings/settings.service.js';
 const host = process.env.SMTP_HOST || 'mail.goexperts.in';
 const port = parseInt(process.env.SMTP_PORT || '465');
 const user = process.env.SMTP_USER || 'servicedesk@goexperts.in';
@@ -335,95 +336,31 @@ const featureList = (items, color) => `
 // 
 // EMAIL 1: Account Active  (sent immediately after admin approves)
 // 
-export const sendAccountActiveEmail = (to, name) => {
+export const sendAccountActiveEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Account Status Update</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your account is now active! 🎉</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox('✅', 'KYC Verification Approved', 'Your identity has been verified by our admin team. Your Go Experts account is now fully active and ready to use.', '#f0fdf4', '#22c55e', '#15803d', '#166534')}
-
-    <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.7;">
-      Welcome to Go Experts a premium platform that connects top global talent with clients, investors, and founders across every industry.
-    </p>
-
-    ${featureList([
-        { icon: '🔒', text: 'Your account is secured and verified' },
-        { icon: '🌐', text: 'Access the full platform and connect globally' },
-        { icon: '👤', text: 'Your profile is now visible to potential collaborators' },
-    ], '#22c55e')}
-
-    ${divider()}
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f8fafc;border-radius:8px;padding:1px;">
-      <tr><td style="padding:20px 24px;">
-        <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:700;">📬 What happens next?</p>
-        <p style="margin:0;color:#64748b;font-size:13px;line-height:1.7;">
-          Check your inbox for a second email from us it contains a button to <strong>activate your Free 90-Day Plan</strong>. Click it to unlock full platform access.
-        </p>
-      </td></tr>
-    </table>
-
-    <p style="margin:32px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
-      If you have any questions, reply to this email or contact us at 
-      <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>
-    </p>
-    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, '✅ Your Go Experts Account is Now Active', shell(`Great news, ${firstName}! Your KYC has been approved and your account is now active.`, body));
+    const rendered = await renderEmailTemplate("tpl_account_active", {
+        full_name: name || 'User',
+        first_name: firstName,
+        name: firstName,
+        dashboard_link: `${FRONTEND_URL}/dashboard`,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
 // 
 // EMAIL 2: Activate Free Plan  (sent at same time as Email 1)
 // 
-export const sendPlanActivationEmail = (to, name) => {
+export const sendPlanActivationEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
     const activationLink = `${FRONTEND_URL}/verify-plan?email=${encodeURIComponent(to)}`;
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Action Required</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Activate your Free Plan 🚀</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
-
-    <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.7;">
-      Congratulations on getting approved! You're eligible for a <strong>Free 90-Day Access Plan</strong>. Click the button below, verify your email with a quick OTP, and your plan activates instantly.
-    </p>
-
-    <!-- Plan Card -->
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border:1px solid #e0f2fe;background:linear-gradient(135deg,#eff6ff 0%,#f0f9ff 100%);border-radius:12px;margin-bottom:24px;">
-      <tr>
-        <td style="padding:24px;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-            <tr>
-              <td>
-                <p style="margin:0 0 4px;color:#0369a1;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Free Starter Plan</p>
-                <p style="margin:0 0 16px;color:#0f172a;font-size:22px;font-weight:800;">90 Days Free Access <span style="font-size:14px;color:#64748b;font-weight:400;">No credit card required</span></p>
-                ${featureList([
-        { icon: '💼', text: 'Post and browse unlimited projects & proposals' },
-        { icon: '🤝', text: 'Connect with verified clients, freelancers & investors' },
-        { icon: '🔒', text: 'Secure milestone-based payment escrow system' },
-        { icon: '📊', text: 'Access industry analytics and market insights' },
-    ], '#3b82f6')}
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-
-    ${ctaButton(activationLink, ' Activate My Free Plan', '#f97316')}
-
-    <p style="margin:0 0 4px;text-align:center;color:#94a3b8;font-size:12px;">Button not working? Copy and paste this link:</p>
-    <p style="margin:0;text-align:center;"><a href="${activationLink}" style="color:#3b82f6;font-size:12px;word-break:break-all;text-decoration:none;">${activationLink}</a></p>
-
-    ${divider()}
-
-    ${alertBox('⏱️', 'This link is for your account only', 'For your security, the plan activation OTP will be sent to this email address. Do not share your OTP with anyone.', '#fefce8', '#f59e0b', '#92400e', '#78350f')}
-
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, '🚀 Activate Your Free 90-Day Plan on Go Experts', shell(`Your Free 90-Day Plan is ready, ${firstName}! Click to activate now takes less than 1 minute.`, body));
+    const rendered = await renderEmailTemplate("tpl_plan_activation_promo", {
+        full_name: name || 'User',
+        first_name: firstName,
+        name: firstName,
+        activation_link: activationLink,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendFreePlanActivatedEmail = (to, name, role, planName = 'Free Plan', endDate) => {
+export const sendFreePlanActivatedEmail = async (to, name, role, planName = 'Free Plan', endDate) => {
     const firstName = (name || 'User').split(' ')[0];
     const roleLabel = (role || 'user').replace(/[_-]+/g, ' ').split(' ').filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
     const dashboardPath = String(role || '').toLowerCase().includes('client') || String(role || '').toLowerCase().includes('business')
@@ -437,100 +374,32 @@ export const sendFreePlanActivatedEmail = (to, name, role, planName = 'Free Plan
     const validUntil = endDate
         ? new Date(endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
         : 'your plan period';
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Plan Activated</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your Free Plan is Active</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox('✅', 'KYC Approved + Free Plan Activated', `Your KYC is verified and your ${planName} for ${roleLabel} has been activated automatically. No payment or manual activation is required.`, '#f0fdf4', '#22c55e', '#15803d', '#166534')}
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border:1px solid #e0f2fe;background:linear-gradient(135deg,#eff6ff 0%,#f8fafc 100%);border-radius:12px;margin:0 0 24px;">
-      <tr><td style="padding:24px;">
-        <p style="margin:0 0 4px;color:#0369a1;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Activated Plan</p>
-        <p style="margin:0 0 8px;color:#0f172a;font-size:22px;font-weight:800;">${planName}</p>
-        <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">Valid until <strong>${validUntil}</strong>.</p>
-      </td></tr>
-    </table>
-
-    ${featureList([
-        { icon: '1', text: 'Access your role dashboard and core workspace tools' },
-        { icon: '2', text: 'Connect with verified users across the Go Experts network' },
-        { icon: '3', text: 'Use platform features with your verified account status' },
-        { icon: '4', text: 'Upgrade anytime when you need advanced limits and premium features' },
-    ], '#3b82f6')}
-
-    ${ctaButton(dashboardLink, 'Go to My Dashboard', '#E30613')}
-
-    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
-      Need help? Contact us at <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
-    </p>
-    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, 'Your Go Experts Free Plan is Active', shell(`Your ${planName} is active. Start using your verified Go Experts account today.`, body));
+    const rendered = await renderEmailTemplate("tpl_free_plan_activated", {
+        full_name: name || 'User',
+        first_name: firstName,
+        name: firstName,
+        role: roleLabel,
+        plan_name: planName,
+        valid_until: validUntil,
+        dashboard_link: dashboardLink,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
 // 
 // EMAIL 3: OTP Code  (sent when user clicks "Activate" button)
 // 
-export const sendPlanActivationOtpEmail = (to, token) => {
+export const sendPlanActivationOtpEmail = async (to, token) => {
     console.log(`\n======================================================================`);
     console.log(`🔑 [PLAN ACTIVATION OTP DISPATCH]`);
     console.log(`   Recipient: ${to}`);
     console.log(`   OTP Code:  ${token}`);
     console.log(`======================================================================\n`);
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Verification Code</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your OTP is here 🔑</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Use the code below to verify your email and activate your Go Experts free plan.</p>
-
-    <!-- OTP Box -->
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-      <tr>
-        <td align="center" style="background:#0f172a;border-radius:12px;padding:32px 24px;">
-          <p style="margin:0 0 12px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">One-Time Password</p>
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
-            <tr>
-              ${token.split('').map(digit => `
-              <td style="padding:0 4px;">
-                <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
-              </td>`).join('')}
-            </tr>
-          </table>
-          <p style="margin:16px 0 0;color:#475569;font-size:12px;">
-             Expires in <strong style="color:#f59e0b;">10 minutes</strong>
-          </p>
-        </td>
-      </tr>
-    </table>
-
-    <!-- Steps -->
-    <p style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:700;">How to use this code:</p>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:24px;">
-      ${[
-        ['1', '#f97316', 'Go back to the verification page in your browser'],
-        ['2', '#3b82f6', 'Enter the 6-digit code shown above'],
-        ['3', '#22c55e', 'Click Verify your plan activates instantly!'],
-    ].map(([num, color, text]) => `
-      <tr>
-        <td style="padding:6px 0;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-            <tr>
-              <td style="width:32px;vertical-align:top;padding-right:12px;">
-                <div style="width:26px;height:26px;background-color:${color};border-radius:50%;text-align:center;line-height:26px;color:#fff;font-size:12px;font-weight:800;">${num}</div>
-              </td>
-              <td style="vertical-align:middle;">
-                <p style="margin:0;color:#374151;font-size:14px;">${text}</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>`).join('')}
-    </table>
-
-    ${alertBox('🔒', 'Never share this code', "Go Experts will NEVER ask for your OTP via phone, chat, or any other method. If someone asks for it, it's a scam.", '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
-
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, ' Your Plan Activation Code Go Experts', shell(`Your OTP is ${token}. Use it to activate your Go Experts free plan. Expires in 10 minutes.`, body));
+    const rendered = await renderEmailTemplate("tpl_plan_activation_otp", {
+        full_name: to.split('@')[0],
+        otp_code: token,
+        token,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
 // 
 // EMAIL 4: Dynamic Industry Welcome  (sent after OTP verified & plan activated)
@@ -667,122 +536,68 @@ export const sendDynamicIndustryEmail = (to, name, role) => {
   `;
     return sendEmail(to, `🎯 Welcome aboard, ${firstName}! Here's how to get started`, shell(`Your Go Experts free plan is active! Here's everything you need to hit the ground running.`, body));
 };
-//  Utility emails upgraded to premium shell
-export const sendWelcomeEmail = (to, name) => {
+//  Utility emails upgraded to dynamic database-driven templates
+export const sendWelcomeEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Welcome</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Welcome to GoExperts! 👋</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
-    <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.7;">
-      We're thrilled to have you join the GoExperts community the premier global talent platform connecting freelancers, clients, investors, and founders.
-    </p>
-    ${ctaButton(`${FRONTEND_URL}/dashboard`, '🚀 Go to Dashboard', '#f97316')}
-    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
-      Questions? Reach us at <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>
-    </p>
-    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, '👋 Welcome to GoExperts!', shell(`Welcome aboard, ${firstName}! Your GoExperts journey starts now.`, body));
+    const rendered = await renderEmailTemplate("tpl_welcome", {
+        full_name: name || 'User',
+        firstName,
+        role: 'Member',
+        dashboard_link: `${FRONTEND_URL}/dashboard`,
+        dashboard_url: `${FRONTEND_URL}/dashboard`,
+        app_url: FRONTEND_URL,
+        app_name: 'Go Experts',
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendPasswordResetEmail = (to, token) => {
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Security</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Password Reset Request 🔑</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">We received a request to reset your GoExperts password. Use the code below to securely verify your identity.</p>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-      <tr>
-        <td align="center" style="background:#0f172a;border-radius:12px;padding:28px 24px;">
-          <p style="margin:0 0 10px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">Reset Code</p>
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
-            <tr>
-              ${token.split('').map(digit => `
-              <td style="padding:0 4px;">
-                <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
-              </td>`).join('')}
-            </tr>
-          </table>
-          <p style="margin:14px 0 0;color:#475569;font-size:12px;"> Expires in <strong style="color:#f59e0b;">10 minutes</strong></p>
-        </td>
-      </tr>
-    </table>
-    ${alertBox('🔒', 'Did not request this?', 'If you did not request a password reset, you can safely ignore this email. Your account remains secure.', '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, '🔑 Password Reset Request GoExperts', shell('A password reset was requested for your GoExperts account.', body));
+export const sendPasswordResetEmail = async (to, token) => {
+    const rendered = await renderEmailTemplate("tpl_password_reset", {
+        full_name: to.split('@')[0],
+        reset_link: `${FRONTEND_URL}/reset-password?token=${token}`,
+        otp_code: token,
+        token,
+        expiry_time: '10 minutes',
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendVerificationEmail = (to, token) => {
+export const sendVerificationEmail = async (to, token) => {
     console.log(`\n======================================================================`);
     console.log(`🔑 [MOBILE OTP DISPATCH]`);
     console.log(`   Recipient: ${to}`);
     console.log(`   OTP Code:  ${token}`);
     console.log(`======================================================================\n`);
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Verification</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email 📧</h1>
-    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Use the one-time code below to verify your GoExperts account.</p>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-      <tr>
-        <td align="center" style="background:#0f172a;border-radius:12px;padding:28px 24px;">
-          <p style="margin:0 0 10px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">Verification Code</p>
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
-            <tr>
-              ${token.split('').map(digit => `
-              <td style="padding:0 4px;">
-                <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
-              </td>`).join('')}
-            </tr>
-          </table>
-          <p style="margin:14px 0 0;color:#475569;font-size:12px;"> Expires in <strong style="color:#f59e0b;">10 minutes</strong></p>
-        </td>
-      </tr>
-    </table>
-    ${alertBox('', 'Never share this code', 'GoExperts will NEVER ask for your OTP via phone, chat, or any other method.', '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, '📧 Verify Your Email GoExperts', shell(`Your GoExperts verification code is ${token}. Expires in 10 minutes.`, body));
+    const rendered = await renderEmailTemplate("tpl_verification_link", {
+        full_name: to.split('@')[0],
+        verification_link: `${FRONTEND_URL}/verify-email?token=${token}`,
+        otp_code: token,
+        token,
+        app_url: FRONTEND_URL,
+        app_name: 'Go Experts',
+        company_name: 'Go Experts',
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendAccountDeletedEmail = (to, name) => {
+export const sendAccountDeletedEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Account Update</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Account Deleted</h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      This is to confirm that your GoExperts account and all associated data have been permanently deleted as requested.
-    </p>
-    ${alertBox('', 'Was this a mistake?', 'If you did not request this deletion, contact our support team immediately at servicedesk@goexperts.in', '#fef2f2', '#ef4444', '#991b1b', '#7f1d1d')}
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, 'Your GoExperts Account Has Been Deleted', shell('Your GoExperts account has been permanently deleted.', body));
+    const rendered = await renderEmailTemplate("tpl_account_deleted", {
+        full_name: name || 'User',
+        firstName,
+        support_email: 'servicedesk@goexperts.in',
+        deletion_date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendWelcomeBonusEmail = (to, name, amount) => {
+export const sendWelcomeBonusEmail = async (to, name, amount) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">KYC Approved</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Welcome Bonus Credited! </h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      Congratulations! Your KYC verification is complete. As a thank you for joining Go Experts, we have credited a <strong>Welcome Bonus of ${amount}</strong> directly to your wallet.
-    </p>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-      <tr>
-        <td align="center" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
-          <p style="margin:0 0 4px;color:#64748b;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Bonus Amount</p>
-          <div style="color:#10b981;font-size:32px;font-weight:800;">${amount}</div>
-        </td>
-      </tr>
-    </table>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
-      <tr>
-        <td align="center">
-          <a href="${FRONTEND_URL}/dashboard" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">Go to Dashboard</a>
-        </td>
-      </tr>
-    </table>
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, ' Welcome Bonus Credited GoExperts', shell(`Your KYC is approved and your ${amount} welcome bonus is in your wallet!`, body));
+    const rendered = await renderEmailTemplate("tpl_welcome_bonus", {
+        full_name: name || 'User',
+        firstName,
+        bonus_amount: amount,
+        amount,
+        dashboard_url: `${FRONTEND_URL}/dashboard`,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
 const escapeHtml = (value) => String(value || '')
     .replace(/&/g, '&amp;')
@@ -809,16 +624,12 @@ const kycStatusPill = (status) => {
             : { bg: '#fef3c7', color: '#92400e' };
     return `<span style="display:inline-block;background:${styles.bg};color:${styles.color};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:5px 10px;border-radius:999px;">${formatKycStatus(normalized)}</span>`;
 };
-export const sendKycDocumentStatusEmail = (to, name, role, documents, overallStatus) => {
+export const sendKycDocumentStatusEmail = async (to, name, role, documents, overallStatus) => {
     const firstName = escapeHtml((name || 'User').split(' ')[0]);
     const roleName = escapeHtml(role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase() : 'Member');
     const safeDocuments = documents.filter((doc) => doc && doc.label && doc.status);
     const rejectedDocs = safeDocuments.filter((doc) => String(doc.status).toLowerCase() === 'rejected');
-    const verifiedDocs = safeDocuments.filter((doc) => String(doc.status).toLowerCase() === 'verified');
     const statusLabel = rejectedDocs.length ? 'Action Required' : overallStatus ? escapeHtml(formatKycStatus(overallStatus)) : 'KYC Updated';
-    const subject = rejectedDocs.length
-        ? 'Action required: Re-upload rejected KYC document(s)'
-        : 'Your KYC document status has been updated';
     const rowsHtml = safeDocuments.map((doc) => {
         const normalized = String(doc.status || '').toLowerCase();
         const isRejected = normalized === 'rejected';
@@ -833,232 +644,99 @@ export const sendKycDocumentStatusEmail = (to, name, role, documents, overallSta
         <td align="right" style="padding:16px;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:nowrap;">${kycStatusPill(normalized)}</td>
       </tr>`;
     }).join('');
-    const rejectedList = rejectedDocs.length ? featureList(rejectedDocs.map((doc) => ({ icon: '!', text: `<strong>${escapeHtml(doc.label)}</strong> needs to be re-uploaded${doc.reason ? `: ${escapeHtml(doc.reason)}` : '.'}` })), '#ef4444') : '';
-    const verifiedList = verifiedDocs.length ? featureList(verifiedDocs.map((doc) => ({ icon: 'OK', text: `<strong>${escapeHtml(doc.label)}</strong> has been verified.` })), '#22c55e') : '';
-    const body = `
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:8px;">
-      <tr><td>${badge(roleName, '#eff6ff', '#1d4ed8')}</td></tr>
-    </table>
-    <h1 style="margin:12px 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">KYC document status update</h1>
-    <p style="margin:0 0 22px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox(rejectedDocs.length ? '!' : 'OK', statusLabel, rejectedDocs.length
-        ? 'Some KYC document(s) were rejected by our admin team. Please review the reason and re-upload the rejected document(s) to continue verification.'
-        : 'Your submitted KYC document(s) were reviewed by our admin team. The verified document(s) are listed below.', rejectedDocs.length ? '#fef2f2' : '#f0fdf4', rejectedDocs.length ? '#ef4444' : '#22c55e', rejectedDocs.length ? '#991b1b' : '#15803d', rejectedDocs.length ? '#7f1d1d' : '#166534')}
-
-    ${rejectedList ? `<p style="margin:0 0 12px;color:#0f172a;font-size:14px;font-weight:700;">Documents to re-upload</p>${rejectedList}${divider()}` : ''}
-    ${verifiedList ? `<p style="margin:0 0 12px;color:#0f172a;font-size:14px;font-weight:700;">Verified documents</p>${verifiedList}${divider()}` : ''}
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border:1px solid #e2e8f0;border-radius:12px;border-collapse:separate;overflow:hidden;margin:0 0 24px;">
-      <tr>
-        <td style="background:#f8fafc;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:12px 16px;border-bottom:1px solid #e2e8f0;">Document</td>
-        <td align="right" style="background:#f8fafc;color:#475569;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:12px 16px;border-bottom:1px solid #e2e8f0;">Status</td>
-      </tr>
-      ${rowsHtml}
-    </table>
-
-    ${rejectedDocs.length ? ctaButton(`${FRONTEND_URL}/profile`, 'Re-upload KYC Documents', '#E30613') : ctaButton(`${FRONTEND_URL}/profile`, 'View KYC Status', '#22c55e')}
-
-    <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:600;">Need help?</p>
-    <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">
-      Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>. Our team will help you complete verification.
-    </p>
-    <p style="margin:16px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, subject, shell(`Your Go Experts KYC document status was updated. ${rejectedDocs.length ? 'Please re-upload rejected document(s).' : 'Reviewed document(s) are listed inside.'}`, body));
+    const rendered = await renderEmailTemplate("tpl_kyc_document_status", {
+        full_name: name || 'User',
+        firstName,
+        role: roleName,
+        overall_status: statusLabel,
+        status_label: statusLabel,
+        document_summary: `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">${rowsHtml}</table>`,
+        documents_list: `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">${rowsHtml}</table>`,
+        kyc_link: `${FRONTEND_URL}/profile`,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendPlanExpiredEmail = (to, name, role, planName, expiredAt) => {
+export const sendPlanExpiredEmail = async (to, name, role, planName, expiredAt) => {
     const firstName = (name || 'User').split(' ')[0];
     const roleName = role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase() : 'Member';
     const safePlanName = planName || 'your subscription';
     const expiredDate = expiredAt ? new Date(expiredAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'recently';
-    const body = `
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom:8px;">
-      <tr><td>${badge(roleName, '#fff7ed', '#c2410c')}</td></tr>
-    </table>
-    <h1 style="margin:12px 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Your plan has expired</h1>
-    <p style="margin:0 0 22px;color:#64748b;font-size:15px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox('⚠️', 'Upgrade required', `Your <strong>${safePlanName}</strong> plan expired on <strong>${expiredDate}</strong>. Your account access is limited until you upgrade or renew your plan.`, '#fff7ed', '#f97316', '#c2410c', '#9a3412')}
-
-    <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.7;">
-      You can still sign in to Go Experts to review your account and complete your upgrade. After upgrading, your account will be reactivated automatically and full platform access will resume.
-    </p>
-
-    ${featureList([
-        { icon: '🔑', text: 'Login remains available for account and billing access' },
-        { icon: '🔄', text: 'Upgrade or renew your plan to reactivate your workspace' },
-        { icon: '🛡️', text: 'Your profile, projects, and data remain safely stored' },
-    ], '#f97316')}
-
-    ${ctaButton(`${FRONTEND_URL}/pricing`, 'Upgrade Your Plan', '#E30613')}
-
-    <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:600;">Need help choosing a plan?</p>
-    <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">
-      Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a> and our team will help you reactivate your account.
-    </p>
-    <p style="margin:16px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, 'Your Go Experts plan has expired ⚠️ upgrade required', shell(`Your ${safePlanName} plan has expired. Please upgrade to continue using Go Experts.`, body));
+    const rendered = await renderEmailTemplate("tpl_subscription_expired", {
+        full_name: name || 'User',
+        firstName,
+        role: roleName,
+        plan_name: safePlanName,
+        expiry_date: expiredDate,
+        pricing_link: `${FRONTEND_URL}/pricing`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendCashbackEmail = (to, name, amount, planName) => {
+export const sendCashbackEmail = async (to, name, amount, planName) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Monthly Reward</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Cashback Credited! </h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      Your monthly 5% cashback for the <strong>${planName}</strong> plan has just been credited to your GoExperts Wallet!
-    </p>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-      <tr>
-        <td align="center" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
-          <p style="margin:0 0 4px;color:#64748b;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Cashback Amount</p>
-          <div style="color:#10b981;font-size:32px;font-weight:800;">${amount}</div>
-        </td>
-      </tr>
-    </table>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
-      <tr>
-        <td align="center">
-          <a href="${FRONTEND_URL}/dashboard" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">Check Wallet Balance</a>
-        </td>
-      </tr>
-    </table>
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, ' Your Monthly Cashback is Here GoExperts', shell(`You just received ${amount} in your GoExperts wallet!`, body));
+    const rendered = await renderEmailTemplate("tpl_monthly_cashback", {
+        full_name: name || 'User',
+        firstName,
+        plan_name: planName,
+        amount,
+        cashback_amount: amount,
+        dashboard_url: `${FRONTEND_URL}/dashboard`,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendReferralCashbackEmail = (to, name, amount, friendName, balanceAfter) => {
+export const sendReferralCashbackEmail = async (to, name, amount, friendName, balanceAfter) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Referral Reward</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">You earned cashback! 💰</h1>
-    <p style="margin:0 0 16px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      Great news! Your friend <strong>${friendName}</strong> just purchased a subscription plan. We've added 5% of their plan value to your wallet as a thank you for referring them.
-    </p>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-      <tr>
-        <td align="center" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:24px;">
-          <p style="margin:0 0 4px;color:#166534;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Cashback Credited</p>
-          <div style="color:#15803d;font-size:32px;font-weight:800;">${amount}</div>
-          <p style="margin:8px 0 0;color:#166534;font-size:13px;">New Wallet Balance: ${balanceAfter}</p>
-        </td>
-      </tr>
-    </table>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:24px 0;">
-      <tr>
-        <td align="center">
-          <a href="${FRONTEND_URL}/dashboard" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;box-shadow:0 4px 6px rgba(227,6,19,0.25);">View Wallet</a>
-        </td>
-      </tr>
-    </table>
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-  `;
-    return sendEmail(to, `You've earned ₹${amount} cashback! 💰`, shell(`You just received ₹${amount} in your wallet for referring ${friendName}!`, body));
+    const rendered = await renderEmailTemplate("tpl_referral_cashback", {
+        full_name: name || 'User',
+        firstName,
+        friend_name: friendName,
+        cashback_amount: amount,
+        amount,
+        new_balance: balanceAfter,
+        wallet_url: `${FRONTEND_URL}/dashboard`,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendSubscriptionReminderEmail = (to, name, planName, daysLeft, formattedExpiration, renewLink) => {
+export const sendSubscriptionReminderEmail = async (to, name, planName, daysLeft, formattedExpiration, renewLink) => {
     const firstName = (name || 'User').split(' ')[0];
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Subscription Reminder</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;">Your plan expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}</h1>
-    <p style="margin:0 0 16px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      Your <strong>${planName}</strong> is expiring on <strong>${formattedExpiration}</strong>.
-      Renew now to maintain uninterrupted access to GoExperts.
-    </p>
-    <p style="margin:24px 0;text-align:center;">
-      <a href="${renewLink}" style="display:inline-block;background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;">Renew Subscription</a>
-    </p>
-    <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, `Your subscription expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`, shell(`Your ${planName} expires soon! Renew now.`, body));
+    const rendered = await renderEmailTemplate("tpl_subscription_expiry_warning", {
+        full_name: name || 'User',
+        firstName,
+        plan_name: planName,
+        days_remaining: daysLeft,
+        expiry_date: formattedExpiration,
+        renewal_link: renewLink,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendKycReminderEmail = (to, name) => {
+export const sendKycReminderEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
-    const kycLink = `${FRONTEND_URL}/kyc`;
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Verification Required</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;line-height:1.2;">Complete Your KYC Verification 📋</h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox('⚠️', 'KYC Pending', 'We noticed that your KYC verification is incomplete. Submitting your verification documents is required to fully activate your account.', '#fffbeb', '#f59e0b', '#b45309', '#92400e')}
-
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      To keep Go Experts secure and trustworthy for all members, verified KYC is required to unlock all platform privileges:
-    </p>
-
-    ${featureList([
-        { icon: '🛡️', text: 'Get the Verified badge on your profile' },
-        { icon: '💼', text: 'Apply for projects, submit proposals, or connect with partners' },
-        { icon: '💳', text: 'Enable secure escrow payments and instant payouts' },
-    ], '#f59e0b')}
-
-    ${ctaButton(kycLink, 'Complete KYC Verification →', '#E30613')}
-
-    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
-      Need help with documents? Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
-    </p>
-    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, '⚠️ Action Required: Complete Your KYC on Go Experts', shell(`Hi ${firstName}, please complete your KYC verification on Go Experts.`, body));
+    const rendered = await renderEmailTemplate("tpl_kyc_reminder", {
+        full_name: name || 'User',
+        firstName,
+        kyc_link: `${FRONTEND_URL}/kyc`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendProfileReminderEmail = (to, name) => {
+export const sendProfileReminderEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
-    const profileLink = `${FRONTEND_URL}/dashboard/profile`;
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Profile Incomplete</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;line-height:1.2;">Finish Setting Up Your Profile 🚀</h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox('💡', 'Profile Action Needed', 'Your profile is currently incomplete. Completing your profile details significantly improves your visibility and matching rate.', '#eff6ff', '#3b82f6', '#1d4ed8', '#1e40af')}
-
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      Profiles with complete details and portfolio items receive up to <strong>5x more engagement</strong> and opportunities on Go Experts.
-    </p>
-
-    ${featureList([
-        { icon: '✨', text: 'Stand out with full skills and bio information' },
-        { icon: '🎯', text: 'Receive personalized recommendations matched to your expertise' },
-        { icon: '📈', text: 'Increase visibility to clients, investors, and partners' },
-    ], '#3b82f6')}
-
-    ${ctaButton(profileLink, 'Complete My Profile →', '#E30613')}
-
-    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
-      Have questions? Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
-    </p>
-    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, 'Action Required: Complete Your Go Experts Profile', shell(`Hi ${firstName}, please complete your profile details on Go Experts.`, body));
+    const rendered = await renderEmailTemplate("tpl_profile_reminder", {
+        full_name: name || 'User',
+        firstName,
+        profile_link: `${FRONTEND_URL}/dashboard/profile`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };
-export const sendRegistrationReminderEmail = (to, name) => {
+export const sendRegistrationReminderEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
-    const loginLink = `${FRONTEND_URL}/login`;
-    const body = `
-    <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Account Setup</p>
-    <h1 style="margin:0 0 8px;color:#0f172a;font-size:24px;font-weight:800;line-height:1.2;">Complete Your Registration 🌟</h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">Hi <strong>${firstName}</strong>,</p>
-
-    ${alertBox('🔔', 'Registration Incomplete', 'We noticed that your registration on Go Experts is pending. Please complete your registration to activate your account and start using the platform.', '#f8fafc', '#64748b', '#334155', '#475569')}
-
-    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">
-      Completing your registration gives you immediate access to top talent, verified partners, and tailored opportunities.
-    </p>
-
-    ${featureList([
-        { icon: '🔑', text: 'Activate your secure Go Experts login' },
-        { icon: '🌐', text: 'Connect with verified professionals and clients worldwide' },
-        { icon: '🚀', text: 'Unlock your 90-day platform access' },
-    ], '#64748b')}
-
-    ${ctaButton(loginLink, 'Resume Registration →', '#E30613')}
-
-    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;line-height:1.6;">
-      Need help? Reply to this email or contact <a href="mailto:servicedesk@goexperts.in" style="color:#f97316;text-decoration:none;">servicedesk@goexperts.in</a>.
-    </p>
-    <p style="margin:8px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
-  `;
-    return sendEmail(to, 'Action Required: Complete Your Go Experts Registration', shell(`Hi ${firstName}, please finish your registration on Go Experts.`, body));
+    const rendered = await renderEmailTemplate("tpl_registration_reminder", {
+        full_name: name || 'User',
+        firstName,
+        login_link: `${FRONTEND_URL}/login`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
 };

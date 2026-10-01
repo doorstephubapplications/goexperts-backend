@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { upload } from "../../middlewares/upload.middleware.js";
 import {
   createBackupSettings,
   deleteBackupSettings,
@@ -44,6 +45,8 @@ import {
   saveIndustryColorsSettings,
   getMobileAppLinksSettings,
   saveMobileAppLinksSettings,
+  getEmailBrandingSettings,
+  saveEmailBrandingSettings,
 } from "../../controllers/settings/settings.controller.js";
 
 const router = Router();
@@ -120,6 +123,22 @@ router.get("/email/templates", getEmailTemplates);
 router.post("/email/templates", saveEmailTemplate);
 router.put("/email/templates", saveEmailTemplate);
 router.delete("/email/templates/:id", deleteEmailTemplate);
+router.get("/email-branding", getEmailBrandingSettings);
+router.put("/email-branding", saveEmailBrandingSettings);
+router.post("/email-branding/logo", upload.single("file"), (req: any, res: any) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No logo file provided" });
+  }
+  const host = req.get("host") || "localhost:5001";
+  const protocol = req.protocol || "http";
+  const fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  return res.json({
+    success: true,
+    message: "Logo uploaded successfully",
+    url: fileUrl,
+    filename: req.file.filename,
+  });
+});
 
 // SMS Gateway
 router.get("/sms", getSmsSettings);

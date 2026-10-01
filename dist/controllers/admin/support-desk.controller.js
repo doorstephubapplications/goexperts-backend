@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database.js";
 import { getIo } from "../../socket/index.js";
-import { sendEmail, shell } from "../../services/mobile/email.service.js";
+import { sendEmail } from "../../services/mobile/email.service.js";
+import { renderEmailTemplate } from "../../services/settings/settings.service.js";
 import { emitNotification } from "../../services/notifications/notification-events.service.js";
 // Helper to attach requester info to tickets
 async function attachRequesters(tickets) {
@@ -117,13 +118,19 @@ export const updateAdminTicket = async (req, res, next) => {
                     actionUrl: "/dashboard/support"
                 }).catch(console.error);
                 if (u.email) {
-                    const body = `
-            <p>Hi ${u.fullName || 'there'},</p>
-            <p>Your support ticket <b>#${ticket.ticketNumber?.slice(-8) || 'ticket'}</b> regarding "${ticket.subject}" has been marked as <b>${status}</b>.</p>
-            <p>If you have any further questions or if this issue was not fully resolved, you can reopen it by replying to the ticket in your dashboard.</p>
-            <a href="https://goexperts.com/dashboard/support" style="display:inline-block;padding:10px 20px;background:#6366f1;color:#fff;text-decoration:none;border-radius:6px;margin-top:15px;">View Ticket</a>
-          `;
-                    await sendEmail(u.email, `Support Ticket ${status} - Go Experts`, shell(`Support Ticket #${ticket.ticketNumber?.slice(-8) || 'ticket'} ${status}`, body)).catch(console.error);
+                    const rendered = await renderEmailTemplate("tpl_support_ticket_status", {
+                        full_name: u.fullName || 'there',
+                        ticket_number: ticket.ticketNumber?.slice(-8) || 'ticket',
+                        subject: ticket.subject || 'your issue',
+                        status,
+                        status_lower: status.toLowerCase(),
+                        support_url: `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/support`,
+                        app_url: process.env.FRONTEND_URL || 'https://goexperts.in',
+                    }).catch(() => ({
+                        subject: `Support Ticket ${status} - Go Experts`,
+                        html: `<p>Hi ${u.fullName || 'there'},</p><p>Your support ticket has been marked as <b>${status}</b>.</p>`,
+                    }));
+                    await sendEmail(u.email, rendered.subject, rendered.html).catch(console.error);
                 }
             }
         }

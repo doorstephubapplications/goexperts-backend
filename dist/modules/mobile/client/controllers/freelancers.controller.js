@@ -135,6 +135,17 @@ export const listFreelancers = async (req, res, next) => {
             const skillProfileFilters = matchingSkills.flatMap((skill) => [
                 { skills: { contains: skill.name } },
             ]);
+            const matchingIndustries = q.length >= 2
+                ? await prisma.industry.findMany({
+                    where: { name: { contains: q }, status: 'active' },
+                    select: { id: true, name: true },
+                    take: 10,
+                }).catch(() => [])
+                : [];
+            const industryProfileFilters = matchingIndustries.flatMap((ind) => [
+                { industryId: ind.id },
+                { industry: { contains: ind.name } }
+            ]);
             const [matchingUsers, matchingProfiles] = await Promise.all([
                 prisma.user.findMany({
                     where: {
@@ -154,7 +165,9 @@ export const listFreelancers = async (req, res, next) => {
                         OR: [
                             { titleHeadline: { contains: q } },
                             { skills: { contains: q } },
+                            { industry: { contains: q } },
                             ...skillProfileFilters,
+                            ...industryProfileFilters,
                         ],
                     },
                     select: { userId: true },

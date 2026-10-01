@@ -223,7 +223,7 @@ export const listProjects = async (req, res, next) => {
 };
 export const createProject = async (req, res, next) => {
     try {
-        const { title, industry, industryId, timeline, deadline, startDate, endDate, description, workMode, workModeId, experienceLevel, budgetRangeId, attachments, } = req.body;
+        const { title, industry, industryId, timeline, deadline, startDate, endDate, description, workMode, workModeId, experienceLevel, budgetRangeId, attachments, avatar, coverImage, } = req.body;
         const resolvedIndustry = await resolveIndustryInput(industryId ?? industry);
         const categoryValue = resolvedIndustry?.id || 'General';
         const technologyValue = technologyFromBody(req.body) || '';
@@ -265,6 +265,8 @@ export const createProject = async (req, res, next) => {
                 workMode: workModeValue,
                 experienceLevel: level ?? 'intermediate',
                 attachments: serializeAttachments(attachments),
+                avatar: avatar || null,
+                coverImage: coverImage || null,
                 status: 'open',
             },
         });
@@ -330,7 +332,7 @@ export const updateProject = async (req, res, next) => {
         });
         if (!existing)
             return res.status(404).json(errorResponse('Project not found', 'NOT_FOUND'));
-        const { title, industry, industryId, timeline, deadline, startDate, endDate, description, workMode, workModeId, experienceLevel, experienceLevelId, budgetRangeId, attachments, status, } = req.body;
+        const { title, industry, industryId, timeline, deadline, startDate, endDate, description, workMode, workModeId, experienceLevel, experienceLevelId, budgetRangeId, attachments, avatar, coverImage, status, } = req.body;
         const resolvedIndustry = await resolveIndustryInput(industryId ?? industry);
         const categoryValue = resolvedIndustry?.id;
         const technologyValue = technologyFromBody(req.body);
@@ -384,6 +386,10 @@ export const updateProject = async (req, res, next) => {
             data.experienceLevel = level;
         if (attachments != null)
             data.attachments = serializeAttachments(attachments);
+        if (avatar !== undefined)
+            data.avatar = avatar;
+        if (coverImage !== undefined)
+            data.coverImage = coverImage;
         if (status != null)
             data.status = status;
         const project = await prisma.project.update({

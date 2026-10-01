@@ -1,6 +1,7 @@
 import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { sendEmail } from "../../services/mobile/email.service.js";
+import { renderEmailTemplate } from "../../services/settings/settings.service.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import {
   HttpError,
@@ -150,14 +151,20 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       const targetUser = await tx.user.findUnique({ where: { id: targetUserId } });
       if (targetUser?.email) {
         try {
-          await sendEmail(
-            targetUser.email,
-            "New Proposal Received - Go Experts",
-            `<p>Hi ${targetUser.fullName || 'Client'},</p>
-            <p>A freelancer has submitted a new proposal for your project <strong>"${project.title}"</strong>.</p>
-            <p><strong>Bid Amount:</strong> ₹${bidAmount}</p>
-            <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5175'}/business/applications?projectId=${projectId}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:#fff;text-decoration:none;border-radius:5px;">View Proposal</a></p>`
-          );
+          const rendered = await renderEmailTemplate("tpl_proposal_received", {
+            full_name: targetUser.fullName || 'Client',
+            client_name: targetUser.fullName || 'Client',
+            project_title: project.title,
+            freelancer_name: 'A freelancer',
+            bid_amount: bidAmount,
+            proposals_url: `${process.env.FRONTEND_URL || 'http://localhost:5175'}/business/applications?projectId=${projectId}`,
+            app_url: process.env.FRONTEND_URL || 'http://localhost:5175',
+          }).catch(() => ({
+            subject: "New Proposal Received - Go Experts",
+            html: `<p>Hi ${targetUser.fullName || 'Client'},</p><p>A freelancer has submitted a proposal for <strong>"${project.title}"</strong>. Bid: ₹${bidAmount}</p>`,
+          }));
+
+          await sendEmail(targetUser.email, rendered.subject, rendered.html);
         } catch (err) {
           console.error("Failed to send proposal email:", err);
         }

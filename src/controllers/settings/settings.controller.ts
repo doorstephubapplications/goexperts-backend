@@ -74,6 +74,9 @@ export const saveGoogleMapsSettings = saveJsonSection("google_maps");
 export const getMobileAppLinksSettings = jsonSection("mobile_app_links");
 export const saveMobileAppLinksSettings = saveJsonSection("mobile_app_links");
 
+export const getEmailBrandingSettings = jsonSection("email_branding");
+export const saveEmailBrandingSettings = saveJsonSection("email_branding");
+
 export const getRolesSettings = async (_req: any, res: Response, next: NextFunction) => {
   try {
     const result = await getTeamRoles();
@@ -260,9 +263,9 @@ export const sendTestEmailHandler = async (req: any, res: Response, next: NextFu
           otp_code: "123456",
           verification_link: `${process.env.CLIENT_URL || "https://goexperts.in"}/verify-email?code=123456`,
           ...(req.body?.variables || {}),
-        },
-        { subject: fallbackSubject, html: fallbackHtml }
+        }
       );
+
 
       await transporter.sendMail({
         from: `"Go Experts Support" <${smtpFrom}>`,
@@ -295,37 +298,96 @@ export const sendTestEmailHandler = async (req: any, res: Response, next: NextFu
 export const getEmailTemplates = async (req: any, res: any, next: any) => {
   try {
     const templatesSetting: any = await getSettingsSection("email_templates");
-    const templates = Array.isArray(templatesSetting?.data) ? templatesSetting.data : [
-      {
-        id: "tpl_verification_link",
-        name: "Verification Link Email",
-        subject: "Verify Your Go Experts Account",
-        body: "Hello {{full_name}},\n\nPlease click the button below to verify your email address:\n\n{{verification_link}}\n\nVerification Code: {{otp_code}}\n\nThank you,\nGo Experts Team",
-        html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
-  <h2 style="color: #1a202c; font-size: 20px; font-weight: 700; margin-bottom: 12px;">Verify Your Email Address</h2>
-  <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Thank you for registering with <strong>Go Experts</strong>. Please click the button below to verify your email address and retrieve your OTP code:</p>
-  <div style="text-align: center; margin: 32px 0;">
-    <a href="{{verification_link}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Verify Email & View Code &rarr;</a>
-  </div>
-  <p style="font-size: 14px; color: #4a5568;">Your verification OTP code is: <strong style="font-size: 18px; color: #E30613;">{{otp_code}}</strong></p>
-</div>`,
-        isDefault: true,
-      },
-      {
-        id: "tpl_welcome",
-        name: "Welcome Email",
-        subject: "Welcome to Go Experts!",
-        body: "Hello {{full_name}},\n\nWelcome to Go Experts! We are thrilled to have you onboard.\n\nBest regards,\nGo Experts Team",
-        html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
-  <h2 style="color: #E30613; font-size: 22px; font-weight: 800;">Welcome to Go Experts!</h2>
-  <p style="font-size: 15px; color: #4a5568;">Hello <strong>{{full_name}}</strong>,</p>
-  <p style="font-size: 15px; color: #4a5568;">We are thrilled to have you onboard. Explore talent, projects, and startups on Go Experts platform today!</p>
-</div>`,
-        isDefault: false,
-      }
-    ];
+    const allTemplates: any[] = Array.isArray(templatesSetting?.data) ? templatesSetting.data : [];
 
-    res.json({ success: true, templates });
+    // Live KPIs across all templates
+    const totalCount = allTemplates.length;
+    const authSecurityCount = allTemplates.filter((t: any) => {
+      const m = String(t.module || "").toLowerCase();
+      return m.includes("auth") || m.includes("kyc") || m.includes("security");
+    }).length;
+    const notificationsCount = allTemplates.filter((t: any) => {
+      const m = String(t.module || "").toLowerCase();
+      return (
+        m.includes("notif") ||
+        m.includes("remind") ||
+        m.includes("messag") ||
+        m.includes("support") ||
+        m.includes("meeting")
+      );
+    }).length;
+    const customCount = allTemplates.filter((t: any) => !t.isDefault).length;
+
+    // Available modules
+    const modulesSet = new Set<string>();
+    allTemplates.forEach((t: any) => {
+      if (t.module) modulesSet.add(t.module);
+    });
+    const modules = Array.from(modulesSet).sort();
+
+    const { search, module: moduleFilter, page, pageSize, all } = req.query || {};
+
+    // If caller requests all, or doesn't provide pagination/filter params, return all for backwards compatibility
+    if (all === "true" || (!page && !pageSize && !search && (!moduleFilter || moduleFilter === "all"))) {
+      return res.json({
+        success: true,
+        templates: allTemplates,
+        total: totalCount,
+        page: 1,
+        pageSize: totalCount,
+        totalPages: 1,
+        modules,
+        stats: {
+          total: totalCount,
+          authSecurity: authSecurityCount,
+          notifications: notificationsCount,
+          custom: customCount,
+        },
+      });
+    }
+
+    // Apply filtering
+    let filtered = [...allTemplates];
+
+    if (search && String(search).trim()) {
+      const q = String(search).trim().toLowerCase();
+      filtered = filtered.filter((t: any) => {
+        const name = String(t.name || "").toLowerCase();
+        const subject = String(t.subject || "").toLowerCase();
+        const mod = String(t.module || "").toLowerCase();
+        const id = String(t.id || "").toLowerCase();
+        return name.includes(q) || subject.includes(q) || mod.includes(q) || id.includes(q);
+      });
+    }
+
+    if (moduleFilter && moduleFilter !== "all") {
+      filtered = filtered.filter(
+        (t: any) => String(t.module || "").toLowerCase() === String(moduleFilter).toLowerCase()
+      );
+    }
+
+    const filteredTotal = filtered.length;
+    const p = Math.max(1, parseInt(page as string) || 1);
+    const ps = Math.max(1, parseInt(pageSize as string) || 10);
+    const totalPages = Math.ceil(filteredTotal / ps) || 1;
+    const start = (p - 1) * ps;
+    const paginatedTemplates = filtered.slice(start, start + ps);
+
+    return res.json({
+      success: true,
+      templates: paginatedTemplates,
+      total: filteredTotal,
+      page: p,
+      pageSize: ps,
+      totalPages,
+      modules,
+      stats: {
+        total: totalCount,
+        authSecurity: authSecurityCount,
+        notifications: notificationsCount,
+        custom: customCount,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -333,28 +395,36 @@ export const getEmailTemplates = async (req: any, res: any, next: any) => {
 
 export const saveEmailTemplate = async (req: any, res: any, next: any) => {
   try {
-    const { id, name, subject, body, html, isDefault } = req.body || {};
+    const { id, name, module, fromName, subject, body, html, variables, isDefault } = req.body || {};
     if (!name || !subject) {
       return res.status(400).json({ success: false, message: "Template name and subject are required" });
     }
 
     const templatesSetting: any = await getSettingsSection("email_templates");
-    let templates: any[] = Array.isArray(templatesSetting?.data) ? [...templatesSetting.data] : [];
+    let templates: any[] = Array.isArray(templatesSetting?.data) && templatesSetting.data.length > 0
+      ? [...templatesSetting.data]
+      : [...(SETTINGS_DEFAULTS.email_templates as any[])];
 
     const targetId = id || `tpl_${Date.now()}`;
+    const existingIndex = templates.findIndex((t) => t.id === targetId);
+    const existing = existingIndex >= 0 ? templates[existingIndex] : {};
+
     const newTemplate = {
+      ...existing,
       id: targetId,
       name,
+      module: module || existing.module || "General",
+      fromName: fromName || existing.fromName || "Go Experts Support",
       subject,
       body: body || "",
       html: html || "",
-      isDefault: Boolean(isDefault),
+      variables: Array.isArray(variables) && variables.length > 0 ? variables : (existing.variables || []),
+      isDefault: isDefault !== undefined ? Boolean(isDefault) : (existing.isDefault ?? true),
       updatedAt: new Date().toISOString(),
     };
 
-    const existingIndex = templates.findIndex((t) => t.id === targetId);
     if (existingIndex >= 0) {
-      templates[existingIndex] = { ...templates[existingIndex], ...newTemplate };
+      templates[existingIndex] = newTemplate;
     } else {
       templates.push(newTemplate);
     }
@@ -370,7 +440,9 @@ export const deleteEmailTemplate = async (req: any, res: any, next: any) => {
   try {
     const { id } = req.params || {};
     const templatesSetting: any = await getSettingsSection("email_templates");
-    let templates: any[] = Array.isArray(templatesSetting?.data) ? [...templatesSetting.data] : [];
+    let templates: any[] = Array.isArray(templatesSetting?.data) && templatesSetting.data.length > 0
+      ? [...templatesSetting.data]
+      : [...(SETTINGS_DEFAULTS.email_templates as any[])];
 
     templates = templates.filter((t) => t.id !== id);
     await saveSettingsSection("email_templates", templates as any);

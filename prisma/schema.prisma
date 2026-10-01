@@ -1144,8 +1144,7 @@ model Blog {
   publishedAt DateTime? @map("published_at")
   scheduledAt DateTime? @map("scheduled_at")
   category    String
-  author      String
-  featured    Boolean   @default(false)
+  author      String?   @default("Admin")
   views       Int       @default(0)
   status      String    @default("active")
   createdAt   DateTime  @default(now()) @map("created_at")

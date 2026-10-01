@@ -813,10 +813,18 @@ export const getFreelancers = async (req, res, next) => {
         let search = String(req.query.search || req.query.q || '').trim();
         if (search.length > 0 && search.length < 3)
             search = '';
-        const categoryIds = String(req.query.categoryIds || req.query.categoryId || req.query.industryId || '')
-            .split(',')
-            .map((value) => value.trim())
+        const parseQueryList = (...values) => values
+            .flatMap((value) => {
+            if (Array.isArray(value))
+                return value;
+            return String(value || '').split(',');
+        })
+            .map((value) => String(value).trim())
             .filter(Boolean);
+        const categoryValues = parseQueryList(req.query.categoryIds, req.query.categoryId, req.query.industryId, req.query.category, req.query.categories, req.query.industry);
+        const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+        const categoryIds = categoryValues.filter((value) => uuidLike.test(value));
+        const categoryNames = categoryValues.filter((value) => !uuidLike.test(value));
         const availabilityValues = String(req.query.availability || req.query.availabilities || '')
             .split(',')
             .map((value) => value.trim())
@@ -875,15 +883,26 @@ export const getFreelancers = async (req, res, next) => {
                 in: [...matchingUserIds],
             };
         }
-        if (categoryIds.length > 0) {
+        if (categoryValues.length > 0) {
             const industries = await prisma.industry.findMany({
-                where: { id: { in: categoryIds }, status: 'active' },
+                where: {
+                    status: 'active',
+                    OR: [
+                        ...(categoryIds.length ? [{ id: { in: categoryIds } }] : []),
+                        ...(categoryNames.length ? [{ name: { in: categoryNames } }] : []),
+                    ],
+                },
                 select: { id: true, name: true },
             });
+            const industryIds = [...new Set([...categoryIds, ...industries.map((industry) => industry.id)])];
+            const industryNames = [...new Set([...categoryNames, ...industries.map((industry) => industry.name)])];
             const categoryProfiles = await prisma.freelancerProfile.findMany({
                 where: {
                     OR: [
-                        { industryId: { in: categoryIds } },
+                        ...(industryIds.length ? [{ industryId: { in: industryIds } }] : []),
+                        ...industryNames.map((name) => ({
+                            industry: { contains: name },
+                        })),
                         ...industries.map((industry) => ({
                             industry: { contains: industry.name },
                         })),

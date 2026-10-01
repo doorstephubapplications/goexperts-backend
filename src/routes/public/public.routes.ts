@@ -706,6 +706,23 @@ router.get("/cms_pages/:name", async (req: Request, res: Response, next: NextFun
   }
 });
 
+function sanitizeCmsContent(content: any): any {
+  if (typeof content !== "string") return content;
+  let cleaned = content.replace(
+    /<p[^>]*>(?:(?!<\/p>)[\s\S])*?(?:Effective Date:\s*\[Insert Effective Date\]|Last Updated:\s*\[Insert Last Updated Date\])[\s\S]*?<\/p>/gi,
+    ""
+  );
+  cleaned = cleaned.replace(
+    /(?:<strong[^>]*>)?\s*Effective Date:\s*(?:<\/strong>)?\s*\[Insert Effective Date\](?:\s*<br\s*\/?>)?/gi,
+    ""
+  );
+  cleaned = cleaned.replace(
+    /(?:<strong[^>]*>)?\s*Last Updated:\s*(?:<\/strong>)?\s*\[Insert Last Updated Date\](?:\s*<br\s*\/?>)?/gi,
+    ""
+  );
+  return cleaned;
+}
+
 const getPageHandler = (pageName: string) => async (req: Request, res: Response, next: NextFunction) => {
   try {
     const row = await prisma.cmsPage.findFirst({
@@ -725,7 +742,7 @@ const getPageHandler = (pageName: string) => async (req: Request, res: Response,
       try {
         content = JSON.parse(row.content);
       } catch {
-        content = row.content;
+        content = sanitizeCmsContent(row.content);
       }
     }
 
@@ -746,7 +763,7 @@ router.get("/page-by-slug/:slug", async (req: Request, res: Response, next: Next
       where: { status: "active", deletedAt: null }
     });
     
-    let matchedPage = null;
+    let matchedPage: any = null;
     for (const page of pages) {
       const jsonToParse = page.publishedJson || page.draftJson;
       if (jsonToParse) {
@@ -772,7 +789,12 @@ router.get("/page-by-slug/:slug", async (req: Request, res: Response, next: Next
     }
     
     if (!matchedPage) return res.status(404).json({ success: false, message: "Page not found" });
-    res.json({ success: true, data: matchedPage });
+
+    const sanitizedData = {
+      ...matchedPage,
+      content: matchedPage.content ? sanitizeCmsContent(matchedPage.content) : matchedPage.content,
+    };
+    res.json({ success: true, data: sanitizedData });
   } catch (e) {
     next(e);
   }
@@ -802,7 +824,7 @@ router.get("/cms_pages", async (req: Request, res: Response, next: NextFunction)
       try {
         content = JSON.parse(row.content);
       } catch {
-        content = row.content;
+        content = sanitizeCmsContent(row.content);
       }
     }
 

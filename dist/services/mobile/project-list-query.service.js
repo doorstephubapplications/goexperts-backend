@@ -43,6 +43,8 @@ export const parseProjectListQuery = async (req, scope) => {
     const categories = [
         ...asStringList(readParam(req, 'category', 'categories')),
         ...asStringList(readParam(req, 'categoryId', 'categoryIds', 'category_id')),
+    ];
+    const industries = [
         ...asStringList(readParam(req, 'industry', 'industries')),
         ...asStringList(readParam(req, 'industryId', 'industryIds', 'industry_id')),
     ];
@@ -65,13 +67,22 @@ export const parseProjectListQuery = async (req, scope) => {
             where.status = status;
     }
     if (q) {
-        const matchingSkills = q.length >= 2
-            ? await prisma.skill.findMany({
-                where: { name: { contains: q }, status: 'active' },
-                select: { id: true, name: true },
-                take: 20,
-            }).catch(() => [])
-            : [];
+        const [matchingSkills, matchingIndustries] = await Promise.all([
+            q.length >= 2
+                ? prisma.skill.findMany({
+                    where: { name: { contains: q }, status: 'active' },
+                    select: { id: true, name: true },
+                    take: 20,
+                }).catch(() => [])
+                : Promise.resolve([]),
+            q.length >= 2
+                ? prisma.industry.findMany({
+                    where: { name: { contains: q }, status: 'active' },
+                    select: { id: true },
+                    take: 10,
+                }).catch(() => [])
+                : Promise.resolve([]),
+        ]);
         const technologySearchValues = [
             q,
             ...matchingSkills.map((skill) => skill.name),
@@ -85,6 +96,9 @@ export const parseProjectListQuery = async (req, scope) => {
             { experienceLevel: search },
             ...technologySearchValues.map((value) => ({
                 technology: { contains: value },
+            })),
+            ...matchingIndustries.map((industry) => ({
+                industryId: industry.id,
             })),
         ];
     }

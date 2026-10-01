@@ -5,7 +5,7 @@ async function main() {
         verification_link: "http://localhost:5175/verify-email?email=saidinesh.goexperts@gmail.com&code=749201",
         otp_code: "749201",
         full_name: "Sai Dinesh",
-    }, { subject: "Verify Your Go Experts Account", html: "Fallback" });
+    });
     console.log("RENDERED SUBJECT:", rendered.subject);
     console.log("RENDERED HTML SNIPPET:", rendered.html.substring(0, 300));
     const emailAdapter = new EmailChannelAdapter();

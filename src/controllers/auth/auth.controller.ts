@@ -1784,36 +1784,22 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
           auth: { user: smtpUser, pass: smtpPass },
         });
 
-        const htmlBody = `
-          <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Security</p>
-          <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Password Reset Request 🔑 </h1>
-          <p style="margin:0 0 24px;color:#64748b;font-size:15px;">We received a request to reset your GoExperts password. Use the code below to securely verify your identity.</p>
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:0 0 24px;">
-            <tr>
-              <td align="center" style="background:#0f172a;border-radius:12px;padding:28px 24px;">
-                <p style="margin:0 0 10px;color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;">Reset Code</p>
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
-                  <tr>
-                    ${otp.split('').map(digit => `
-                    <td style="padding:0 4px;">
-                      <div style="width:44px;height:56px;background:#1e293b;border:2px solid #f97316;border-radius:8px;text-align:center;line-height:56px;color:#f97316;font-size:28px;font-weight:800;font-family:monospace;">${digit}</div>
-                    </td>`).join('')}
-                  </tr>
-                </table>
-                <p style="margin:14px 0 0;color:#475569;font-size:12px;"> Expires in <strong style="color:#f59e0b;">10 minutes</strong></p>
-              </td>
-            </tr>
-          </table>
-          <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-        `;
+        const rendered = await renderEmailTemplate("tpl_password_reset", {
+          full_name: (subject as any).fullName || subject.email.split('@')[0],
+          reset_link: `${process.env.FRONTEND_URL || "https://goexperts.in"}/reset-password?token=${otp}`,
+          otp_code: otp,
+          token: otp,
+          expiry_time: '10 minutes',
+          app_url: process.env.FRONTEND_URL || "https://goexperts.in",
+        });
 
         console.log(`[password-reset] Sending mail...`);
         const info = await transporter.sendMail({
           from: smtpFrom,
           to: subject.email,
-          subject: "Go Experts  Password Reset",
+          subject: rendered.subject,
           text: `Reset your password using this code (valid 10 minutes):\n\n${otp}\n`,
-          html: htmlBody,
+          html: rendered.html,
         });
         console.log(`[password-reset] Email sent successfully: ${info.messageId}`);
       } else {
@@ -2076,39 +2062,9 @@ export const sendOtp = async (req: Request, res: Response, next: NextFunction) =
             otp_code: otp,
             full_name: email.split("@")[0],
             email,
-          },
-          {
-            subject: "Verify Your Go Experts Account",
-            html: shell(
-              `Verify your GoExperts account email to get started.`,
-              `
-              <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Email Verification</p>
-              <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email Address ðŸ“§</h1>
-              <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Thank you for registering with <strong>GoExperts</strong>. Please click the button below to verify your email address and retrieve your OTP verification code:</p>
-
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:28px auto;">
-                <tr>
-                  <td style="border-radius:8px;background-color:#c0392b;" align="center">
-                    <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${verificationLink}" style="height:50px;v-text-anchor:middle;width:260px;" arcsize="16%" stroke="f" fillcolor="#c0392b"><w:anchorlock/><center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:700;">Verify Email &amp; View Code &rarr;</center></v:roundrect><![endif]-->
-                    <!--[if !mso]><!--><a href="${verificationLink}" target="_blank" style="background-color:#c0392b;color:#ffffff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;line-height:50px;text-align:center;text-decoration:none;display:inline-block;border-radius:8px;padding:0 32px;min-width:220px;">Verify Email &amp; View Code &rarr;</a><!--<![endif]-->
-                  </td>
-                </tr>
-              </table>
-
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#fff7ed;border-left:4px solid #f97316;border-radius:0 8px 8px 0;padding:1px;margin:0 0 24px;">
-                <tr><td style="padding:14px 18px;">
-                  <p style="margin:0 0 4px;color:#92400e;font-size:13px;font-weight:700;">â° Security Notice</p>
-                  <p style="margin:0;color:#78350f;font-size:13px;line-height:1.6;">This verification link and OTP code will expire in <strong>15 minutes</strong>. Do not share it with anyone.</p>
-                </td></tr>
-              </table>
-
-              <p style="margin:0 0 8px;color:#64748b;font-size:13px;">Button not working? Copy and paste this link:</p>
-              <p style="margin:0 0 24px;"><a href="${verificationLink}" style="color:#c0392b;font-size:12px;word-break:break-all;text-decoration:none;">${verificationLink}</a></p>
-              <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-              `
-            ),
           }
         );
+
 
         let emailRes: any = null;
         emailRes = await emailAdapter.send(
@@ -2233,21 +2189,19 @@ export const sendDeleteAccountOtp = async (req: Request, res: Response, next: Ne
     console.log(`[DELETE ACCOUNT OTP] Email: ${email} | Code: ${otp}`);
 
     // Dispatch real email via SMTP transporter
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; background-color: #ffffff;">
-        <h2 style="color: ${brandColor}; margin-top: 0;">Go Experts  Delete Account Request</h2>
-        <p style="color: #3f3f46; font-size: 15px;">You have requested to delete your account registered on Go Experts (<strong>${email}</strong>).</p>
-        <p style="color: #3f3f46; font-size: 15px;">Your 6-digit OTP verification code is:</p>
-        <div style="background-color: #fff1f2; border: 1px solid #fecdd3; padding: 16px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: ${brandColor}; border-radius: 10px; margin: 20px 0;">
-          ${otp}
-        </div>
-        <p style="color: #71717a; font-size: 13px;">This verification code is valid for 10 minutes. If you did not request account deletion, please ignore this email or contact support immediately.</p>
-        <hr style="border: none; border-top: 1px solid #f4f4f5; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #a1a1aa; margin: 0;">Go Experts Support Team Â· servicedesk@goexperts.in</p>
-      </div>
-    `;
+    const rendered = await renderEmailTemplate("tpl_delete_account_otp", {
+      full_name: email.split('@')[0],
+      email,
+      otp_code: otp,
+      token: otp,
+      expiry_time: '10 minutes',
+      app_url: process.env.FRONTEND_URL || "https://goexperts.in",
+    }).catch(() => ({
+      subject: "Delete Account Verification Code - Go Experts",
+      html: `<p>Your OTP for account deletion is: <strong>${otp}</strong>. Valid for 10 minutes.</p>`,
+    }));
 
-    await sendEmail(email, "Delete Account Verification Code - Go Experts", emailHtml).catch((e) => {
+    await sendEmail(email, rendered.subject, rendered.html).catch((e) => {
       console.error("[DELETE ACCOUNT OTP EMAIL ERROR]", e);
     });
 
@@ -2387,39 +2341,9 @@ export const sendVerificationLink = async (req: Request, res: Response, next: Ne
         otp_code: otp,
         full_name: email.split("@")[0],
         email,
-      },
-      {
-        subject: "Verify Your Go Experts Account",
-        html: shell(
-          `Verify your GoExperts account email to get started.`,
-          `
-          <p style="margin:0 0 4px;color:#64748b;font-size:13px;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;">Email Verification</p>
-          <h1 style="margin:0 0 8px;color:#0f172a;font-size:26px;font-weight:800;line-height:1.2;">Verify Your Email Address ðŸ“§</h1>
-          <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Thank you for registering with <strong>GoExperts</strong>. Please click the button below to verify your email address and retrieve your OTP code (Expires in 15 minutes):</p>
-
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:28px auto;">
-            <tr>
-              <td style="border-radius:8px;background-color:#c0392b;" align="center">
-                <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${verificationLink}" style="height:50px;v-text-anchor:middle;width:260px;" arcsize="16%" stroke="f" fillcolor="#c0392b"><w:anchorlock/><center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:700;">Verify Email &amp; View Code &rarr;</center></v:roundrect><![endif]-->
-                <!--[if !mso]><!--><a href="${verificationLink}" target="_blank" style="background-color:#c0392b;color:#ffffff;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;line-height:50px;text-align:center;text-decoration:none;display:inline-block;border-radius:8px;padding:0 32px;min-width:220px;">Verify Email &amp; View Code &rarr;</a><!--<![endif]-->
-              </td>
-            </tr>
-          </table>
-
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#fff7ed;border-left:4px solid #f97316;border-radius:0 8px 8px 0;padding:1px;margin:0 0 24px;">
-            <tr><td style="padding:14px 18px;">
-              <p style="margin:0 0 4px;color:#92400e;font-size:13px;font-weight:700;">â° Security Notice</p>
-              <p style="margin:0;color:#78350f;font-size:13px;line-height:1.6;">This verification link and OTP code will expire in <strong>15 minutes</strong>. Do not share it with anyone.</p>
-            </td></tr>
-          </table>
-
-          <p style="margin:0 0 8px;color:#64748b;font-size:13px;">Button not working? Copy and paste this link:</p>
-          <p style="margin:0 0 24px;"><a href="${verificationLink}" style="color:#c0392b;font-size:12px;word-break:break-all;text-decoration:none;">${verificationLink}</a></p>
-          <p style="margin:0;color:#374151;font-size:13px;font-weight:600;">The GoExperts Team</p>
-          `
-        ),
       }
     );
+
 
     const response = await emailAdapter.send(
       {

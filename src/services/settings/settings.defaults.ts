@@ -1,3 +1,5 @@
+import { MASTER_EMAIL_TEMPLATES } from "./email-templates.master.js";
+
 export const SETTINGS_DEFAULTS = {
   general: {
     platformName: "Go Experts",
@@ -326,99 +328,7 @@ export const SETTINGS_DEFAULTS = {
     countryRestriction: "IN",
     status: "active",
   },
-  email_templates: [
-    {
-      id: "tpl_verification_link",
-      name: "Verification Link Email",
-      subject: "Verify Your GoExperts Account 📧",
-      body: "Hello {{full_name}},\n\nPlease click the button below to verify your email address (Link & Code expire in 15 minutes):\n\n{{verification_link}}\n\nThank you,\nGoExperts Team",
-      html: `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; overflow: hidden;">
-          <div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613;">
-            <img src="https://goexperts.in/logo.png" alt="Go Experts" style="max-height: 44px;" />
-          </div>
-          <div style="padding: 32px 24px;">
-            <h2 style="color: #1a202c; font-size: 22px; font-weight: 800; margin-bottom: 12px;">Verify Your Email Address 📧</h2>
-            <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Thank you for registering with <strong>Go Experts</strong>. Please click the button below to verify your email address and retrieve your OTP verification code:</p>
-            
-            <div style="text-align: center; margin-top: 32px; margin-bottom: 32px;">
-              <a href="{{verification_link}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Verify Email &amp; View Code &rarr;</a>
-            </div>
-
-            <div style="background-color: #fff7ed; border-left: 4px solid #f97316; border-radius: 4px 8px 8px 4px; padding: 16px; margin: 24px 0;">
-              <h3 style="margin: 0 0 8px 0; color: #92400e; font-size: 14px; font-weight: 700;">⏰ Security Notice</h3>
-              <p style="margin: 0; font-size: 13px; color: #78350f; line-height: 1.5;">This verification link and OTP code will expire in <strong>15 minutes</strong>. Do not share it with anyone.</p>
-            </div>
-            
-            <p style="font-size: 13px; color: #718096; margin-top: 24px;">Button not working? Copy and paste this link:<br/><a href="{{verification_link}}" style="color: #E30613;">{{verification_link}}</a></p>
-          </div>
-          <div style="background-color: #fafbfc; padding: 24px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #edf2f7;">
-            <p style="margin: 0 0 6px 0; font-weight: 600; color: #4a5568;">Go Experts &bull; Working With You. For You.</p>
-            <p style="margin: 0;">Need support? Contact us anytime at <a href="mailto:servicedesk@goexperts.in" style="color: #E30613; text-decoration: none;">servicedesk@goexperts.in</a></p>
-          </div>
-        </div>
-      `,
-      isDefault: true,
-    },
-    {
-      id: "tpl_welcome",
-      name: "Welcome Email",
-      subject: "Welcome to Go Experts! Your 90-Day Free Trial is Active 🎉",
-      body: "Hello {{full_name}},\n\nWelcome to Go Experts! We are thrilled to have you onboard.\n\nBest regards,\nGo Experts Team",
-      html: `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; overflow: hidden;">
-          <div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613;">
-            <img src="https://goexperts.in/assets/img/logo.png" alt="Go Experts" style="max-height: 44px;" />
-          </div>
-          <div style="padding: 32px 24px;">
-            <h2 style="color: #1a202c; font-size: 22px; font-weight: 800; margin-bottom: 12px;">Welcome to Go Experts! 🎉</h2>
-            <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Hello <strong>{{full_name}}</strong>, thank you for registering with <strong>Go Experts</strong> as a <strong>{{role}}</strong>.</p>
-            
-            <div style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin: 24px 0;">
-              <h3 style="margin: 0 0 10px 0; color: #E30613; font-size: 16px; font-weight: 700;">🎁 90-Day Free Trial Activated!</h3>
-              <p style="margin: 0 0 8px 0; font-size: 14px; color: #4a5568;">Your account has been granted <strong>90 Days of Full Platform Access</strong> with zero commitment.</p>
-              <p style="margin: 0; font-size: 13px; color: #718096;"><strong>Trial Expiry Date:</strong> {{trial_ends_at}}</p>
-            </div>
-
-            <div style="text-align: center; margin-top: 32px;">
-              <a href="{{app_url}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Explore Platform Now &rarr;</a>
-            </div>
-          </div>
-        </div>
-      `,
-      isDefault: true,
-    },
-    {
-      id: "tpl_referral_cashback",
-      name: "Referral Cashback Received",
-      subject: "You've earned ₹{{cashback_amount}} cashback! 💰",
-      body: "Hello {{full_name}},\n\nGreat news! Your friend {{friend_name}} just purchased a subscription plan. As a thank you for referring them, we've credited ₹{{cashback_amount}} (5% of the plan value) to your wallet.\n\nYour new wallet balance is ₹{{total_balance}}.\n\nBest regards,\nGo Experts Team",
-      html: `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; overflow: hidden;">
-          <div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613;">
-            <img src="https://goexperts.in/assets/img/logo.png" alt="Go Experts" style="max-height: 44px;" />
-          </div>
-          <div style="padding: 32px 24px;">
-            <h2 style="color: #1a202c; font-size: 22px; font-weight: 800; margin-bottom: 12px;">You earned cashback! 💰</h2>
-            <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Hello <strong>{{full_name}}</strong>,</p>
-            <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Great news! Your friend <strong>{{friend_name}}</strong> just purchased a subscription plan on Go Experts.</p>
-            
-            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 20px; margin: 24px 0;">
-              <h3 style="margin: 0 0 10px 0; color: #166534; font-size: 16px; font-weight: 700;">₹{{cashback_amount}} Credited</h3>
-              <p style="margin: 0; font-size: 14px; color: #15803d;">We've added 5% of their plan value to your wallet as a thank you for referring them.</p>
-            </div>
-
-            <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Your updated wallet balance is now <strong>₹{{total_balance}}</strong>.</p>
-            
-            <div style="text-align: center; margin-top: 32px;">
-              <a href="{{app_url}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">View Wallet &rarr;</a>
-            </div>
-          </div>
-        </div>
-      `,
-      isDefault: true,
-    }
-  ],
+  email_templates: MASTER_EMAIL_TEMPLATES,
   splash: {
     enabled: true,
     splash: {
@@ -461,6 +371,23 @@ export const SETTINGS_DEFAULTS = {
     playStoreUrl: "https://play.google.com/store/apps/details?id=com.yourcompany.app",
     appleStoreUrl: "https://apps.apple.com/us/app/your-app/id1234567890",
     isActive: true,
+  },
+  email_branding: {
+    logoUrl: "http://localhost:5173/goexperts-logo.png",
+    logoHeight: 34,
+    showBrandText: true,
+    primaryColor: "#E30613",
+    headerTag: "Security Notice",
+    appSectionTitle: "Get the Go Experts App",
+    playStoreUrl: "https://play.google.com/store/apps/details?id=com.doorstephub.goexperts&pcampaignid=web_share",
+    appleStoreUrl: "https://apps.apple.com",
+    supportEmail: "servicedesk@goexperts.in",
+    websiteUrl: "https://goexperts.in",
+    tagline: "Working With You. For You.",
+    copyrightText: "© 2026 Go Experts Technologies Private Limited. All rights reserved.",
+    privacyUrl: "https://goexperts.in/privacy",
+    termsUrl: "https://goexperts.in/terms",
+    notificationSettingsUrl: "https://goexperts.in/settings/notifications",
   },
 } as const;
 

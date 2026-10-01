@@ -89,11 +89,7 @@ async function buildCategoryDistribution() {
         take: 6,
     });
     if (stats.length === 0) {
-        return [
-            { name: "Web Development", value: 0 },
-            { name: "Mobile App", value: 0 },
-            { name: "UI/UX Design", value: 0 },
-        ];
+        return [];
     }
     return stats.map(item => ({ name: item.category || "General", value: item._count }));
 }
@@ -218,54 +214,7 @@ export class InsightsService {
                 createdAt: report.createdAt,
             }));
         }
-        const [paymentsCount, usersCount, subscriptionsCount, investmentsCount] = await Promise.all([
-            prisma.payment.count(),
-            prisma.user.count(),
-            prisma.subscription.count(),
-            prisma.investment.count(),
-        ]);
-        return [
-            {
-                id: "REP-01",
-                name: "Monthly Revenue Report",
-                category: "Finance",
-                format: "Excel",
-                createdBy: "System",
-                status: "active",
-                schedule: "Monthly",
-                recordCount: paymentsCount,
-            },
-            {
-                id: "REP-02",
-                name: "User Cohort Growth Report",
-                category: "Users",
-                format: "PDF",
-                createdBy: "System",
-                status: "active",
-                schedule: "Weekly",
-                recordCount: usersCount,
-            },
-            {
-                id: "REP-03",
-                name: "Subscription Cancellation Analytics",
-                category: "Billing",
-                format: "CSV",
-                createdBy: "System",
-                status: "active",
-                schedule: "Daily",
-                recordCount: subscriptionsCount,
-            },
-            {
-                id: "REP-04",
-                name: "Startup Funding Pipeline Overview",
-                category: "Investment",
-                format: "PDF",
-                createdBy: "System",
-                status: "active",
-                schedule: "Weekly",
-                recordCount: investmentsCount,
-            },
-        ];
+        return [];
     }
     static async getAnalyticsOverview() {
         const range = AnalyticsService.getDateRange("last_30_days");
@@ -299,51 +248,31 @@ export class InsightsService {
             orderBy: { createdAt: "desc" },
             take: 100,
         });
-        const dashboards = storedDashboards.length
-            ? storedDashboards.map((dashboard, index) => ({
-                id: dashboard.id.startsWith("DASH-") ? dashboard.id : `DASH-${String(index + 1).padStart(2, "0")}`,
-                name: dashboard.name,
-                category: dashboard.category,
-                queryModel: dashboard.queryModel,
-                columnsConfig: dashboard.columnsConfig ?? "",
-                creator: dashboard.creator,
-                status: dashboard.status,
-                metricCount: 0,
-                createdAt: dashboard.createdAt,
-            }))
-            : [
-                {
-                    id: "DASH-01",
-                    name: "Executive Finance Dashboard",
-                    category: "Finance",
-                    queryModel: "payments_aggregates",
-                    columnsConfig: "amount,gst,gateway",
-                    creator: "System",
-                    status: "active",
-                    metricCount: financials.totalRevenue,
-                },
-                {
-                    id: "DASH-02",
-                    name: "User Retention Funnel View",
-                    category: "Users",
-                    queryModel: "users_cohorts",
-                    columnsConfig: "signup_date,role,retention_rate",
-                    creator: "System",
-                    status: "active",
-                    metricCount: totalUsers,
-                },
-                {
-                    id: "DASH-03",
-                    name: "Conversion Rate Comparisons",
-                    category: "Conversion",
-                    queryModel: "conversions_monthly",
-                    columnsConfig: "month,rate,views",
-                    creator: "System",
-                    status: "active",
-                    metricCount: conversion.length,
-                },
-            ];
-        return { traffic, sources, funnel, conversion, dashboards, summary: { totalUsers, totalRevenue: financials.totalRevenue } };
+        const dashboards = storedDashboards.map((dashboard, index) => ({
+            id: dashboard.id.startsWith("DASH-") ? dashboard.id : `DASH-${String(index + 1).padStart(2, "0")}`,
+            name: dashboard.name,
+            category: dashboard.category,
+            queryModel: dashboard.queryModel,
+            columnsConfig: dashboard.columnsConfig ?? "",
+            creator: dashboard.creator,
+            status: dashboard.status,
+            metricCount: 0,
+            createdAt: dashboard.createdAt,
+        }));
+        return {
+            traffic,
+            sources,
+            funnel,
+            conversion,
+            dashboards,
+            summary: {
+                totalUsers,
+                totalRevenue: financials.totalRevenue,
+                activeScenarios: storedDashboards.length || Math.max(totalUsers, 10),
+                dataIngestion: apiLogs.length > 0 ? (apiLogs.length * 0.04).toFixed(1) : "2.4",
+                simTime: Math.max(12, Math.round(users.registrationTrend.length * 1.2))
+            }
+        };
     }
     static buildTrafficSeries(apiLogs, registrationTrend) {
         if (apiLogs.length > 0) {
@@ -362,12 +291,7 @@ export class InsightsService {
             }
             return Array.from(dayBuckets.entries()).slice(0, 14).map(([day, values]) => ({ day, ...values }));
         }
-        return registrationTrend.slice(-14).map((item, index) => ({
-            day: `D${index + 1}`,
-            organic: Math.round(item.value * 0.55),
-            paid: Math.round(item.value * 0.3),
-            referral: Math.round(item.value * 0.15),
-        }));
+        return [];
     }
     static buildTrafficSources(countryDistribution, categoryDistribution) {
         const totalCountries = countryDistribution.reduce((sum, item) => sum + item.value, 0) || 1;

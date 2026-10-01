@@ -88,54 +88,175 @@ router.delete("/referral_rules/:id", async (req, res) => {
         res.status(500).json({ success: false, message: "Error deleting rule" });
     }
 });
-// Pending Referrals
+// Pending Referrals — server-side pagination, search, type & status filter
 router.get("/pending_referrals", async (req, res) => {
     try {
-        const referrals = await prisma.referral.findMany({
-            where: {
-                referee: {
-                    is: {
-                        deletedAt: null,
-                    },
-                },
-            },
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const pageSize = Math.min(100, parseInt(req.query.pageSize) || 15);
+        const skip = (page - 1) * pageSize;
+        const search = (req.query.search || "").trim().toLowerCase();
+        const typeFilter = (req.query.type || "ALL").toUpperCase();
+        const statusFilter = (req.query.status || "ALL").toUpperCase();
+        // ── All possible status values per bucket ─────────────────────────────
+        const WT_PENDING_VALS = ["pending", "PENDING"];
+        const WT_CREDITED_VALS = ["completed", "COMPLETED", "credited", "CREDITED", "approved", "APPROVED", "rewarded", "REWARDED"];
+        const WT_REJECTED_VALS = ["failed", "FAILED", "rejected", "REJECTED"];
+        const REF_PENDING_VALS = ["pending", "PENDING"];
+        const REF_CREDITED_VALS = ["successful", "SUCCESSFUL", "credited", "CREDITED", "approved", "APPROVED", "completed", "COMPLETED", "rewarded", "REWARDED"];
+        const REF_REJECTED_VALS = ["rejected", "REJECTED", "failed", "FAILED"];
+        // ── STATS via Prisma count/aggregate (always unfiltered) ──────────────
+        const [wtTotal, wtPendingCount, wtCreditedCount, wtAmtAgg, refTotal, refPendingCount, refApprovedCount,] = await Promise.all([
+            prisma.walletTransaction.count({ where: { type: "welcome_bonus" } }),
+            prisma.walletTransaction.count({ where: { type: "welcome_bonus", OR: [{ status: { in: WT_PENDING_VALS } }, { status: null }] } }),
+            prisma.walletTransaction.count({ where: { type: "welcome_bonus", status: { in: WT_CREDITED_VALS } } }),
+            prisma.walletTransaction.aggregate({ where: { type: "welcome_bonus", status: { in: WT_CREDITED_VALS } }, _sum: { amount: true } }),
+            prisma.referral.count({ where: { referee: { is: { deletedAt: null } } } }),
+            prisma.referral.count({ where: { referee: { is: { deletedAt: null } }, status: { in: REF_PENDING_VALS } } }),
+            prisma.referral.count({ where: { referee: { is: { deletedAt: null } }, status: { in: REF_CREDITED_VALS } } }),
+        ]);
+        const stats = {
+            totalWelcome: wtTotal,
+            wtPending: wtPendingCount,
+            wtCredited: wtCreditedCount,
+            wtCreditedAmt: parseFloat(String(wtAmtAgg._sum?.amount ?? 0)) || 0,
+            totalReferrals: refTotal,
+            refPending: refPendingCount,
+            refApproved: refApprovedCount,
+        };
+        // ── STATUS FILTER MAPS for paginated data ─────────────────────────────
+        const wtStatusMap = {
+            PENDING: WT_PENDING_VALS,
+            CREDITED: WT_CREDITED_VALS,
+            REJECTED: WT_REJECTED_VALS,
+        };
+        const refStatusMap = {
+            PENDING: REF_PENDING_VALS,
+            CREDITED: REF_CREDITED_VALS,
+            REJECTED: REF_REJECTED_VALS,
+        };
+        // ── WELCOME BONUSES filtered data ─────────────────────────────────────
+        const wtWhere = { type: "welcome_bonus" };
+        if (statusFilter !== "ALL" && wtStatusMap[statusFilter]) {
+            if (statusFilter === "PENDING") {
+                wtWhere.OR = [{ status: { in: WT_PENDING_VALS } }, { status: null }];
+            }
+            else {
+                wtWhere.status = { in: wtStatusMap[statusFilter] };
+            }
+        }
+        const welcomeBonusesFull = await prisma.walletTransaction.findMany({
+            where: wtWhere,
+            include: { wallet: { include: { user: { select: { fullName: true, email: true, role: true } } } } },
+            orderBy: { createdAt: "desc" },
+        });
+        let mappedWelcome = welcomeBonusesFull.map((tx) => ({
+            id: tx.id, type: "WELCOME",
+            status: tx.status || "PENDING",
+            amount: parseFloat(tx.amount) || 0,
+            createdAt: tx.createdAt, updatedAt: tx.updatedAt,
+            referrerId: tx.wallet?.userId ?? null, refereeId: null,
+            referrer: tx.wallet?.user ?? null, referee: null,
+        }));
+        if (search) {
+            mappedWelcome = mappedWelcome.filter((r) => r.referrer?.fullName?.toLowerCase().includes(search) ||
+                r.referrer?.email?.toLowerCase().includes(search) ||
+                r.id?.toLowerCase().includes(search));
+        }
+        // ── REFERRAL BONUSES filtered data ────────────────────────────────────
+        const refWhere = { referee: { is: { deletedAt: null } } };
+        if (statusFilter !== "ALL" && refStatusMap[statusFilter]) {
+            refWhere.status = { in: refStatusMap[statusFilter] };
+        }
+        const referralsFull = await prisma.referral.findMany({
+            where: refWhere,
             include: {
                 referrer: { select: { fullName: true, email: true, role: true } },
                 referee: { select: { fullName: true, email: true, isVerified: true, verified: true } },
             },
             orderBy: { createdAt: "desc" },
         });
-        const mappedReferrals = referrals.map(r => ({ ...r, type: "REFERRAL" }));
-        const welcomeBonuses = await prisma.walletTransaction.findMany({
-            where: { type: "welcome_bonus" },
-            include: {
-                wallet: {
-                    include: {
-                        user: { select: { fullName: true, email: true, role: true } }
-                    }
-                }
-            },
-            orderBy: { createdAt: "desc" },
-        });
-        const mappedWelcomeBonuses = welcomeBonuses.map(tx => ({
-            id: tx.id,
-            campaignId: null,
-            referrerId: tx.wallet?.userId,
-            refereeId: null,
-            link: null,
-            qrCode: null,
-            status: tx.status || "CREDITED",
-            createdAt: tx.createdAt,
-            updatedAt: tx.createdAt,
-            type: "WELCOME",
-            referrer: tx.wallet?.user,
-            referee: null,
-        }));
-        const combinedData = [...mappedReferrals, ...mappedWelcomeBonuses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        res.json({ success: true, data: combinedData });
+        let mappedReferrals = referralsFull.map((r) => ({ ...r, type: "REFERRAL", amount: 0 }));
+        if (search) {
+            mappedReferrals = mappedReferrals.filter((r) => r.referrer?.fullName?.toLowerCase().includes(search) ||
+                r.referrer?.email?.toLowerCase().includes(search) ||
+                r.referee?.fullName?.toLowerCase().includes(search) ||
+                r.referee?.email?.toLowerCase().includes(search) ||
+                r.id?.toLowerCase().includes(search));
+        }
+        // ── Merge & paginate ──────────────────────────────────────────────────
+        let combined = [];
+        if (typeFilter === "WELCOME")
+            combined = mappedWelcome;
+        else if (typeFilter === "REFERRAL")
+            combined = mappedReferrals;
+        else
+            combined = [...mappedWelcome, ...mappedReferrals];
+        combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const total = combined.length;
+        const paginated = combined.slice(skip, skip + pageSize);
+        res.json({ success: true, data: paginated, pagination: { total, page, pageSize, totalPages: Math.ceil(total / pageSize) }, stats });
     }
     catch (error) {
         res.status(500).json({ success: false, message: "Error fetching pending referrals: " + (error?.message || error) });
+    }
+});
+// Bulk approve welcome bonuses
+router.post("/pending_referrals/bulk-approve", async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: "No IDs provided" });
+        }
+        let approved = 0;
+        for (const id of ids) {
+            try {
+                const wt = await prisma.walletTransaction.findUnique({ where: { id } });
+                if (wt && (wt.status?.toLowerCase() === "pending")) {
+                    await prisma.walletTransaction.update({ where: { id }, data: { status: "completed" } });
+                    approved++;
+                }
+                // also try referral
+                const ref = await prisma.referral.findUnique({ where: { id } });
+                if (ref && ref.status === "PENDING") {
+                    await prisma.referral.update({ where: { id }, data: { status: "SUCCESSFUL" } });
+                    approved++;
+                }
+            }
+            catch (_) { }
+        }
+        res.json({ success: true, message: `${approved} record(s) approved.` });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Bulk approve failed: " + (error?.message || error) });
+    }
+});
+// Bulk reject
+router.post("/pending_referrals/bulk-reject", async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: "No IDs provided" });
+        }
+        let rejected = 0;
+        for (const id of ids) {
+            try {
+                const wt = await prisma.walletTransaction.findUnique({ where: { id } });
+                if (wt && (wt.status?.toLowerCase() === "pending")) {
+                    await prisma.walletTransaction.update({ where: { id }, data: { status: "rejected" } });
+                    rejected++;
+                }
+                const ref = await prisma.referral.findUnique({ where: { id } });
+                if (ref && ref.status === "PENDING") {
+                    await prisma.referral.update({ where: { id }, data: { status: "REJECTED" } });
+                    rejected++;
+                }
+            }
+            catch (_) { }
+        }
+        res.json({ success: true, message: `${rejected} record(s) rejected.` });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Bulk reject failed: " + (error?.message || error) });
     }
 });
 router.put("/pending_referrals/:id", async (req, res) => {

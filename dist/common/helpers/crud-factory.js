@@ -292,7 +292,9 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
             nextData.author = adminName;
         }
         if (!nextData.slug && nextData.title) {
-            nextData.slug = String(nextData.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+            const baseSlug = String(nextData.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+            const randomSuffix = Math.random().toString(36).substring(2, 6);
+            nextData.slug = `${baseSlug}-${randomSuffix}`;
         }
         return nextData;
     }
@@ -318,6 +320,16 @@ export function createCrudRouter(modelName, searchColumns = [], options = {}) {
                 const actualModel = sModel === "user" ? "user" : "user"; // always fetch user
                 // If the model is not user, but the route is updating user (roles route alias), id is user id
                 oldUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+            }
+            // If updating a master option, handle cascading updates
+            if (sModel === "masterOption") {
+                const oldOption = await db.findUnique({ where: { id: req.params.id } });
+                if (oldOption && oldOption.type === "BLOG_CATEGORY" && sanitized.label && sanitized.label !== oldOption.label) {
+                    await prisma.blog.updateMany({
+                        where: { category: oldOption.label },
+                        data: { category: sanitized.label },
+                    });
+                }
             }
             const row = await db.update({
                 where: { id: req.params.id },

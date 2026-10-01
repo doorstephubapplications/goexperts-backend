@@ -610,6 +610,14 @@ router.get("/cms_pages/:name", async (req, res, next) => {
         next(e);
     }
 });
+function sanitizeCmsContent(content) {
+    if (typeof content !== "string")
+        return content;
+    let cleaned = content.replace(/<p[^>]*>(?:(?!<\/p>)[\s\S])*?(?:Effective Date:\s*\[Insert Effective Date\]|Last Updated:\s*\[Insert Last Updated Date\])[\s\S]*?<\/p>/gi, "");
+    cleaned = cleaned.replace(/(?:<strong[^>]*>)?\s*Effective Date:\s*(?:<\/strong>)?\s*\[Insert Effective Date\](?:\s*<br\s*\/?>)?/gi, "");
+    cleaned = cleaned.replace(/(?:<strong[^>]*>)?\s*Last Updated:\s*(?:<\/strong>)?\s*\[Insert Last Updated Date\](?:\s*<br\s*\/?>)?/gi, "");
+    return cleaned;
+}
 const getPageHandler = (pageName) => async (req, res, next) => {
     try {
         const row = await prisma.cmsPage.findFirst({
@@ -628,7 +636,7 @@ const getPageHandler = (pageName) => async (req, res, next) => {
                 content = JSON.parse(row.content);
             }
             catch {
-                content = row.content;
+                content = sanitizeCmsContent(row.content);
             }
         }
         res.json({ success: true, data: { ...row, content } });
@@ -673,7 +681,11 @@ router.get("/page-by-slug/:slug", async (req, res, next) => {
         }
         if (!matchedPage)
             return res.status(404).json({ success: false, message: "Page not found" });
-        res.json({ success: true, data: matchedPage });
+        const sanitizedData = {
+            ...matchedPage,
+            content: matchedPage.content ? sanitizeCmsContent(matchedPage.content) : matchedPage.content,
+        };
+        res.json({ success: true, data: sanitizedData });
     }
     catch (e) {
         next(e);
@@ -701,7 +713,7 @@ router.get("/cms_pages", async (req, res, next) => {
                 content = JSON.parse(row.content);
             }
             catch {
-                content = row.content;
+                content = sanitizeCmsContent(row.content);
             }
         }
         res.json({ success: true, data: { ...row, content } });

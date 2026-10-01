@@ -139,63 +139,282 @@ export async function saveSettingsSection(section, data) {
     });
     return { section, data: normalizedData };
 }
-export async function renderEmailTemplate(templateId, variables, fallback) {
-    if (!fallback) {
-        fallback = SETTINGS_DEFAULTS.email_templates.find(t => t.id === templateId) || { subject: "Go Experts", html: "Hello" };
+export function wrapInMncEmailLayout(innerContent, branding = {}, options = {}) {
+    const brand = {
+        logoUrl: branding?.logoUrl || "http://localhost:5173/goexperts-logo.png",
+        logoHeight: branding?.logoHeight || 34,
+        showBrandText: branding?.showBrandText !== false,
+        primaryColor: branding?.primaryColor || "#E30613",
+        headerTag: branding?.headerTag || options?.module || "Security Notice",
+        appSectionTitle: branding?.appSectionTitle || "Get the Go Experts App",
+        playStoreUrl: branding?.playStoreUrl ||
+            "https://play.google.com/store/apps/details?id=com.doorstephub.goexperts&pcampaignid=web_share",
+        appleStoreUrl: branding?.appleStoreUrl || "https://apps.apple.com",
+        supportEmail: branding?.supportEmail || "servicedesk@goexperts.in",
+        websiteUrl: branding?.websiteUrl || "https://goexperts.in",
+        tagline: branding?.tagline || "Working With You. For You.",
+        copyrightText: branding?.copyrightText ||
+            "© 2026 Go Experts Technologies Private Limited. All rights reserved.",
+        privacyUrl: branding?.privacyUrl || "https://goexperts.in/privacy",
+        termsUrl: branding?.termsUrl || "https://goexperts.in/terms",
+        notificationSettingsUrl: branding?.notificationSettingsUrl ||
+            "https://goexperts.in/settings/notifications",
+    };
+    // If the content is already a full responsive document, return as is
+    if (innerContent.includes("<!DOCTYPE") || innerContent.includes("class=\"email-container\"")) {
+        return innerContent;
     }
-    try {
-        const section = await getSettingsSection("email_templates");
-        const templates = Array.isArray(section?.data) ? section.data : [];
-        const found = templates.find((t) => t.id === templateId ||
-            (t.id && String(t.id).toLowerCase() === templateId.toLowerCase()));
-        let rawSubject = found?.subject || fallback.subject;
-        let rawHtml = found?.html || found?.body || fallback.html;
-        // Safety fallback if database template is corrupted or wrong template matched
-        if (templateId === "tpl_verification_link" &&
-            (!rawHtml.includes("verification_link") && !rawHtml.includes("otp_code"))) {
-            rawSubject = fallback.subject;
-            rawHtml = fallback.html;
-        }
-        // Dynamic patch for legacy database templates missing the logo or footer
-        if (templateId === "tpl_verification_link") {
-            if (rawHtml.includes('https://goexperts.in/assets/img/logo.png')) {
-                rawHtml = rawHtml.replace(/https:\/\/goexperts\.in\/assets\/img\/logo\.png/g, 'https://goexperts.in/logo.png');
-            }
-            if (!rawHtml.includes('Go Experts &bull; Working With You. For You.')) {
-                const searchStr = `</a></p>\n          </div>\n        </div>`;
-                const replacement = `</a></p>\n          </div>\n          <div style="background-color: #fafbfc; padding: 24px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #edf2f7;">\n            <p style="margin: 0 0 6px 0; font-weight: 600; color: #4a5568;">Go Experts &bull; Working With You. For You.</p>\n            <p style="margin: 0;">Need support? Contact us anytime at <a href="mailto:servicedesk@goexperts.in" style="color: #E30613; text-decoration: none;">servicedesk@goexperts.in</a></p>\n          </div>\n        </div>`;
-                if (rawHtml.includes(searchStr)) {
-                    rawHtml = rawHtml.replace(searchStr, replacement);
-                }
-            }
-        }
-        const allVars = {
-            app_name: "Go Experts",
-            company_name: "Go Experts Inc.",
-            app_url: process.env.CLIENT_URL || process.env.FRONTEND_URL || "https://goexperts.in",
-            ...variables,
-        };
-        let subject = rawSubject;
-        let html = rawHtml;
-        for (const [k, v] of Object.entries(allVars)) {
-            const regBraces = new RegExp(`\\{\\{${k}\\}\\}`, "gi");
-            const regSingle = new RegExp(`\\{${k}\\}`, "gi");
-            subject = subject.replace(regBraces, v).replace(regSingle, v);
-            html = html.replace(regBraces, v).replace(regSingle, v);
-        }
-        return { subject, html };
+    // Clean old wrappers if any
+    let cleanContent = innerContent
+        .replace(/<div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613; background: #ffffff;">[\s\S]*?<\/div>/gi, "")
+        .replace(/<div style="background-color: #f[78]faf[cd]; padding: 20px 24px; text-align: center; border-top: 1px solid #eaedf1;">[\s\S]*?<\/div>\s*<\/div>$/gi, "")
+        .replace(/<div style="background-color: #f[78]faf[cd]; padding: 20px 24px; text-align: center; border-top: 1px solid #eaedf1;">[\s\S]*?<\/div>/gi, "")
+        .replace(/^<div style="font-family: [^>]+max-width: 600px[^>]+>/i, "")
+        .replace(/<\/div>\s*$/i, "")
+        .trim();
+    return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <title>${options?.subject || "Go Experts Notification"}</title>
+  
+  <style type="text/css">
+    * {
+      box-sizing: border-box;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
     }
-    catch {
-        let subject = fallback.subject;
-        let html = fallback.html;
-        for (const [k, v] of Object.entries(variables)) {
-            const regBraces = new RegExp(`\\{\\{${k}\\}\\}`, "gi");
-            const regSingle = new RegExp(`\\{${k}\\}`, "gi");
-            subject = subject.replace(regBraces, v).replace(regSingle, v);
-            html = html.replace(regBraces, v).replace(regSingle, v);
-        }
-        return { subject, html };
+    table, td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+      border-collapse: collapse;
     }
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+    }
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      background-color: #f4f6f8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #1f2937;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .email-wrapper {
+        padding: 0 !important;
+      }
+      .email-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        box-shadow: none !important;
+      }
+      .header-padding {
+        padding: 18px 20px !important;
+      }
+      .header-tag {
+        display: none !important;
+      }
+      .content-padding {
+        padding: 28px 20px 24px !important;
+      }
+      .footer-padding {
+        padding: 24px 20px !important;
+      }
+      .otp-code {
+        font-size: 26px !important;
+        letter-spacing: 5px !important;
+      }
+      .action-btn {
+        display: block !important;
+        width: 100% !important;
+        padding: 14px 20px !important;
+        text-align: center !important;
+      }
+      .store-badges-row {
+        display: block !important;
+        text-align: center !important;
+      }
+      .store-badge-item {
+        display: inline-block !important;
+        margin: 4px 6px !important;
+      }
+      .title-heading {
+        font-size: 19px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f6f8; -webkit-font-smoothing: antialiased;">
+
+  <!-- Outer Responsive Wrapper -->
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-wrapper" style="background-color: #f4f6f8; padding: 40px 16px;">
+    <tr>
+      <td align="center" style="padding: 0;">
+        
+        <!-- MNC Enterprise Card (Max 580px width on Desktop, 100% on Mobile) -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 580px; width: 100%; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); overflow: hidden;">
+          
+          <!-- Top Accent Line -->
+          <tr>
+            <td style="height: 3px; background-color: ${brand.primaryColor}; line-height: 3px; font-size: 0;">&nbsp;</td>
+          </tr>
+
+          <!-- MNC Corporate Header -->
+          <tr>
+            <td class="header-padding" style="padding: 22px 36px; background-color: #ffffff; border-bottom: 1px solid #f3f4f6;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="left" style="vertical-align: middle;">
+                    <a href="${brand.websiteUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="vertical-align: middle; padding-right: 10px;">
+                            <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
+                          </td>
+                          ${brand.showBrandText
+        ? `<td style="vertical-align: middle;">
+                            <span style="font-size: 22px; font-weight: 800; color: ${brand.primaryColor}; letter-spacing: -0.4px; line-height: 1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Go <span style="color: #111827;">Experts</span></span>
+                          </td>`
+        : ""}
+                        </tr>
+                      </table>
+                    </a>
+                  ${brand.headerTag
+        ? `<td align="right" class="header-tag" style="vertical-align: middle;">
+                    <span style="font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: 0.5px; text-transform: uppercase;">${brand.headerTag}</span>
+                  </td>`
+        : ""}
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- MNC Body Content -->
+          <tr>
+            <td class="content-padding" style="padding: 36px 36px 28px; background-color: #ffffff;">
+              ${cleanContent}
+            </td>
+          </tr>
+
+          <!-- MNC Corporate Footer (App Badges & Links) -->
+          <tr>
+            <td class="footer-padding" style="padding: 28px 36px 32px; background-color: #f9fafb; border-top: 1px solid #e5e7eb;">
+              
+              <!-- Mobile App Banner -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px;">
+                <tr>
+                  <td align="center">
+                    <p style="margin: 0 0 12px 0; font-size: 12px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">
+                      ${brand.appSectionTitle}
+                    </p>
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center">
+                      <tr class="store-badges-row">
+                        <!-- Google Play Button -->
+                        <td class="store-badge-item" style="padding: 0 6px;">
+                          <a href="${brand.playStoreUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" height="34" style="height: 34px; width: auto; display: block; border: 0;" />
+                          </a>
+                        </td>
+                        <!-- App Store Button -->
+                        <td class="store-badge-item" style="padding: 0 6px;">
+                          <a href="${brand.appleStoreUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="Download on the App Store" height="34" style="height: 34px; width: auto; display: block; border: 0;" />
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <div style="height: 1px; background-color: #e5e7eb; margin: 0 0 18px 0;"></div>
+
+              <!-- Corporate Legal Text -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="center" style="font-size: 12px; color: #6b7280; line-height: 1.6;">
+                    <p style="margin: 0 0 6px 0; font-weight: 600; color: #4b5563;">
+                      Go Experts &bull; ${brand.tagline}
+                    </p>
+                    <p style="margin: 0 0 10px 0; font-size: 11px; color: #9ca3af;">
+                      Questions? Contact us at <a href="mailto:${brand.supportEmail}" style="color: ${brand.primaryColor}; text-decoration: none;">${brand.supportEmail}</a> &bull; <a href="${brand.websiteUrl}" target="_blank" style="color: #6b7280; text-decoration: none;">${brand.websiteUrl.replace(/^https?:\/\//, '')}</a>
+                    </p>
+                    <p style="margin: 0 0 8px 0; font-size: 11px; color: #9ca3af;">
+                      <a href="${brand.privacyUrl}" target="_blank" style="color: #6b7280; text-decoration: underline;">Privacy Policy</a> &bull;
+                      <a href="${brand.termsUrl}" target="_blank" style="color: #6b7280; text-decoration: underline;">Terms of Service</a> &bull;
+                      <a href="${brand.notificationSettingsUrl}" target="_blank" style="color: #6b7280; text-decoration: underline;">Notification Settings</a>
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #9ca3af;">
+                      ${brand.copyrightText}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>`;
+}
+export async function renderEmailTemplate(templateId, variables = {}) {
+    const section = await getSettingsSection("email_templates");
+    const templates = Array.isArray(section?.data) ? section.data : [];
+    const normTarget = templateId.replace(/^tpl_/, "").toLowerCase();
+    const found = templates.find((t) => t.id === templateId ||
+        (t.id && String(t.id).toLowerCase() === templateId.toLowerCase()) ||
+        (t.id && String(t.id).replace(/^tpl_/, "").toLowerCase() === normTarget));
+    if (!found) {
+        console.error(`[renderEmailTemplate] Template "${templateId}" not found in database. Please ensure it is seeded.`);
+        throw new Error(`Email template "${templateId}" not found in database. Please re-seed the email templates.`);
+    }
+    let rawSubject = found.subject;
+    let rawHtml = (found.html || found.body);
+    const allVars = {
+        app_name: "Go Experts",
+        company_name: "Go Experts Inc.",
+        app_url: process.env.CLIENT_URL || process.env.FRONTEND_URL || "https://goexperts.in",
+    };
+    for (const [k, v] of Object.entries(variables || {})) {
+        allVars[k] = v !== undefined && v !== null ? String(v) : "";
+    }
+    let subject = rawSubject;
+    let html = rawHtml;
+    for (const [k, v] of Object.entries(allVars)) {
+        const regBraces = new RegExp(`\\{\\{${k}\\}\\}`, "gi");
+        const regSingle = new RegExp(`\\{${k}\\}`, "gi");
+        subject = subject.replace(regBraces, v).replace(regSingle, v);
+        html = html.replace(regBraces, v).replace(regSingle, v);
+    }
+    // Dynamic corporate email branding
+    const brandingSection = await getSettingsSection("email_branding");
+    const branding = brandingSection?.data || {};
+    const finalHtml = wrapInMncEmailLayout(html, branding, {
+        subject,
+        module: found.module || "Official Notification",
+    });
+    return { subject, html: finalHtml };
 }
 export async function getTeamRoles() {
     try {

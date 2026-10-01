@@ -371,6 +371,17 @@ function ensureBlogAdminAuthor(modelName: string, data: any, req: AuthenticatedR
             oldUser = await prisma.user.findUnique({ where: { id: req.params.id }});
         }
 
+        // If updating a master option, handle cascading updates
+        if (sModel === "masterOption") {
+          const oldOption = await db.findUnique({ where: { id: req.params.id } });
+          if (oldOption && oldOption.type === "BLOG_CATEGORY" && sanitized.label && sanitized.label !== oldOption.label) {
+            await prisma.blog.updateMany({
+              where: { category: oldOption.label },
+              data: { category: sanitized.label },
+            });
+          }
+        }
+
         const row = await db.update({
           where: { id: req.params.id },
           data: sanitized,

@@ -30,6 +30,14 @@ const splitIds = (raw) => String(raw || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+const defaultTimelineOptions = [
+    { id: 'less_than_1_week', name: 'Less than a week' },
+    { id: '1_2_weeks', name: '1-2 weeks' },
+    { id: '2_4_weeks', name: '2-4 weeks' },
+    { id: '1_3_months', name: '1-3 months' },
+    { id: '3_6_months', name: '3-6 months' },
+    { id: '6_plus_months', name: '6+ months' },
+];
 /**
  * Enrich project rows with human-readable names (never expose raw IDs in display fields).
  */
@@ -40,12 +48,14 @@ export const shapeProjects = async (projects, viewerUserId) => {
     const allCategoryKeys = [...new Set(projects.map((p) => String(p.category || '').trim()).filter(Boolean))];
     const allExperienceKeys = [...new Set(projects.map((p) => String(p.experienceLevel || '').trim()).filter(Boolean))];
     const allWorkModeKeys = [...new Set(projects.map((p) => String(p.workMode || '').trim()).filter(Boolean))];
+    const allTimelineKeys = [...new Set(projects.map((p) => String(p.timeline || '').trim()).filter(Boolean))];
     const allSkillKeys = [...new Set(projects.flatMap((p) => splitIds(p.technology)).filter(Boolean))];
     const budgetIds = [...new Set(projects.map((p) => p.budgetRangeId).filter(Boolean))];
     const allLookupKeys = [...new Set([
             ...allCategoryKeys,
             ...allExperienceKeys,
             ...allWorkModeKeys,
+            ...allTimelineKeys,
             ...allSkillKeys,
         ])];
     const [clients, industries, skillCategories, experienceLevels, workModes, budgetRanges, skills, masterOptions] = await Promise.all([
@@ -162,6 +172,24 @@ export const shapeProjects = async (projects, viewerUserId) => {
             addWorkMode(m.id, label);
     });
     const budgetRangeById = new Map(budgetRanges.map((b) => [b.id, b]));
+    const timelineMap = new Map();
+    const addTimeline = (id, name) => {
+        if (!id && !name)
+            return;
+        const entry = { id: id || name, name: name || id };
+        if (id)
+            timelineMap.set(id, entry);
+        if (name) {
+            timelineMap.set(name, entry);
+            timelineMap.set(name.toLowerCase(), entry);
+        }
+    };
+    defaultTimelineOptions.forEach((t) => addTimeline(t.id, t.name));
+    (masterOptions || []).filter((m) => ['project_timeline', 'project_timeline_option', 'timeline'].includes(m.type)).forEach((m) => {
+        const label = m.label || m.value || '';
+        if (label)
+            addTimeline(m.id, label);
+    });
     const skillMap = new Map();
     const addSkill = (id, name) => {
         if (!id && !name)
@@ -248,10 +276,18 @@ export const shapeProjects = async (projects, viewerUserId) => {
             name: resolvedWm?.name || wmKey || 'Remote',
         };
         const budgetRangeRecord = budgetRangeById.get(String(project.budgetRangeId || '').trim()) || null;
+        const timelineKey = String(project.timeline || '').trim();
+        const resolvedTimeline = timelineMap.get(timelineKey) || timelineMap.get(timelineKey.toLowerCase());
+        const timelineObj = {
+            id: resolvedTimeline?.id || timelineKey,
+            name: resolvedTimeline?.name || timelineKey,
+        };
         return {
             id: project.id,
             title: project.title,
             description: project.description ?? '',
+            avatar: project.avatar ?? null,
+            coverImage: project.coverImage ?? null,
             clientId: project.client,
             clientName: client?.fullName || 'Client',
             clientAvatar: client?.avatarUrl ?? null,
@@ -276,7 +312,9 @@ export const shapeProjects = async (projects, viewerUserId) => {
                 }
                 : null,
             isHourly: false,
-            timeline: project.timeline ?? '',
+            timeline: timelineObj,
+            timelineId: timelineObj.id,
+            timelineName: timelineObj.name,
             startDate: project.startDate ? new Date(project.startDate).toISOString() : null,
             endDate: project.endDate ? new Date(project.endDate).toISOString() : null,
             workMode: workModeObj,
