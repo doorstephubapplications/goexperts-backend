@@ -2257,9 +2257,36 @@ export const getById = (modelName: string) => async (req: Request, res: Response
           return String(item || '').trim();
         }).filter(Boolean);
       };
-      const indArr = normalizeOptionList(
-        user.freelancerProfile?.industry || reg.industryIds || reg.industry,
-        ['industryId', 'id', 'industryName', 'name', 'label', 'value']
+      const normalizeIndustryList = (value: any) => {
+        if (value == null) return [] as string[];
+        const values = Array.isArray(value) ? value : typeof value !== 'object' && String(value).includes(',') ? String(value).split(',') : [value];
+        const seen = new Set<string>();
+        const result: string[] = [];
+        values.forEach((item: any) => {
+          const candidates = item && typeof item === 'object'
+            ? [item.industryName, item.name, item.label, item.value, item.industryId, item.id]
+            : [item];
+          candidates.forEach((candidate) => {
+            const text = String(candidate || '').trim();
+            const key = text.toLowerCase();
+            if (text && !seen.has(key)) {
+              seen.add(key);
+              result.push(text);
+            }
+          });
+        });
+        return result;
+      };
+      const profileIndustryValue = user.freelancerProfile?.industry;
+      const titleValue = user.freelancerProfile?.titleHeadline || reg.titleHeadline || reg.title || '';
+      const normalizedProfileIndustry = String(profileIndustryValue || '').trim().toLowerCase();
+      const normalizedTitle = String(titleValue || '').trim().toLowerCase();
+      const industrySource =
+        normalizedProfileIndustry && normalizedProfileIndustry !== normalizedTitle
+          ? profileIndustryValue
+          : (reg.industryIds || reg.industry);
+      const indArr = normalizeIndustryList(
+        industrySource
       );
       const sklArr = normalizeOptionList(
         user.freelancerProfile?.skills || reg.skillsIds || reg.skillIds || reg.skills,
@@ -2307,15 +2334,17 @@ export const getById = (modelName: string) => async (req: Request, res: Response
 
       const formattedIndustries = indArr.map((key: string) => {
         const found = indIdMap.get(key) || indNameMap.get(key.toLowerCase().trim());
-        const realId = found ? found.id : key;
+        const realId = found ? found.id : '';
         const realName = found ? found.name : (/^[0-9a-f-]{36}$/i.test(key) ? '' : key);
         return {
           id: realId,
           name: realName || 'General',
+          industryId: realId,
+          industryName: realName || 'General',
        
         };
       });
-      const primaryInd = formattedIndustries[0] || { id: '', name: 'General' };
+      const primaryInd = formattedIndustries[0] || { id: '', name: 'General', industryId: '', industryName: 'General' };
 
       const dbWorkModes = await prisma.workMode.findMany({
         where: { OR: [{ id: { in: wmArr } }, { name: { in: wmArr } }] }

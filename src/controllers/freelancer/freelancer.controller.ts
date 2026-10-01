@@ -32,6 +32,23 @@ function filled(...values: Array<unknown>) {
   }).length;
 }
 
+function optionText(value: any) {
+  if (value == null || value === "") return null;
+  if (typeof value === "object") {
+    const resolved =
+      value.industryId ??
+      value.id ??
+      value.industryName ??
+      value.name ??
+      value.label ??
+      value.value;
+    return resolved != null && String(resolved).trim()
+      ? String(resolved).trim()
+      : null;
+  }
+  return String(value).trim() || null;
+}
+
 type PortfolioItem = {
   id: string;
   title: string;
@@ -1195,10 +1212,12 @@ export const updateFreelancerProfile = async (
     });
 
     const industry =
-      body.title != null
-        ? String(body.title).trim() || null
+      body.industryId != null
+        ? optionText(body.industryId)
         : body.industry != null
-          ? String(body.industry).trim() || null
+        ? optionText(body.industry)
+        : body.category != null
+          ? optionText(body.category)
           : existing.freelancerProfile?.industry ?? null;
 
     const experience =

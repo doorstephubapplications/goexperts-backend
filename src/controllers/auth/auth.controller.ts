@@ -744,7 +744,24 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
           idDocumentUrl: req.body?.idDocumentUrl || null,
         });
 
-        let industryName = req.body?.industry || req.body?.category || null;
+        const resolveOption = (value: any) => {
+          if (value == null || value === "") return null;
+          if (typeof value === "object") {
+            const resolved =
+              value.industryId ??
+              value.categoryId ??
+              value.id ??
+              value.value ??
+              value.industryName ??
+              value.name ??
+              value.label;
+            return resolved != null && String(resolved).trim()
+              ? String(resolved).trim()
+              : null;
+          }
+          return String(value).trim() || null;
+        };
+        let industryName = resolveOption(req.body?.industry) || resolveOption(req.body?.category);
         if (industryName && industryName.length === 36) {
           const industryRow = await tx.industry.findFirst({
             where: { id: industryName }
