@@ -32,18 +32,29 @@ export class FaqController {
     // ==========================================
     async getAdminFaqs(req, res) {
         try {
-            const { role, categoryId, search, status, featured } = req.query;
+            const { role, categoryId, search, status, featured, page, pageSize } = req.query;
             const data = await faqService.getAdminFaqs({
                 role: role,
                 categoryId: categoryId,
                 search: search,
                 status: status,
-                featured: featured === 'true' ? true : featured === 'false' ? false : undefined
+                featured: featured === 'true' ? true : featured === 'false' ? false : undefined,
+                page: page !== undefined ? Number(page) : undefined,
+                pageSize: pageSize !== undefined ? Number(pageSize) : undefined
             });
             res.json({ success: true, data });
         }
         catch (error) {
             res.status(500).json({ success: false, error: error.message });
+        }
+    }
+    async deleteFaq(req, res) {
+        try {
+            const data = await faqService.deleteFaq(req.params.id);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, error: error.message });
         }
     }
     async getAdminFaqById(req, res) {
@@ -118,7 +129,14 @@ export class FaqController {
     // ==========================================
     async getAdminCategories(req, res) {
         try {
-            const data = await faqService.getAdminCategories();
+            const { search, role, isActive, page, pageSize } = req.query;
+            const data = await faqService.getAdminCategories({
+                search: search,
+                role: role,
+                isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+                page: page !== undefined ? Number(page) : undefined,
+                pageSize: pageSize !== undefined ? Number(pageSize) : undefined
+            });
             res.json({ success: true, data });
         }
         catch (error) {

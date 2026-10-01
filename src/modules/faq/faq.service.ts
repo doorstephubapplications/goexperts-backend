@@ -76,28 +76,68 @@ export class FaqService {
   // ADMIN API - FAQS
   // ==========================================
 
-  public async getAdminFaqs(params: { role?: FAQRole; categoryId?: string; search?: string; status?: string; featured?: boolean }) {
-    const { role, categoryId, search, status, featured } = params;
+  public async getAdminFaqs(params: {
+    role?: FAQRole;
+    categoryId?: string;
+    search?: string;
+    status?: string;
+    featured?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const { role, categoryId, search, status, featured, page, pageSize } = params;
     
     const where: any = {};
     if (role) where.role = role;
     if (categoryId) where.categoryId = categoryId;
     if (status) where.status = status;
     if (featured !== undefined) where.isFeatured = featured;
-    if (search) {
+    if (search && String(search).trim()) {
+      const q = String(search).trim();
       where.OR = [
-        { question: { contains: search } },
-        { answer: { contains: search } }
+        { question: { contains: q } },
+        { answer: { contains: q } }
       ];
+    }
+
+    if (page !== undefined && page !== null) {
+      const pageNum = Math.max(1, Number(page) || 1);
+      const take = Math.max(1, Number(pageSize) || 10);
+      const skip = (pageNum - 1) * take;
+
+      const [items, total] = await Promise.all([
+        prisma.fAQ.findMany({
+          where,
+          skip,
+          take,
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+          include: {
+            category: { select: { id: true, name: true, role: true } }
+          }
+        }),
+        prisma.fAQ.count({ where })
+      ]);
+
+      return {
+        items,
+        total,
+        page: pageNum,
+        pageSize: take,
+        totalPages: Math.max(1, Math.ceil(total / take))
+      };
     }
 
     return prisma.fAQ.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       include: {
         category: { select: { id: true, name: true, role: true } }
       }
     });
+  }
+
+  public async deleteFaq(id: string) {
+    return prisma.fAQ.delete({ where: { id } });
   }
   
   public async getAdminFaqById(id: string) {
@@ -169,14 +209,74 @@ export class FaqService {
   // ADMIN API - CATEGORIES
   // ==========================================
 
-  public async getAdminCategories() {
+  public async getAdminCategories(params?: {
+    search?: string;
+    role?: FAQRole;
+    isActive?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const { search, role, isActive, page, pageSize } = params || {};
+    const where: any = {};
+
+    if (role) where.role = role;
+    if (isActive !== undefined) where.isActive = isActive;
+    if (search && String(search).trim()) {
+      const q = String(search).trim();
+      where.OR = [
+        { name: { contains: q } },
+        { slug: { contains: q } }
+      ];
+    }
+
+    if (page !== undefined && page !== null) {
+      const pageNum = Math.max(1, Number(page) || 1);
+      const take = Math.max(1, Number(pageSize) || 10);
+      const skip = (pageNum - 1) * take;
+
+      const [items, total] = await Promise.all([
+        prisma.fAQCategory.findMany({
+          where,
+          skip,
+          take,
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+          include: {
+            _count: {
+              select: { faqs: true }
+            }
+          }
+        }),
+        prisma.fAQCategory.count({ where })
+      ]);
+
+      return {
+        items,
+        total,
+        page: pageNum,
+        pageSize: take,
+        totalPages: Math.max(1, Math.ceil(total / take))
+      };
+    }
+
     return prisma.fAQCategory.findMany({
-      orderBy: { sortOrder: 'asc' }
+      where,
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        _count: {
+          select: { faqs: true }
+        }
+      }
     });
   }
 
   public async createCategory(data: any) {
-    return prisma.fAQCategory.create({ data });
+    const slug = data.slug || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    return prisma.fAQCategory.create({
+      data: {
+        ...data,
+        slug: slug || `cat-${Date.now()}`
+      }
+    });
   }
 
   public async updateCategory(id: string, data: any) {

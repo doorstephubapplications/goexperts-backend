@@ -17,7 +17,7 @@ export const faqSchema = z.object({
     slug: z.string().min(1, "Slug is required"),
     shortAnswer: z.string().optional().nullable(),
     sortOrder: z.number().int().default(0),
-    isFeatured: z.boolean().default(false),
+    isFeatured: z.boolean().default(false).optional(),
     status: z.string().default("DRAFT"), // DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED
     isPublished: z.boolean().default(false),
     seoTitle: z.string().optional().nullable(),

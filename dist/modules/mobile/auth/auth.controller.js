@@ -40,6 +40,28 @@ const REFRESH_SECRET = requireSecret('JWT_REFRESH_SECRET', process.env.JWT_REFRE
 const PASSWORD_RESET_SECRET = process.env.JWT_RESET_SECRET || JWT_SECRET;
 const PASSWORD_RESET_EXPIRES_IN_MS = 15 * 60 * 1000;
 const authEpochKey = (userId) => `auth_epoch:${userId}`;
+const optionValue = (value) => {
+    if (value == null || value === '')
+        return null;
+    if (Array.isArray(value)) {
+        return value.map(optionValue).filter(Boolean).join(',');
+    }
+    if (typeof value === 'object') {
+        const resolved = value.industryId ??
+            value.categoryId ??
+            value.skillId ??
+            value.workModeId ??
+            value.id ??
+            value.value ??
+            value.industryName ??
+            value.name ??
+            value.label;
+        return resolved != null && String(resolved).trim()
+            ? String(resolved).trim()
+            : null;
+    }
+    return String(value).trim() || null;
+};
 const getAuthEpoch = async (userId) => {
     try {
         const prismaAny = prisma;
@@ -504,7 +526,7 @@ export const register = async (req, res, next) => {
                 const explicitStartupName = startupObj.name || b.startupName || (typeof b.startup === 'string' ? b.startup : null);
                 if (explicitStartupName && String(explicitStartupName).trim().length > 0) {
                     const startupNameVal = String(explicitStartupName).trim();
-                    const industryVal = b.industryId || b.industry || b.taxonomy?.primaryCategoryId || null;
+                    const industryVal = optionValue(b.industryId ?? b.industry ?? b.taxonomy?.primaryCategoryId);
                     const stageVal = startupObj.stageId || b.stage || b.fundingStage || null;
                     const teamSizeRaw = b.teamSizeId || b.teamSize;
                     const teamSizeVal = teamSizeRaw ? (parseInt(String(teamSizeRaw).replace(/[^\d]/g, '')) || 1) : 1;
@@ -521,7 +543,7 @@ export const register = async (req, res, next) => {
                         where: { userId: created.id },
                         update: {
                             startupName: startupNameVal,
-                            industry: industryVal ? String(industryVal).trim() : null,
+                            industry: industryVal,
                             stage: stageVal ? String(stageVal).trim() : null,
                             teamSize: teamSizeVal,
                             raised: raisedVal,
@@ -533,7 +555,7 @@ export const register = async (req, res, next) => {
                         create: {
                             userId: created.id,
                             startupName: startupNameVal,
-                            industry: industryVal ? String(industryVal).trim() : null,
+                            industry: industryVal,
                             stage: stageVal ? String(stageVal).trim() : null,
                             teamSize: teamSizeVal,
                             raised: raisedVal,
@@ -547,7 +569,7 @@ export const register = async (req, res, next) => {
                         data: {
                             founder: created.id,
                             startup: startupNameVal,
-                            industry: industryVal ? String(industryVal).trim() : null,
+                            industry: industryVal,
                             category: b.profileCategoryId || b.categoryId || b.taxonomy?.primaryCategoryId || null,
                             stage: stageVal ? String(stageVal).trim() : null,
                             funding: raisedVal,
@@ -563,7 +585,7 @@ export const register = async (req, res, next) => {
             }
             else if (targetRole === 'client') {
                 const companyVal = b.businessName || b.company || b.companyName || null;
-                const industryVal = b.industryId || b.industry || null;
+                const industryVal = optionValue(b.industryId ?? b.industry);
                 const projectHireBudgetVal = b.projectHireBudget || b.projectHireBudgetRange || b.budget || null;
                 const hiringGoalVal = b.hiringGoal || b.primaryGoal || null;
                 const companySizeVal = b.companySize || b.currentTeam || b.teamSize || null;
@@ -571,7 +593,7 @@ export const register = async (req, res, next) => {
                     where: { userId: created.id },
                     update: {
                         company: companyVal ? String(companyVal).trim() : undefined,
-                        industry: industryVal ? String(industryVal).trim() : undefined,
+                        industry: industryVal || undefined,
                         projectHireBudget: projectHireBudgetVal ? String(projectHireBudgetVal).trim() : undefined,
                         hiringGoal: hiringGoalVal ? String(hiringGoalVal).trim() : undefined,
                         companySize: companySizeVal ? String(companySizeVal).trim() : undefined,
@@ -580,7 +602,7 @@ export const register = async (req, res, next) => {
                     create: {
                         userId: created.id,
                         company: companyVal ? String(companyVal).trim() : null,
-                        industry: industryVal ? String(industryVal).trim() : null,
+                        industry: industryVal,
                         projectHireBudget: projectHireBudgetVal ? String(projectHireBudgetVal).trim() : null,
                         hiringGoal: hiringGoalVal ? String(hiringGoalVal).trim() : null,
                         companySize: companySizeVal ? String(companySizeVal).trim() : null,
@@ -607,7 +629,7 @@ export const register = async (req, res, next) => {
             else if (targetRole === 'freelancer') {
                 const rawSkills = b.skillIds ?? b.skills;
                 const skillsVal = Array.isArray(rawSkills) ? rawSkills.join(',') : (rawSkills ? String(rawSkills) : null);
-                const industryVal = b.industryId || b.industry || null;
+                const industryVal = optionValue(b.industryId ?? b.industry);
                 const expRaw = b.experienceYears ?? b.experience;
                 const experienceVal = expRaw != null ? String(expRaw) : null;
                 const hourlyRateVal = b.hourlyRate != null && b.hourlyRate !== '' ? parseFloat(b.hourlyRate) : null;
@@ -616,7 +638,7 @@ export const register = async (req, res, next) => {
                     where: { userId: created.id },
                     update: {
                         skills: skillsVal || undefined,
-                        industry: industryVal ? String(industryVal).trim() : undefined,
+                        industry: industryVal || undefined,
                         experience: experienceVal || undefined,
                         hourlyRate: hourlyRateVal != null ? hourlyRateVal : undefined,
                         education: educationVal || undefined,
@@ -624,7 +646,7 @@ export const register = async (req, res, next) => {
                     create: {
                         userId: created.id,
                         skills: skillsVal || '',
-                        industry: industryVal ? String(industryVal).trim() : null,
+                        industry: industryVal,
                         experience: experienceVal,
                         hourlyRate: hourlyRateVal,
                         education: educationVal,
@@ -1379,10 +1401,10 @@ export const updateMe = async (req, res, next) => {
             if (val == null)
                 return undefined;
             if (typeof val === 'object' && !Array.isArray(val)) {
-                return val.id || val.value || val.name || val.label;
+                return optionValue(val) || undefined;
             }
             if (Array.isArray(val)) {
-                const ids = val.map(item => (typeof item === 'object' ? item.id || item.value || item.name : String(item))).filter(Boolean);
+                const ids = val.map(item => optionValue(item)).filter(Boolean);
                 return ids.join(',');
             }
             return String(val).trim();
