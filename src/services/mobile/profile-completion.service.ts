@@ -70,6 +70,7 @@ function evaluateFreelancer(user: any, fp: any) {
     certifications: hasText(fp?.certifications),
     linkedin: hasText(fp?.linkedInUrl),
     avatar: hasText(user.avatarUrl),
+    coverImage: hasText(user.coverImageUrl),
   };
 
   const core = [
@@ -82,6 +83,7 @@ function evaluateFreelancer(user: any, fp: any) {
     { key: 'country', label: 'Country', valid: fields.country, sectionKey: 'location' },
     { key: 'city', label: 'City', valid: fields.city, sectionKey: 'location' },
     { key: 'avatar', label: 'Profile Picture', valid: fields.avatar, sectionKey: 'personal' },
+    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage, sectionKey: 'personal' },
   ];
 
   const recommended = [
@@ -99,7 +101,9 @@ function evaluateFreelancer(user: any, fp: any) {
   };
 
   let score = 0;
-  if (fields.fullName && fields.email && fields.avatar) score += weights.identity;
+  if (fields.fullName && fields.email) score += 10;
+  if (fields.avatar) score += 5;
+  if (fields.coverImage) score += 5;
   if (fields.title && fields.bio && fields.experience) score += weights.professional;
   if (fields.skills) score += weights.skills;
   if (fields.rate || fields.availability) score += weights.rate;
@@ -151,6 +155,7 @@ function evaluateClient(user: any, cp: any) {
     country: hasText(user.country),
     city: hasText(user.city),
     avatar: hasText(user.avatarUrl),
+    coverImage: hasText(user.coverImageUrl),
     hiringGoal: hasText(cp?.hiringGoal),
     projectHireBudget: hasText(cp?.projectHireBudget) || hasNumber(cp?.projectHireBudget),
   };
@@ -161,6 +166,7 @@ function evaluateClient(user: any, cp: any) {
     { key: 'country', label: 'Country', valid: fields.country },
     { key: 'city', label: 'City', valid: fields.city },
     { key: 'avatar', label: 'Profile Picture', valid: fields.avatar },
+    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage },
   ];
 
   const recommended = [
@@ -169,7 +175,9 @@ function evaluateClient(user: any, cp: any) {
   ];
 
   let score = 0;
-  if (fields.fullName && fields.email && fields.avatar) score += 30;
+  if (fields.fullName && fields.email) score += 20;
+  if (fields.avatar) score += 5;
+  if (fields.coverImage) score += 5;
   if (fields.company || fields.industry) score += 30;
   if (fields.country && fields.city) score += 20;
   if (fields.hiringGoal || fields.projectHireBudget) score += 20;
@@ -215,6 +223,7 @@ function evaluateInvestor(user: any, ip: any) {
     country: hasText(user.country),
     city: hasText(user.city),
     avatar: hasText(user.avatarUrl),
+    coverImage: hasText(user.coverImageUrl),
   };
 
   const isIndividual = ip?.investorType === 'Angel Investor' || ip?.investorType === 'Individual';
@@ -225,6 +234,7 @@ function evaluateInvestor(user: any, ip: any) {
     { key: 'investorType', label: 'Investor Type', valid: fields.investorType },
     { key: 'focusAreas', label: 'Preferred Industries', valid: fields.focusAreas },
     { key: 'avatar', label: 'Profile Picture', valid: fields.avatar },
+    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage },
   ];
 
   const recommended = [
@@ -239,7 +249,9 @@ function evaluateInvestor(user: any, ip: any) {
   let maxScore = isIndividual ? 80 : 100;
   let earnedScore = 0;
   
-  if (fields.fullName && fields.email && fields.avatar) earnedScore += 30;
+  if (fields.fullName && fields.email) earnedScore += 20;
+  if (fields.avatar) earnedScore += 5;
+  if (fields.coverImage) earnedScore += 5;
   if (fields.investorType && fields.focusAreas) earnedScore += 30;
   if (fields.ticketMin) earnedScore += 20;
   if (!isIndividual && fields.firm) earnedScore += 20;
@@ -294,6 +306,7 @@ function evaluateFounder(user: any, fp: any) {
     country: hasText(user.country),
     city: hasText(user.city),
     avatar: hasText(user.avatarUrl),
+    coverImage: hasText(user.coverImageUrl),
   };
 
   const seekingFunding = true; // Placeholder for future logic based on intents
@@ -306,6 +319,7 @@ function evaluateFounder(user: any, fp: any) {
     { key: 'pitch', label: 'Short Pitch', valid: fields.pitch },
     { key: 'stage', label: 'Business Stage', valid: fields.stage },
     { key: 'avatar', label: 'Profile Picture', valid: fields.avatar },
+    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage },
   ];
 
   if (seekingFunding) {
@@ -319,7 +333,9 @@ function evaluateFounder(user: any, fp: any) {
   let maxScore = seekingFunding ? 100 : 85;
   let earnedScore = 0;
   
-  if (fields.fullName && fields.email && fields.avatar) earnedScore += 25;
+  if (fields.fullName && fields.email) earnedScore += 15;
+  if (fields.avatar) earnedScore += 5;
+  if (fields.coverImage) earnedScore += 5;
   if (fields.startupName && fields.industry) earnedScore += 25;
   if (fields.pitch && fields.stage) earnedScore += 20;
   if (fields.country || fields.city) earnedScore += 15;
