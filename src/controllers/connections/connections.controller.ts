@@ -182,6 +182,17 @@ export const acceptInvitation = async (req: AuthenticatedRequest, res: Response,
       });
     } catch (err) {}
     
+    const senderUser = await prisma.user.findUnique({ where: { id: invitation.senderId } });
+    if (senderUser) {
+      const { sendConnectionAcceptedEmail } = await import("../../services/mobile/email.service.js");
+      await sendConnectionAcceptedEmail(
+        senderUser.email,
+        senderUser.fullName,
+        invitation.receiver.fullName,
+        `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/messages`
+      ).catch(e => console.error("Failed to send connection accepted email:", e));
+    }
+
     return res.json({ success: true, message: 'Invitation accepted successfully', data: updated });
   } catch (error) { next(error); }
 };
@@ -215,6 +226,17 @@ export const rejectInvitation = async (req: AuthenticatedRequest, res: Response,
         invitationId: id
       });
     } catch (err) {}
+
+    const senderUser = await prisma.user.findUnique({ where: { id: invitation.senderId } });
+    const receiverUser = await prisma.user.findUnique({ where: { id: invitation.receiverId } });
+    if (senderUser && receiverUser) {
+      const { sendConnectionRejectedEmail } = await import("../../services/mobile/email.service.js");
+      await sendConnectionRejectedEmail(
+        senderUser.email,
+        senderUser.fullName,
+        receiverUser.fullName
+      ).catch(e => console.error("Failed to send connection rejected email:", e));
+    }
 
     return res.json({ success: true, message: 'Invitation rejected', data: updated });
   } catch (error) { next(error); }

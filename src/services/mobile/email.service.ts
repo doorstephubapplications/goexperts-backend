@@ -894,4 +894,33 @@ export const sendRegistrationReminderEmail = async (to: string, name: string) =>
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
+export const sendConnectionRequestEmail = async (to: string, name: string, senderName: string, networkLink: string) => {
+  const rendered = await renderEmailTemplate("tpl_connection_request", {
+    full_name: name || 'User',
+    sender_name: senderName,
+    network_link: networkLink || `${FRONTEND_URL}/dashboard/network`,
+    app_url: FRONTEND_URL,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
+export const sendConnectionAcceptedEmail = async (to: string, name: string, acceptorName: string, chatLink: string) => {
+  const rendered = await renderEmailTemplate("tpl_connection_accepted", {
+    full_name: name || 'User',
+    acceptor_name: acceptorName,
+    chat_link: chatLink || `${FRONTEND_URL}/dashboard/messages`,
+    app_url: FRONTEND_URL,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
+export const sendConnectionRejectedEmail = async (to: string, name: string, rejectorName: string) => {
+  const rendered = await renderEmailTemplate("tpl_connection_rejected", {
+    full_name: name || 'User',
+    rejector_name: rejectorName,
+    app_url: FRONTEND_URL,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
 
