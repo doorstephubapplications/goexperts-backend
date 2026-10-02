@@ -923,4 +923,14 @@ export const sendConnectionRejectedEmail = async (to: string, name: string, reje
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
+export const sendProjectCreatedEmail = async (to: string, name: string, projectTitle: string, dashboardLink: string) => {
+  const rendered = await renderEmailTemplate("tpl_project_created", {
+    full_name: name || 'User',
+    project_title: projectTitle,
+    dashboard_link: dashboardLink || `${FRONTEND_URL}/dashboard/projects`,
+    app_url: FRONTEND_URL,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
 

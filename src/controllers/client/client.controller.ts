@@ -635,6 +635,17 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
       metadata: { title: project.title, budget: project.budget },
     });
 
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user) {
+      const { sendProjectCreatedEmail } = await import("../../services/mobile/email.service.js");
+      await sendProjectCreatedEmail(
+        user.email,
+        user.fullName,
+        project.title,
+        `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/projects`
+      ).catch(e => console.error("Failed to send project created email:", e));
+    }
+
     res.status(201).json({ success: true, message: "Project created", data: project });
   } catch (err) {
     handleError(err, res, next);
