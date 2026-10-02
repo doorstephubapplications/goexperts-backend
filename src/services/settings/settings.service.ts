@@ -169,14 +169,8 @@ export function wrapInMncEmailLayout(
     rawLogoUrl = "https://apiai.goexperts.in" + rawLogoUrl;
   }
   
-  let rawLogoUrlDark = branding?.logoUrlDark || rawLogoUrl;
-  if (rawLogoUrlDark.startsWith("/")) {
-    rawLogoUrlDark = "https://apiai.goexperts.in" + rawLogoUrlDark;
-  }
-  
   const brand = {
     logoUrl: rawLogoUrl,
-    logoUrlDark: rawLogoUrlDark,
     logoHeight: branding?.logoHeight || 34,
     showBrandText: branding?.showBrandText !== false,
     primaryColor: branding?.primaryColor || "#E30613",
@@ -221,8 +215,6 @@ export function wrapInMncEmailLayout(
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
   <meta name="x-apple-disable-message-reformatting" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="supported-color-schemes" content="light dark" />
   <title>${options?.subject || "Go Experts Notification"}</title>
   
   <style type="text/css">
@@ -230,10 +222,6 @@ export function wrapInMncEmailLayout(
       box-sizing: border-box;
       -webkit-text-size-adjust: 100%;
       -ms-text-size-adjust: 100%;
-    }
-    :root {
-      color-scheme: light dark;
-      supported-color-schemes: light dark;
     }
     table, td {
       mso-table-lspace: 0pt;
@@ -255,60 +243,6 @@ export function wrapInMncEmailLayout(
       background-color: #f4f6f8;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       color: #1f2937;
-    }
-    
-    .dark-logo {
-      display: none;
-      mso-hide: all;
-    }
-
-    @media screen and (prefers-color-scheme: dark) {
-      body, .email-wrapper {
-        background-color: #1a1a1a !important;
-      }
-      .email-container {
-        background-color: #2a2a2a !important;
-        border-color: #333333 !important;
-      }
-      .header-padding {
-        background-color: #2a2a2a !important;
-        border-bottom-color: #333333 !important;
-      }
-      .content-padding, .footer-padding {
-        background-color: #2a2a2a !important;
-      }
-      * {
-        color: #e5e7eb !important;
-      }
-      .light-logo {
-        display: none !important;
-        mso-hide: all !important;
-      }
-      .dark-logo {
-        display: block !important;
-        visibility: visible !important;
-        width: auto !important;
-        max-height: none !important;
-        max-width: none !important;
-        line-height: normal !important;
-        overflow: visible !important;
-        float: none !important;
-      }
-    }
-
-    [data-ogsc] .light-logo {
-      display: none !important;
-      mso-hide: all !important;
-    }
-    [data-ogsc] .dark-logo {
-      display: block !important;
-      visibility: visible !important;
-      width: auto !important;
-      max-height: none !important;
-      max-width: none !important;
-      line-height: normal !important;
-      overflow: visible !important;
-      float: none !important;
     }
 
     @media only screen and (max-width: 600px) {
@@ -384,14 +318,7 @@ export function wrapInMncEmailLayout(
                       <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                         <tr>
                           <td style="vertical-align: middle; padding-right: 10px;">
-                              <!--[if !mso]><! -->
-                              <div class="dark-logo" style="display:none; mso-hide:all; overflow:hidden; float:left; width:0px; max-height:0px; max-width:0px; line-height:0px; visibility:hidden;" align="center">
-                                <img src="${brand.logoUrlDark}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; border: 0;" />
-                              </div>
-                              <!--<![endif]-->
-                              <div class="light-logo">
-                                <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; border: 0;" />
-                              </div>
+                            <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
                           </td>
                         </tr>
                       </table>
