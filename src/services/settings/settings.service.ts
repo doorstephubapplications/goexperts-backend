@@ -221,6 +221,8 @@ export function wrapInMncEmailLayout(
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
   <meta name="x-apple-disable-message-reformatting" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
   <title>${options?.subject || "Go Experts Notification"}</title>
   
   <style type="text/css">
@@ -228,6 +230,10 @@ export function wrapInMncEmailLayout(
       box-sizing: border-box;
       -webkit-text-size-adjust: 100%;
       -ms-text-size-adjust: 100%;
+    }
+    :root {
+      color-scheme: light dark;
+      supported-color-schemes: light dark;
     }
     table, td {
       mso-table-lspace: 0pt;
@@ -253,11 +259,30 @@ export function wrapInMncEmailLayout(
     
     .dark-logo {
       display: none !important;
+      mso-hide: all;
     }
 
     @media (prefers-color-scheme: dark) {
+      body, .email-wrapper {
+        background-color: #1a1a1a !important;
+      }
+      .email-container {
+        background-color: #2a2a2a !important;
+        border-color: #333333 !important;
+      }
+      .header-padding {
+        background-color: #2a2a2a !important;
+        border-bottom-color: #333333 !important;
+      }
+      .content-padding, .footer-padding {
+        background-color: #2a2a2a !important;
+      }
+      * {
+        color: #e5e7eb !important;
+      }
       .light-logo {
         display: none !important;
+        mso-hide: all;
       }
       .dark-logo {
         display: block !important;
