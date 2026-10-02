@@ -637,7 +637,99 @@ adminUsersRouter.delete("/:id", async (req: Request, res: Response, next: NextFu
     next(err);
   }
 });
+// ==========================================
+// 7. PATCH /api/admin/users/:id/kyc-document
+// ==========================================
+adminUsersRouter.patch("/:id/kyc-document", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key, status, reason, unlockRequested } = req.body;
+    const userId = req.params.id;
+    
+    if (!key) {
+      return res.status(400).json({ success: false, message: "Document key is required" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        freelancerProfile: true,
+        clientProfile: true,
+        founderProfile: true,
+        investorProfile: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    let targetProfile = user.freelancerProfile || user.clientProfile || user.founderProfile || user.investorProfile;
+    let targetModelName = user.freelancerProfile ? "freelancerProfile" 
+                         : user.clientProfile ? "clientProfile" 
+                         : user.founderProfile ? "founderProfile" 
+                         : user.investorProfile ? "investorProfile" : null;
+
+    if (!targetProfile || !targetModelName) {
+      return res.status(404).json({ success: false, message: "User profile not found for document update" });
+    }
+
+    let verificationJsonStr = (targetProfile as any).verificationJson;
+    if (!verificationJsonStr) {
+      return res.status(404).json({ success: false, message: "No verification data found" });
+    }
+
+    let vJson: any = {};
+    if (typeof verificationJsonStr === "string") {
+      try {
+        vJson = JSON.parse(verificationJsonStr);
+      } catch (e) {
+        vJson = {};
+      }
+    } else {
+      vJson = verificationJsonStr;
+    }
+
+    let updated = false;
+
+    // Try finding the document directly by key (e.g., vJson.pan)
+    if (vJson[key] && typeof vJson[key] === "object") {
+      vJson[key].status = status;
+      if (reason !== undefined) vJson[key].rejectReason = reason;
+      if (unlockRequested !== undefined) vJson[key].unlockRequested = unlockRequested;
+      updated = true;
+    } else {
+      // Fallback: Check documents or documentsList array
+      let docsArray = vJson.documentsList || vJson.documents;
+      if (Array.isArray(docsArray)) {
+        let docIndex = docsArray.findIndex((d: any) => d.key === key || d.id === key);
+        if (docIndex !== -1) {
+          docsArray[docIndex].status = status;
+          if (reason !== undefined) docsArray[docIndex].rejectReason = reason;
+          if (unlockRequested !== undefined) docsArray[docIndex].unlockRequested = unlockRequested;
+          updated = true;
+        }
+      }
+    }
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Document not found in user records" });
+    }
+
+    // Save back to DB
+    const updateData = {
+      verificationJson: JSON.stringify(vJson)
+    };
+
+    await (prisma as any)[targetModelName].update({
+      where: { id: targetProfile.id },
+      data: updateData
+    });
+
+    res.json({ success: true, message: `Document successfully marked as ${status}` });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default adminUsersRouter;
-
 
