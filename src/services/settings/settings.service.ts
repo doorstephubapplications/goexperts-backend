@@ -315,13 +315,6 @@ export function wrapInMncEmailLayout(
                           <td style="vertical-align: middle; padding-right: 10px;">
                             <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
                           </td>
-                          ${
-                            brand.showBrandText
-                              ? `<td style="vertical-align: middle;">
-                            <span style="font-size: 22px; font-weight: 800; color: ${brand.primaryColor}; letter-spacing: -0.4px; line-height: 1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Go <span style="color: #111827;">Experts</span></span>
-                          </td>`
-                              : ""
-                          }
                         </tr>
                       </table>
                     </a>
