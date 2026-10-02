@@ -203,12 +203,13 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
     
     // Normalize Verification Center Structure
     let profile = user.freelancerProfile || user.clientProfile || user.founderProfile || user.investorProfile;
-    let verificationCenter = {
+    let verificationCenter: any = {
       email: user.isVerified || user.verified ? "VERIFIED" : "PENDING",
       phone: user.phone ? "VERIFIED" : "PENDING",
       profile: user.completionPercentage && user.completionPercentage >= 80 ? "COMPLETED" : "PENDING",
       kyc: "PENDING",
-      documents: "PENDING"
+      documents: "PENDING",
+      documentsList: []
     };
 
     if (profile && (profile as any).verificationJson) {
@@ -220,6 +221,12 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         } else if (vJson.kycSubmitted) {
           verificationCenter.kyc = "IN_REVIEW";
           verificationCenter.documents = "SUBMITTED";
+        }
+        
+        if (Array.isArray(vJson.documentsList)) {
+          verificationCenter.documentsList = vJson.documentsList;
+        } else if (Array.isArray(vJson.documents)) {
+          verificationCenter.documentsList = vJson.documents;
         }
       } catch {}
     }
