@@ -302,6 +302,14 @@ export const activateUserSubscription = async (
             discount: 0,
             total: plan.amount,
             status: 'paid',
+            items: {
+              create: [
+                {
+                  description: `Subscription: ${plan.name}`,
+                  amount: plan.amount,
+                }
+              ]
+            }
           }
         });
 
