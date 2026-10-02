@@ -405,7 +405,7 @@ export const activateUserSubscription = async (
             type: 'referral_cashback',
             title: 'Cashback Credited Successfully! 🎉',
             message: `You received 💰${cashbackAmount} cashback (${cashbackPercent}%) because your friend ${referral.referee.fullName} bought a subscription plan!`,
-            channel: 'all',
+            channel: 'push',
             payload: { amount: cashbackAmount, baseAmount: planBaseAmount, grossAmount: plan.amount, friend: referral.referee.fullName },
           }).catch(console.error);
         }
