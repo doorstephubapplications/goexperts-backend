@@ -262,7 +262,7 @@ export function wrapInMncEmailLayout(
       mso-hide: all;
     }
 
-    @media (prefers-color-scheme: dark) {
+    @media screen and (prefers-color-scheme: dark) {
       body, .email-wrapper {
         background-color: #1a1a1a !important;
       }
@@ -282,11 +282,33 @@ export function wrapInMncEmailLayout(
       }
       .light-logo {
         display: none !important;
-        mso-hide: all;
+        mso-hide: all !important;
       }
       .dark-logo {
         display: block !important;
+        visibility: visible !important;
+        width: auto !important;
+        max-height: none !important;
+        max-width: none !important;
+        line-height: normal !important;
+        overflow: visible !important;
+        float: none !important;
       }
+    }
+
+    [data-ogsc] .light-logo {
+      display: none !important;
+      mso-hide: all !important;
+    }
+    [data-ogsc] .dark-logo {
+      display: block !important;
+      visibility: visible !important;
+      width: auto !important;
+      max-height: none !important;
+      max-width: none !important;
+      line-height: normal !important;
+      overflow: visible !important;
+      float: none !important;
     }
 
     @media only screen and (max-width: 600px) {
