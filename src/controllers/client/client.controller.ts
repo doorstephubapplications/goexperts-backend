@@ -1486,7 +1486,8 @@ export const withdrawClientWallet = async (req: AuthenticatedRequest, res: Respo
     if (!amount || amount < 1000) {
       return res.status(400).json({ success: false, message: "Minimum withdrawal amount is ₹1,000" });
     }
-    const result = await debitWalletForSelf(userId, amount, "withdrawal", body.description || "Wallet withdrawal", "pending");
+    const payoutDesc = body.bankDetails || (body.method ? `${body.method}: ${body.bankDetails || body.details || ''}` : null) || body.description || "Client withdrawal";
+    const result = await debitWalletForSelf(userId, amount, "withdrawal", payoutDesc, "pending");
     res.status(201).json({ success: true, message: "Withdrawal request submitted", data: result });
   } catch (err) {
     handleError(err, res, next);

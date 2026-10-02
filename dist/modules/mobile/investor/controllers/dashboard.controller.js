@@ -197,12 +197,19 @@ export const getDashboard = async (req, res, next) => {
         const receivedInvitationsCount = await prisma.connectionInvitation.count({
             where: { receiverId: userId, status: 'PENDING' },
         });
-        const connectionsCount = await prisma.connection.count({
+        const connectionsRaw = await prisma.connection.findMany({
             where: {
                 OR: [{ userOneId: userId }, { userTwoId: userId }],
                 status: 'ACTIVE',
             },
         });
+        let connectionsCount = 0;
+        for (const conn of connectionsRaw) {
+            const peerId = conn.userOneId === userId ? conn.userTwoId : conn.userOneId;
+            const peer = await prisma.user.findUnique({ where: { id: peerId } });
+            if (peer)
+                connectionsCount++;
+        }
         return res.json(successResponse('Investor dashboard retrieved', {
             profileCompletion: completion.profileCompletion,
             profileCompletedPer: completion.profileCompletion,

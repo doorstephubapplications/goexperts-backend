@@ -28,13 +28,52 @@ export const listWithdrawals = async (req: AuthenticatedRequest, res: Response, 
           include: {
             user: {
               select: { id: true, fullName: true, email: true, avatarUrl: true, role: true }
+            },
+            withdrawals: {
+              orderBy: { createdAt: "desc" },
+              take: 10
             }
           }
         }
       },
       orderBy: { createdAt: "desc" },
     });
-    res.json({ success: true, rows: transactions, total: transactions.length });
+
+    const rows = transactions.map((txn: any) => {
+      const matchedReq = txn.wallet?.withdrawals?.find(
+        (w: any) => Math.abs(w.amount - txn.amount) < 0.01 && 
+          Math.abs(new Date(w.createdAt).getTime() - new Date(txn.createdAt).getTime()) < 1000 * 60 * 60 * 24 * 7
+      ) || txn.wallet?.withdrawals?.[0];
+
+      let paymentMethod = matchedReq?.paymentMethod || "";
+      let accountDetails = matchedReq?.paymentDetails || "";
+
+      const desc = txn.description || "";
+      if (!paymentMethod || !accountDetails) {
+        if (/upi/i.test(desc)) {
+          paymentMethod = "UPI";
+          accountDetails = desc;
+        } else if (/bank/i.test(desc)) {
+          paymentMethod = "Bank Transfer";
+          accountDetails = desc;
+        }
+      }
+
+      if (!paymentMethod) {
+        paymentMethod = /upi/i.test(desc) ? "UPI" : (/bank/i.test(desc) ? "Bank Transfer" : "Bank Transfer");
+      }
+      if (!accountDetails) {
+        accountDetails = desc || "No details provided";
+      }
+
+      return {
+        ...txn,
+        paymentMethod,
+        accountDetails,
+      };
+    });
+
+    res.json({ success: true, rows, total: rows.length });
   } catch (err) {
     next(err);
   }
