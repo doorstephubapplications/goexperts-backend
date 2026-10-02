@@ -2279,22 +2279,48 @@ export const verifyDeleteAccountOtp = async (req: Request, res: Response, next: 
 export const getOtpInfo = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = String(req.query.token || "").trim();
+    const codeParam = String(req.query.code || "").trim();
     const emailParam = String(req.query.email || "").trim().toLowerCase();
+
+    // 1. If token or code param is already a 6-digit OTP code (e.g. from mobile link or direct param)
+    if (/^\d{6}$/.test(token)) {
+      return res.json({
+        success: true,
+        otp: token,
+        expiresInSeconds: 600,
+      });
+    }
+
+    if (/^\d{6}$/.test(codeParam)) {
+      return res.json({
+        success: true,
+        otp: codeParam,
+        expiresInSeconds: 600,
+      });
+    }
 
     let email = emailParam;
 
-    // Resolve token â†’ email
+    // Resolve token -> email
     if (token) {
       const tokenRecord = tokenStore.get(token);
-      if (!tokenRecord || tokenRecord.expiresAt < Date.now()) {
-        tokenStore.delete(token);
-        return res.status(404).json({ success: false, message: "No active verification code found or link has expired." });
+      if (tokenRecord && tokenRecord.expiresAt >= Date.now()) {
+        email = tokenRecord.email;
       }
-      email = tokenRecord.email;
+    }
+
+    // Also check if any stored OTP matches this token as an OTP code
+    if (!email && token) {
+      for (const [key, val] of otpStore.entries()) {
+        if (val.otp === token && val.expiresAt >= Date.now()) {
+          email = key;
+          break;
+        }
+      }
     }
 
     if (!email) {
-      return res.status(400).json({ success: false, message: "Token or email parameter required" });
+      return res.status(404).json({ success: false, message: "No active verification code found or link has expired." });
     }
 
     const stored = otpStore.get(email);
@@ -2304,7 +2330,7 @@ export const getOtpInfo = async (req: Request, res: Response, next: NextFunction
     return res.json({
       success: true,
       otp: stored.otp,
-      expiresInSeconds: Math.floor((stored.expiresAt - Date.now()) / 1000),
+      expiresInSeconds: Math.max(0, Math.floor((stored.expiresAt - Date.now()) / 1000)),
     });
   } catch (err) {
     next(err);
