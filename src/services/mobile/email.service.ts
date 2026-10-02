@@ -662,12 +662,13 @@ export const sendAdminWalletCreditEmail = async (to: string, name: string, amoun
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
-export const sendSubscriptionPurchasedEmail = async (to: string, name: string, planName: string, amount: number, invoicePdfPath?: string) => {
+export const sendSubscriptionPurchasedEmail = async (to: string, name: string, planName: string, amount: number, invoicePdfPath?: string, invoicePublicUrl?: string) => {
   const rendered = await renderEmailTemplate("tpl_subscription_purchased", {
     full_name: name || 'User',
     plan_name: planName,
     amount: amount,
     dashboard_link: `${FRONTEND_URL}/dashboard/billing`,
+    invoice_link: invoicePublicUrl ? `${process.env.BACKEND_URL || 'https://api.goexperts.in'}${invoicePublicUrl}` : '',
   });
   
   const attachments = invoicePdfPath ? [

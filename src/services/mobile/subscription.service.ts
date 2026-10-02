@@ -308,8 +308,8 @@ export const activateUserSubscription = async (
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (user && user.email) {
           try {
-            const { filePath } = await generateInvoicePdf(invoiceObj.id);
-            await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount, filePath);
+            const { filePath, publicPath } = await generateInvoicePdf(invoiceObj.id);
+            await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount, filePath, publicPath);
           } catch (pdfErr) {
             console.error('Failed to generate PDF or send email:', pdfErr);
             await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount);
