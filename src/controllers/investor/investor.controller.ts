@@ -893,9 +893,8 @@ export const listInvestorReviews = async (req: AuthenticatedRequest, res: Respon
 
 export const addInvestorTeamMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { requireUser } = await import('../../middlewares/auth.middleware.js');
-    const userId = requireUser(req, res);
-    if (!userId) return;
+        const userId = req.user?.id || (req as any).userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
     const body = req.body || {};
     const name = String(body.name || "").trim();
     if (!name) return res.status(400).json({ success: false, message: "name is required" });
@@ -940,7 +939,8 @@ export const addInvestorTeamMember = async (req: AuthenticatedRequest, res: Resp
           ownerId: userId,
           userId: existingUser.id,
           email,
-          role: body.role || "Member"
+          role: body.role || "Member",
+          permissions: "[]"
         }
       });
 
@@ -949,7 +949,8 @@ export const addInvestorTeamMember = async (req: AuthenticatedRequest, res: Resp
       const frontendUrl = process.env.FRONTEND_URL || "https://goexperts.in";
 
       try {
-        const { renderEmailTemplate, sendEmail } = await import("../../services/mobile/email.service.js");
+        const { sendEmail } = await import("../../services/mobile/email.service.js");
+        const { renderEmailTemplate } = await import("../../services/settings/settings.service.js");
         const rendered = await renderEmailTemplate("tpl_team_invitation", {
           full_name: name,
           member_name: name,
@@ -984,9 +985,8 @@ export const addInvestorTeamMember = async (req: AuthenticatedRequest, res: Resp
 
 export const listInvestorTeam = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { requireUser } = await import('../../middlewares/auth.middleware.js');
-    const userId = requireUser(req, res);
-    if (!userId) return;
+        const userId = req.user?.id || (req as any).userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
     const { getJsonSetting } = await import('../../common/helpers/portal-shared.js');
     const rows = await getJsonSetting(userId, "team", [] as any[]);
     res.json({ success: true, rows, total: rows.length });
@@ -997,9 +997,8 @@ export const listInvestorTeam = async (req: AuthenticatedRequest, res: Response,
 
 export const deleteInvestorTeamMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { requireUser } = await import('../../middlewares/auth.middleware.js');
-    const userId = requireUser(req, res);
-    if (!userId) return;
+        const userId = req.user?.id || (req as any).userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
     const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
