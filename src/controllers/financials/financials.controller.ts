@@ -1082,7 +1082,7 @@ export async function resendInvoice(req: AuthenticatedRequest, res: Response) {
   try {
     // Only admin users with invoice permissions can resend
     if (req.user?.type !== "admin") return res.status(403).json({ success: false, message: "Forbidden" });
-    const allowed = await adminHasPermission(req.user?.id, "invoices", ["manage", "resend"]);
+    const allowed = await adminHasPermission(req.user?.id, "invoices", ["manage", "read", "resend"]);
     if (!allowed) return res.status(403).json({ success: false, message: "Insufficient permissions" });
 
     const { id } = req.params;
