@@ -164,8 +164,13 @@ export function wrapInMncEmailLayout(
   branding: any = {},
   options: { subject?: string; module?: string } = {}
 ) {
+  let rawLogoUrl = branding?.logoUrl || "https://apiai.goexperts.in/goexperts-logo.png";
+  if (rawLogoUrl.startsWith("/")) {
+    rawLogoUrl = "https://apiai.goexperts.in" + rawLogoUrl;
+  }
+  
   const brand = {
-    logoUrl: branding?.logoUrl || "http://localhost:5173/goexperts-logo.png",
+    logoUrl: rawLogoUrl,
     logoHeight: branding?.logoHeight || 34,
     showBrandText: branding?.showBrandText !== false,
     primaryColor: branding?.primaryColor || "#E30613",
