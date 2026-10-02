@@ -798,9 +798,9 @@ export const sendReferralCashbackEmail = async (to: string, name: string, amount
     full_name: name || 'User',
     firstName,
     friend_name: friendName,
-    cashback_amount: amount,
-    amount,
-    new_balance: balanceAfter,
+    cashback_amount: Number(amount).toFixed(2),
+    amount: Number(amount).toFixed(2),
+    new_balance: Number(balanceAfter).toFixed(2),
     wallet_url: `${FRONTEND_URL}/dashboard`,
   });
 
