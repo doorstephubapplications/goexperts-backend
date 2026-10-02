@@ -853,6 +853,35 @@ export const sendProfileReminderEmail = async (to: string, name: string) => {
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
+export const sendMeetingCreatedEmail = async (to: string, name: string, title: string, date: string, time: string, mode: string, joinLink: string, hostName: string = 'Go Experts') => {
+  const rendered = await renderEmailTemplate("tpl_meeting_invitation", {
+    full_name: name || 'User',
+    meeting_title: title || 'Meeting',
+    meeting_date: date,
+    meeting_time: time,
+    mode,
+    meeting_url: joinLink || `${FRONTEND_URL}/dashboard/meetings`,
+    host_name: hostName,
+    app_url: FRONTEND_URL,
+  });
+
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
+export const sendMeetingReminderEmail = async (to: string, name: string, title: string, date: string, time: string, mode: string, joinLink: string) => {
+  const rendered = await renderEmailTemplate("tpl_meeting_reminder", {
+    full_name: name || 'User',
+    meeting_title: title || 'Meeting',
+    date,
+    time,
+    mode,
+    join_link: joinLink || `${FRONTEND_URL}/dashboard/meetings`,
+    app_url: FRONTEND_URL,
+  });
+
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
 export const sendRegistrationReminderEmail = async (to: string, name: string) => {
   const firstName = (name || 'User').split(' ')[0];
   const rendered = await renderEmailTemplate("tpl_registration_reminder", {
