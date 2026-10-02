@@ -169,8 +169,14 @@ export function wrapInMncEmailLayout(
     rawLogoUrl = "https://apiai.goexperts.in" + rawLogoUrl;
   }
   
+  let rawLogoUrlDark = branding?.logoUrlDark || rawLogoUrl;
+  if (rawLogoUrlDark.startsWith("/")) {
+    rawLogoUrlDark = "https://apiai.goexperts.in" + rawLogoUrlDark;
+  }
+  
   const brand = {
     logoUrl: rawLogoUrl,
+    logoUrlDark: rawLogoUrlDark,
     logoHeight: branding?.logoHeight || 34,
     showBrandText: branding?.showBrandText !== false,
     primaryColor: branding?.primaryColor || "#E30613",
@@ -243,6 +249,19 @@ export function wrapInMncEmailLayout(
       background-color: #f4f6f8;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       color: #1f2937;
+    }
+    
+    .dark-logo {
+      display: none !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .light-logo {
+        display: none !important;
+      }
+      .dark-logo {
+        display: block !important;
+      }
     }
 
     @media only screen and (max-width: 600px) {
@@ -318,7 +337,8 @@ export function wrapInMncEmailLayout(
                       <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                         <tr>
                           <td style="vertical-align: middle; padding-right: 10px;">
-                            <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
+                            <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" class="light-logo" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
+                            <img src="${brand.logoUrlDark}" alt="Go Experts" height="${brand.logoHeight}" class="dark-logo" style="height: ${brand.logoHeight}px; width: auto; display: none; border: 0;" />
                           </td>
                         </tr>
                       </table>
