@@ -195,3 +195,102 @@ export const creditWallet = async (req: AuthenticatedRequest, res: Response, nex
     next(err);
   }
 };
+
+export const bulkStatus = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.type !== "admin" && req.user?.role !== "super_admin") {
+      throw new HttpError("Super Admin access required", 403);
+    }
+    const { ids, value, field, adminNotes } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0 || field !== "status") {
+      throw new HttpError("Invalid parameters");
+    }
+
+    let processedCount = 0;
+    for (const id of ids) {
+      const txn = await prisma.walletTransaction.findUnique({ where: { id }, include: { wallet: { include: { user: true } } } });
+      if (!txn || txn.type !== "withdrawal" || txn.status !== "pending") continue;
+
+      if (value === "completed") {
+        await prisma.walletTransaction.update({
+          where: { id },
+          data: { status: "completed" },
+        });
+
+        if (txn.wallet?.userId) {
+          await prisma.notification.create({
+            data: {
+              userId: txn.wallet.userId,
+              title: "Withdrawal Approved",
+              message: `Your withdrawal of ₹${txn.amount} has been approved. ${adminNotes ? 'Note: ' + adminNotes : ''}`,
+              type: "WITHDRAWAL_APPROVED",
+              channel: "in-app"
+            }
+          });
+          
+          if (txn.wallet.user?.email) {
+            try {
+              const { sendEmail } = await import("../../services/mobile/email.service.js");
+              const { renderEmailTemplate } = await import("../../services/settings/settings.service.js");
+              const frontendUrl = process.env.FRONTEND_URL || "https://goexperts.in";
+              
+              const rendered = await renderEmailTemplate("tpl_withdrawal_approved", {
+                customer_name: txn.wallet.user.fullName || "User",
+                amount: `₹${txn.amount}`,
+                withdrawal_id: id.substring(0, 8).toUpperCase(),
+                notes: adminNotes || "Processed successfully",
+                date: new Date().toLocaleString(),
+                login_url: `${frontendUrl}/login`
+              });
+              await sendEmail(txn.wallet.user.email, rendered.subject, rendered.html);
+            } catch (mailErr) {
+              console.warn("Failed to send withdrawal approval email:", mailErr);
+            }
+          }
+        }
+        processedCount++;
+      } else if (value === "rejected") {
+        await prisma.$transaction(async (tx) => {
+          await tx.walletTransaction.update({
+            where: { id },
+            data: { status: "rejected" },
+          });
+
+          const updatedWallet = await tx.wallet.update({
+            where: { id: txn.wallet.id },
+            data: { balance: { increment: txn.amount } }
+          });
+
+          await tx.walletTransaction.create({
+            data: {
+              walletId: txn.wallet.id,
+              type: "refund",
+              amount: txn.amount,
+              direction: "credit",
+              description: `Refund for rejected withdrawal (${id.slice(0, 8)}) - ${adminNotes || ''}`,
+              balanceAfter: updatedWallet.balance,
+              status: "completed"
+            }
+          });
+        });
+        
+        if (txn.wallet?.userId) {
+          await prisma.notification.create({
+            data: {
+              userId: txn.wallet.userId,
+              title: "Withdrawal Rejected",
+              message: `Your withdrawal of ₹${txn.amount} was rejected and refunded. ${adminNotes ? 'Reason: ' + adminNotes : ''}`,
+              type: "WITHDRAWAL_REJECTED",
+              channel: "in-app"
+            }
+          });
+        }
+        processedCount++;
+      }
+    }
+
+    res.json({ success: true, message: `Successfully updated ${processedCount} records` });
+  } catch (err) {
+    next(err);
+  }
+};

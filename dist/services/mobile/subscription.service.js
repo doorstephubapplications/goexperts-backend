@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database.js';
-import { sendFreePlanActivatedEmail, sendPlanExpiredEmail, sendReferralCashbackEmail } from './email.service.js';
+import { sendFreePlanActivatedEmail, sendPlanExpiredEmail, sendReferralCashbackEmail, sendSubscriptionPurchasedEmail } from './email.service.js';
+import { generateInvoicePdf } from '../invoice/invoice.service.js';
 import { NotificationEngine } from './notification.engine.js';
 import { getVerificationStats } from '../../common/helpers/verification.js';
 const GST_RATE_FOR_INCLUDED_PLAN_PRICE = 0.18;
@@ -259,7 +260,7 @@ export const activateUserSubscription = async (userId, planIdOrName, billingCycl
         try {
             const gst = plan.amount * 0.18;
             const invoiceNumber = 'INV-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-            await prisma.invoice.create({
+            const invoiceObj = await prisma.invoice.create({
                 data: {
                     invoiceNumber,
                     userId,
@@ -269,8 +270,27 @@ export const activateUserSubscription = async (userId, planIdOrName, billingCycl
                     discount: 0,
                     total: plan.amount,
                     status: 'paid',
+                    items: {
+                        create: [
+                            {
+                                description: `Subscription: ${plan.name}`,
+                                amount: plan.amount,
+                            }
+                        ]
+                    }
                 }
             });
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            if (user && user.email) {
+                try {
+                    const { filePath, publicPath } = await generateInvoicePdf(invoiceObj.id);
+                    await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount, filePath, publicPath);
+                }
+                catch (pdfErr) {
+                    console.error('Failed to generate PDF or send email:', pdfErr);
+                    await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount);
+                }
+            }
         }
         catch (err) {
             console.error('Failed to generate subscription invoice:', err);
@@ -337,7 +357,7 @@ export const activateUserSubscription = async (userId, planIdOrName, billingCycl
                         type: 'referral_cashback',
                         title: 'Cashback Credited Successfully! 🎉',
                         message: `You received 💰${cashbackAmount} cashback (${cashbackPercent}%) because your friend ${referral.referee.fullName} bought a subscription plan!`,
-                        channel: 'all',
+                        channel: 'push',
                         payload: { amount: cashbackAmount, baseAmount: planBaseAmount, grossAmount: plan.amount, friend: referral.referee.fullName },
                     }).catch(console.error);
                 }

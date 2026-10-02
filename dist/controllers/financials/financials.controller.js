@@ -1015,7 +1015,7 @@ export async function resendInvoice(req, res) {
         // Only admin users with invoice permissions can resend
         if (req.user?.type !== "admin")
             return res.status(403).json({ success: false, message: "Forbidden" });
-        const allowed = await adminHasPermission(req.user?.id, "invoices", ["manage", "resend"]);
+        const allowed = await adminHasPermission(req.user?.id, "invoices", ["manage", "read", "resend"]);
         if (!allowed)
             return res.status(403).json({ success: false, message: "Insufficient permissions" });
         const { id } = req.params;
@@ -1028,13 +1028,20 @@ export async function resendInvoice(req, res) {
         // Ensure PDF exists (generate if missing)
         const { filePath, publicPath } = await generateInvoicePdf(id);
         // Send email with attachment
-        const { sendEmailWithAttachment, shell } = await import("../../services/mobile/email.service.js");
+        const { sendEmailWithAttachment } = await import("../../services/mobile/email.service.js");
+        const { renderEmailTemplate } = await import("../../services/settings/settings.service.js");
         const to = invoice.user?.email || "";
         if (!to)
             return res.status(400).json({ success: false, message: "No recipient email for invoice" });
-        const subject = `Your Go Experts Invoice #${invoice.invoiceNumber || invoice.id}`;
-        const body = `<p>Hi ${invoice.user?.fullName || 'Customer'},</p><p>Please find attached your invoice <strong>#${invoice.invoiceNumber}</strong>.</p><p>Thank you,<br/>Go Experts</p>`;
-        const attachRes = await sendEmailWithAttachment(to, subject, shell('Your invoice is attached', body), [{ filename: path.basename(filePath), path: filePath }]);
+        const rendered = await renderEmailTemplate("tpl_resend_invoice", {
+            full_name: invoice.user?.fullName || 'Customer',
+            invoice_number: invoice.invoiceNumber || invoice.id,
+            amount: Number(invoice.total || 0).toFixed(2),
+            invoice_link: `${process.env.BACKEND_URL || 'https://api.goexperts.in'}${publicPath}`,
+            dashboard_link: `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/billing`,
+        });
+        const subject = rendered.subject || `Your Go Experts Invoice #${invoice.invoiceNumber || invoice.id}`;
+        const attachRes = await sendEmailWithAttachment(to, subject, rendered.html, [{ filename: path.basename(filePath), path: filePath }]);
         // Mark as emailed
         try {
             await prisma.invoice.update({ where: { id }, data: { emailSent: true } });

@@ -270,6 +270,8 @@ export const createProject = async (req, res, next) => {
                 status: 'open',
             },
         });
+        const { sendProjectCreatedEmail } = await import("../../../../services/mobile/email.service.js");
+        await sendProjectCreatedEmail(req.user.email, req.user.fullName, project.title, `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/projects`).catch(e => console.error("Failed to send mobile project created email:", e));
         const shaped = await shapeProject(project, req.user.id);
         // Notify matching freelancers (limit 20)
         process.nextTick(async () => {

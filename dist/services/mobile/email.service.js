@@ -583,6 +583,7 @@ export const sendAccountDeletedEmail = async (to, name) => {
     const rendered = await renderEmailTemplate("tpl_account_deleted", {
         full_name: name || 'User',
         firstName,
+        email: to,
         support_email: 'servicedesk@goexperts.in',
         deletion_date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
     });
@@ -597,6 +598,34 @@ export const sendWelcomeBonusEmail = async (to, name, amount) => {
         amount,
         dashboard_url: `${FRONTEND_URL}/dashboard`,
     });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendAdminWalletCreditEmail = async (to, name, amount, reason) => {
+    const rendered = await renderEmailTemplate("tpl_admin_wallet_credit", {
+        full_name: name || 'User',
+        amount: amount,
+        reason: reason || 'Manual adjustment',
+        wallet_link: `${FRONTEND_URL}/dashboard/wallet`,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendSubscriptionPurchasedEmail = async (to, name, planName, amount, invoicePdfPath, invoicePublicUrl) => {
+    const rendered = await renderEmailTemplate("tpl_subscription_purchased", {
+        full_name: name || 'User',
+        plan_name: planName,
+        amount: amount,
+        dashboard_link: `${FRONTEND_URL}/dashboard/billing`,
+        invoice_link: invoicePublicUrl ? `${process.env.BACKEND_URL || 'https://api.goexperts.in'}${invoicePublicUrl}` : '',
+    });
+    const attachments = invoicePdfPath ? [
+        {
+            filename: `Invoice_${planName.replace(/\s+/g, '_')}.pdf`,
+            path: invoicePdfPath
+        }
+    ] : [];
+    if (attachments.length > 0) {
+        return sendEmailWithAttachment(to, rendered.subject, rendered.html, attachments);
+    }
     return sendEmail(to, rendered.subject, rendered.html);
 };
 const escapeHtml = (value) => String(value || '')
@@ -690,9 +719,9 @@ export const sendReferralCashbackEmail = async (to, name, amount, friendName, ba
         full_name: name || 'User',
         firstName,
         friend_name: friendName,
-        cashback_amount: amount,
-        amount,
-        new_balance: balanceAfter,
+        cashback_amount: Number(amount).toFixed(2),
+        amount: Number(amount).toFixed(2),
+        new_balance: Number(balanceAfter).toFixed(2),
         wallet_url: `${FRONTEND_URL}/dashboard`,
     });
     return sendEmail(to, rendered.subject, rendered.html);
@@ -730,12 +759,92 @@ export const sendProfileReminderEmail = async (to, name) => {
     });
     return sendEmail(to, rendered.subject, rendered.html);
 };
+export const sendMeetingCreatedEmail = async (to, name, title, date, time, mode, joinLink, hostName = 'Go Experts') => {
+    const rendered = await renderEmailTemplate("tpl_meeting_invitation", {
+        full_name: name || 'User',
+        meeting_title: title || 'Meeting',
+        meeting_date: date,
+        meeting_time: time,
+        mode,
+        meeting_url: joinLink || `${FRONTEND_URL}/dashboard/meetings`,
+        host_name: hostName,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendMeetingReminderEmail = async (to, name, title, date, time, mode, joinLink) => {
+    const rendered = await renderEmailTemplate("tpl_meeting_reminder", {
+        full_name: name || 'User',
+        meeting_title: title || 'Meeting',
+        date,
+        time,
+        mode,
+        join_link: joinLink || `${FRONTEND_URL}/dashboard/meetings`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
 export const sendRegistrationReminderEmail = async (to, name) => {
     const firstName = (name || 'User').split(' ')[0];
     const rendered = await renderEmailTemplate("tpl_registration_reminder", {
         full_name: name || 'User',
         firstName,
         login_link: `${FRONTEND_URL}/login`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendConnectionRequestEmail = async (to, name, senderName, networkLink) => {
+    const rendered = await renderEmailTemplate("tpl_connection_request", {
+        full_name: name || 'User',
+        sender_name: senderName,
+        network_link: networkLink || `${FRONTEND_URL}/dashboard/network`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendConnectionAcceptedEmail = async (to, name, acceptorName, chatLink) => {
+    const rendered = await renderEmailTemplate("tpl_connection_accepted", {
+        full_name: name || 'User',
+        acceptor_name: acceptorName,
+        chat_link: chatLink || `${FRONTEND_URL}/dashboard/messages`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendConnectionRejectedEmail = async (to, name, rejectorName) => {
+    const rendered = await renderEmailTemplate("tpl_connection_rejected", {
+        full_name: name || 'User',
+        rejector_name: rejectorName,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendProjectCreatedEmail = async (to, name, projectTitle, dashboardLink) => {
+    const rendered = await renderEmailTemplate("tpl_project_created", {
+        full_name: name || 'User',
+        project_title: projectTitle,
+        dashboard_link: dashboardLink || `${FRONTEND_URL}/dashboard/projects`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendTicketCreatedEmail = async (to, name, ticketNumber, ticketSubject, dashboardLink) => {
+    const rendered = await renderEmailTemplate("tpl_ticket_created", {
+        full_name: name || 'User',
+        ticket_number: ticketNumber,
+        ticket_subject: ticketSubject,
+        dashboard_link: dashboardLink || `${FRONTEND_URL}/dashboard/support`,
+        app_url: FRONTEND_URL,
+    });
+    return sendEmail(to, rendered.subject, rendered.html);
+};
+export const sendTicketClosedEmail = async (to, name, ticketNumber, ticketSubject, dashboardLink) => {
+    const rendered = await renderEmailTemplate("tpl_ticket_closed", {
+        full_name: name || 'User',
+        ticket_number: ticketNumber,
+        ticket_subject: ticketSubject,
+        dashboard_link: dashboardLink || `${FRONTEND_URL}/dashboard/support`,
         app_url: FRONTEND_URL,
     });
     return sendEmail(to, rendered.subject, rendered.html);

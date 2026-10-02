@@ -140,11 +140,15 @@ export async function saveSettingsSection(section, data) {
     return { section, data: normalizedData };
 }
 export function wrapInMncEmailLayout(innerContent, branding = {}, options = {}) {
+    let rawLogoUrl = branding?.logoUrl || "https://apiai.goexperts.in/goexperts-logo.png";
+    if (rawLogoUrl.startsWith("/")) {
+        rawLogoUrl = "https://apiai.goexperts.in" + rawLogoUrl;
+    }
     const brand = {
-        logoUrl: branding?.logoUrl || "http://localhost:5173/goexperts-logo.png",
+        logoUrl: rawLogoUrl,
         logoHeight: branding?.logoHeight || 34,
         showBrandText: branding?.showBrandText !== false,
-        primaryColor: branding?.primaryColor || "#E30613",
+        primaryColor: branding?.primaryColor || "#38B2AC",
         headerTag: branding?.headerTag || options?.module || "Security Notice",
         appSectionTitle: branding?.appSectionTitle || "Get the Go Experts App",
         playStoreUrl: branding?.playStoreUrl ||
@@ -166,7 +170,7 @@ export function wrapInMncEmailLayout(innerContent, branding = {}, options = {}) 
     }
     // Clean old wrappers if any
     let cleanContent = innerContent
-        .replace(/<div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613; background: #ffffff;">[\s\S]*?<\/div>/gi, "")
+        .replace(/<div style="padding: 24px; text-align: center; border-bottom: 3px solid #38B2AC; background: #ffffff;">[\s\S]*?<\/div>/gi, "")
         .replace(/<div style="background-color: #f[78]faf[cd]; padding: 20px 24px; text-align: center; border-top: 1px solid #eaedf1;">[\s\S]*?<\/div>\s*<\/div>$/gi, "")
         .replace(/<div style="background-color: #f[78]faf[cd]; padding: 20px 24px; text-align: center; border-top: 1px solid #eaedf1;">[\s\S]*?<\/div>/gi, "")
         .replace(/^<div style="font-family: [^>]+max-width: 600px[^>]+>/i, "")
@@ -285,11 +289,6 @@ export function wrapInMncEmailLayout(innerContent, branding = {}, options = {}) 
                           <td style="vertical-align: middle; padding-right: 10px;">
                             <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
                           </td>
-                          ${brand.showBrandText
-        ? `<td style="vertical-align: middle;">
-                            <span style="font-size: 22px; font-weight: 800; color: ${brand.primaryColor}; letter-spacing: -0.4px; line-height: 1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Go <span style="color: #111827;">Experts</span></span>
-                          </td>`
-        : ""}
                         </tr>
                       </table>
                     </a>

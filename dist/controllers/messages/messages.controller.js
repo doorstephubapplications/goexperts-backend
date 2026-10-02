@@ -313,6 +313,11 @@ export const createOrFindConversation = async (req, res, next) => {
                     });
                 }
                 catch (err) { }
+                const finalRecipientUser = await prisma.user.findUnique({ where: { id: finalRecipientId } });
+                if (finalRecipientUser) {
+                    const { sendConnectionRequestEmail } = await import("../../services/mobile/email.service.js");
+                    await sendConnectionRequestEmail(finalRecipientUser.email, finalRecipientUser.fullName, newInvite.sender.fullName, `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/network`).catch(e => console.error("Failed to send connection request email:", e));
+                }
                 return res.status(200).json({ success: true, message: 'Connection request sent', data: newInvite });
             }
         }

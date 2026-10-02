@@ -9,6 +9,10 @@ export async function adminHasPermission(adminId, moduleName, actions = null) {
         });
         if (!admin || !admin.role)
             return false;
+        // Super Admins automatically bypass all permission checks
+        if (admin.role.name.toLowerCase().includes('super') || admin.role.name.toLowerCase() === 'admin') {
+            return true;
+        }
         const perms = (admin.role.rolePermissions || []).map((rp) => rp.permission || null).filter(Boolean);
         if (!perms.length)
             return false;

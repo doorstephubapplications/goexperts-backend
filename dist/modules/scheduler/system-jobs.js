@@ -61,6 +61,41 @@ export function registerSystemJobs() {
             console.log(`[SYSTEM JOB] Marked user ${user.email} as inactive due to 31 days of inactivity`);
         }
     });
+    // 5. Daily Meeting Reminders
+    SchedulerService.registerHandler("Daily Meeting Reminders", async () => {
+        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+        const { sendMeetingReminderEmail } = await import("../../services/mobile/email.service.js");
+        const meetingsToday = await prisma.meeting.findMany({
+            where: {
+                date: today,
+                status: { not: "Cancelled" }
+            }
+        });
+        for (const meeting of meetingsToday) {
+            // Find the recipient based on createdBy (if creator is founder, recipient is investor, else vice versa)
+            // createdBy is technically the user ID, but we can just find both and send if their email exists
+            let emailsToSend = [];
+            const founderUser = await prisma.user.findFirst({ where: { fullName: meeting.founder, deletedAt: null } });
+            const investorUser = await prisma.user.findFirst({ where: { fullName: meeting.investor, deletedAt: null } });
+            if (founderUser && founderUser.id !== meeting.createdBy) {
+                emailsToSend.push({ email: founderUser.email, name: founderUser.fullName });
+            }
+            if (investorUser && investorUser.id !== meeting.createdBy) {
+                emailsToSend.push({ email: investorUser.email, name: investorUser.fullName });
+            }
+            // Fallback if createdBy logic fails or missing
+            if (emailsToSend.length === 0 && (founderUser || investorUser)) {
+                if (founderUser)
+                    emailsToSend.push({ email: founderUser.email, name: founderUser.fullName });
+                if (investorUser)
+                    emailsToSend.push({ email: investorUser.email, name: investorUser.fullName });
+            }
+            for (const recipient of emailsToSend) {
+                await sendMeetingReminderEmail(recipient.email, recipient.name, meeting.title || 'Meeting', meeting.date, meeting.time, meeting.mode, meeting.meetingLink || "").catch(e => console.error("Meeting reminder email failed:", e));
+                console.log(`[SYSTEM JOB] Sent meeting reminder for ${meeting.id} to ${recipient.email}`);
+            }
+        }
+    });
     // 1. Subscription Expiry Check
     SchedulerService.registerHandler("Subscription Expiry Check", async () => {
         const now = new Date();

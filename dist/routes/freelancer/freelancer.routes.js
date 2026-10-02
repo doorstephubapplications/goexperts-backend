@@ -6,12 +6,14 @@ import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
 import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { uploadFile } from "../../controllers/media/media.controller.js";
-import { searchPublishedProjects, acceptOffer, withdrawProposal, getFreelancerDashboard, getFreelancerProfile, updateFreelancerProfile, listFreelancerNotifications, markFreelancerNotificationRead, markAllFreelancerNotificationsRead, getFreelancerPortfolio, getFreelancerPortfolioItem, createFreelancerPortfolioItem, updateFreelancerPortfolioItem, deleteFreelancerPortfolioItem, } from "../../controllers/freelancer/freelancer.controller.js";
+import { searchPublishedProjects, acceptOffer, withdrawProposal, getFreelancerDashboard, getFreelancerProfile, updateFreelancerProfile, listFreelancerNotifications, markFreelancerNotificationRead, markAllFreelancerNotificationsRead, getFreelancerPortfolio, getFreelancerPortfolioItem, createFreelancerPortfolioItem, updateFreelancerPortfolioItem, deleteFreelancerPortfolioItem, addFreelancerTeamMember, deleteFreelancerTeamMember, listFreelancerTeam, } from "../../controllers/freelancer/freelancer.controller.js";
 import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
 import { listFreelancerProposals, createFreelancerProposal, listFreelancerContracts, listFreelancerTasks, addFreelancerTask, updateFreelancerTask, listFreelancerMeetings, createFreelancerMeeting, createFreelancerNotification, listFreelancerMessages, createFreelancerMessage, listFreelancerReviews, getFreelancerWallet, withdrawFreelancerWallet, listFreelancerInvoices, listFreelancerSubscriptions, purchaseFreelancerSubscription, getFreelancerExperience, putFreelancerExperience, getFreelancerEducation, putFreelancerEducation, postFreelancerEducation, deleteFreelancerEducation, putFreelancerEducationById, getFreelancerCertificates, putFreelancerCertificates, postFreelancerCertificates, deleteFreelancerCertificates, putFreelancerCertificateById, getFreelancerSkills, putFreelancerSkills, listSavedProjects, saveProject, unsaveProject, getFreelancerSettings, updateFreelancerSettings, getFreelancerAnalytics, updateFreelancerCover, listFreelancerClients, getFreelancerResume, putFreelancerResume, exportFreelancerResumePdf, getFreelancerReferrals, getFreelancerEarnings, listFreelancerActivity, createFreelancerActivity, } from "../../controllers/freelancer/freelancer-extra.controller.js";
 import { getFreelancerResumeShare, createFreelancerResumeShare, updateFreelancerResumeShare, regenerateFreelancerResumeShare, updateFreelancerResumeShareSnapshot, deleteFreelancerResumeShare } from "../../controllers/freelancer/freelancer-resume-share.controller.js";
 const router = Router();
 router.use(authMiddleware);
+// Portal media upload is needed DURING onboarding for avatars and documents
+router.post("/media/upload", upload.single("file"), uploadFile);
 router.use(requireOnboarding);
 router.use(portalRoleMiddleware(["freelancer", "client", "investor", "founder", "admin", "super_admin"]));
 router.get("/projects", searchPublishedProjects);
@@ -95,6 +97,8 @@ router.get("/referrals", getFreelancerReferrals);
 router.get("/earnings", getFreelancerEarnings);
 router.get("/activity", listFreelancerActivity);
 router.post("/activity", createFreelancerActivity);
-// Portal media upload (images/docs for avatar, verification, portfolio)
-router.post("/media/upload", upload.single("file"), uploadFile);
+// Team endpoints
+router.get("/team", listFreelancerTeam);
+router.post("/team", addFreelancerTeamMember);
+router.delete("/team/:id", deleteFreelancerTeamMember);
 export default router;

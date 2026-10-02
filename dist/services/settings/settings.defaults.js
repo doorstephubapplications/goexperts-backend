@@ -15,7 +15,7 @@ export const SETTINGS_DEFAULTS = {
         referralCashbackPercent: 5,
     },
     branding: {
-        primaryColor: "#E30613",
+        primaryColor: "#38B2AC",
         sidebarColor: "#111111",
         lightLogoUrl: "https://goexperts.in/logo.png",
         darkLogoUrl: "https://goexperts.in/logo.png",
@@ -372,7 +372,7 @@ export const SETTINGS_DEFAULTS = {
         logoUrl: "http://localhost:5173/goexperts-logo.png",
         logoHeight: 34,
         showBrandText: true,
-        primaryColor: "#E30613",
+        primaryColor: "#38B2AC",
         headerTag: "Security Notice",
         appSectionTitle: "Get the Go Experts App",
         playStoreUrl: "https://play.google.com/store/apps/details?id=com.doorstephub.goexperts&pcampaignid=web_share",

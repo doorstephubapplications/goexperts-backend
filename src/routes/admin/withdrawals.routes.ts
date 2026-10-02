@@ -17,5 +17,13 @@ router.get("/all", listWithdrawals as any);
 router.post("/:id/approve", approveWithdrawal as any);
 router.post("/:id/reject", rejectWithdrawal as any);
 router.post("/credit-wallet", creditWallet as any);
+router.post("/bulk-status", (async (req, res, next) => {
+  try {
+    const { bulkStatus } = await import("../../controllers/admin/withdrawals.controller.js");
+    return bulkStatus(req, res, next);
+  } catch (err) {
+    next(err);
+  }
+}) as any);
 
 export default router;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../../config/database.js";
+import { sendAccountDeletedEmail } from "../../services/mobile/email.service.js";
 import { SETTINGS_DEFAULTS } from "../../services/settings/settings.defaults.js";
 import { getHomeCmsContent, getHomePagePayload, getPublicCategories, getPublicPlatformStats, getPublicSkills, } from "../../services/public/home.service.js";
 import { parseCatalogListBody, parseFreelancersListBody, parseSkillsListBody } from "../../common/helpers/catalog-body.js";
@@ -965,6 +966,9 @@ router.post("/delete-requests/:id/approve", async (req, res, next) => {
                 deletedAt: new Date(),
             },
         });
+        if (user.email) {
+            sendAccountDeletedEmail(user.email, user.fullName || 'User').catch(console.error);
+        }
         res.json({ success: true, message: `Account deletion approved for ${user.email}. User has been deactivated.`, user });
     }
     catch (err) {
@@ -1754,6 +1758,13 @@ router.post("/projects/create", async (req, res, next) => {
                 where: { userId },
                 data: { projectsPosted: { increment: 1 } },
             }).catch(() => { });
+        }
+        if (userId) {
+            const emailUser = await prisma.user.findUnique({ where: { id: userId } });
+            if (emailUser) {
+                const { sendProjectCreatedEmail } = await import("../../services/mobile/email.service.js");
+                await sendProjectCreatedEmail(emailUser.email, emailUser.fullName, project.title, `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/projects`).catch(e => console.error("Failed to send project created email:", e));
+            }
         }
         res.status(201).json({ success: true, data: project, message: "Project created" });
     }

@@ -5,7 +5,7 @@ import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { uploadFile } from "../../controllers/media/media.controller.js";
 import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
-import { getInvestorDashboard, getInvestorProfile, updateInvestorProfile, listWatchlist, addToWatchlist, removeFromWatchlist, getInvestorPortfolio, listInvestorInvestments, createInvestorInvestment, listInvestorMeetings, createInvestorMeeting, listInvestorMessages, createInvestorMessage, getInvestorWallet, depositInvestorWallet, withdrawInvestorWallet, listInvestorInvoices, getInvestorAnalytics, getInvestorReports, listInvestorNotifications, markInvestorNotificationRead, markAllInvestorNotificationsRead, listInvestorDocuments, addInvestorDocument, listInvestorSubscriptions, purchaseInvestorSubscription, getInvestorSettings, updateInvestorSettings, listAllFounders, listInvestorReviews, } from "../../controllers/investor/investor.controller.js";
+import { getInvestorDashboard, getInvestorProfile, updateInvestorProfile, listWatchlist, addToWatchlist, removeFromWatchlist, getInvestorPortfolio, listInvestorInvestments, createInvestorInvestment, listInvestorMeetings, createInvestorMeeting, listInvestorMessages, createInvestorMessage, getInvestorWallet, depositInvestorWallet, withdrawInvestorWallet, listInvestorInvoices, getInvestorAnalytics, getInvestorReports, listInvestorNotifications, markInvestorNotificationRead, markAllInvestorNotificationsRead, listInvestorDocuments, addInvestorDocument, listInvestorSubscriptions, purchaseInvestorSubscription, getInvestorSettings, updateInvestorSettings, listAllFounders, listInvestorReviews, addInvestorTeamMember, deleteInvestorTeamMember, listInvestorTeam, } from "../../controllers/investor/investor.controller.js";
 const router = Router();
 router.use(authMiddleware);
 router.use(requireOnboarding);
@@ -47,4 +47,8 @@ router.patch("/settings", investorOnly, updateInvestorSettings);
 router.get("/all-founders", investorOnly, listAllFounders);
 router.post("/media/upload", investorOnly, upload.single("file"), uploadFile);
 router.get("/reviews", investorOnly, listInvestorReviews);
+// Team endpoints
+router.get("/team", listInvestorTeam);
+router.post("/team", addInvestorTeamMember);
+router.delete("/team/:id", deleteInvestorTeamMember);
 export default router;

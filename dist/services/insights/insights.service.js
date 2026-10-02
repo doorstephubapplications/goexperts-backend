@@ -234,7 +234,7 @@ export class InsightsService {
         const subscribed = users.subscriptionDistribution.reduce((sum, item) => sum + item.value, 0);
         const renewed = Math.round(subscribed * 0.72);
         const funnel = [
-            { name: "Visitors", value: Math.max(totalUsers * 4, signups * 3, 1000), fill: "#E30613" },
+            { name: "Visitors", value: Math.max(totalUsers * 4, signups * 3, 1000), fill: "#38B2AC" },
             { name: "Sign-ups", value: Math.max(signups, totalUsers, 100), fill: "#0EA5E9" },
             { name: "Activated", value: Math.max(activated, 50), fill: "#F59E0B" },
             { name: "Subscribed", value: Math.max(subscribed, 20), fill: "#16A34A" },

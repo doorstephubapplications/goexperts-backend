@@ -125,8 +125,27 @@ export const scheduleMeeting = async (req, res, next) => {
             type: 'meeting_scheduled',
             title: 'New Meeting Scheduled',
             message: `${req.user.fullName || 'An investor'} has scheduled a meeting with you for ${date} at ${time}.`,
-            channel: 'all'
+            channel: 'push'
         });
+        try {
+            const { sendEmail } = await import('../../../../services/mobile/email.service.js');
+            const { renderEmailTemplate } = await import('../../../../services/settings/settings.service.js');
+            const targetUser = await prisma.user.findUnique({ where: { id: founderId } });
+            if (targetUser && targetUser.email) {
+                const rendered = await renderEmailTemplate("tpl_meeting_invitation", {
+                    full_name: targetUser.fullName || "User",
+                    meeting_title: meeting.title || "Meeting",
+                    meeting_date: date,
+                    meeting_time: time,
+                    meeting_url: meeting.meetingLink || "Pending Link",
+                    host_name: req.user.fullName || "An investor",
+                });
+                await sendEmail(targetUser.email, rendered.subject, rendered.html);
+            }
+        }
+        catch (e) {
+            console.error("Failed to send HTML meeting email:", e);
+        }
         return res.status(201).json(successResponse('Meeting scheduled', await shapeMeeting(meeting, req.user.id)));
     }
     catch (error) {

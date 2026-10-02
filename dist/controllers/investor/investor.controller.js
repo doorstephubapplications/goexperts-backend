@@ -849,3 +849,121 @@ export const listInvestorReviews = async (req, res, next) => {
         next(err);
     }
 };
+export const addInvestorTeamMember = async (req, res, next) => {
+    try {
+        const userId = req.user?.id || req.userId;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const body = req.body || {};
+        const name = String(body.name || "").trim();
+        if (!name)
+            return res.status(400).json({ success: false, message: "name is required" });
+        const email = body.email ? String(body.email).trim().toLowerCase() : "";
+        const { getJsonSetting, setJsonSetting } = await import('../../common/helpers/portal-shared.js');
+        const rows = await getJsonSetting(userId, "team", []);
+        const member = {
+            id: `TM-${Date.now().toString(36).toUpperCase()}`,
+            name,
+            email,
+            role: body.role || "Member",
+            createdAt: new Date().toISOString(),
+        };
+        const nextRows = [member, ...rows];
+        await setJsonSetting(userId, "team", nextRows);
+        let emailSent = false;
+        let tempPassword = "";
+        if (email) {
+            tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
+            const bcrypt = await import("bcrypt");
+            const hashedPassword = await bcrypt.default.hash(tempPassword, 10);
+            let existingUser = await prisma.user.findFirst({ where: { email } });
+            if (!existingUser) {
+                existingUser = await prisma.user.create({
+                    data: {
+                        email,
+                        fullName: name,
+                        password: hashedPassword,
+                        role: "investor",
+                        status: "active",
+                        isVerified: true,
+                        verified: true,
+                    }
+                });
+            }
+            await prisma.teamMember.create({
+                data: {
+                    ownerId: userId,
+                    userId: existingUser.id,
+                    email,
+                    role: body.role || "Member",
+                    permissions: "[]"
+                }
+            });
+            const rootUser = await prisma.user.findUnique({ where: { id: userId } });
+            const rootName = rootUser?.fullName || "Your Investor Organization";
+            const frontendUrl = process.env.FRONTEND_URL || "https://goexperts.in";
+            try {
+                const { sendEmail } = await import("../../services/mobile/email.service.js");
+                const { renderEmailTemplate } = await import("../../services/settings/settings.service.js");
+                const rendered = await renderEmailTemplate("tpl_team_invitation", {
+                    full_name: name,
+                    member_name: name,
+                    client_name: rootName,
+                    role: body.role || "Member",
+                    department: body.department || "Operations",
+                    email,
+                    password: tempPassword,
+                    temp_password: tempPassword,
+                    login_url: `${frontendUrl}/login`,
+                    app_url: frontendUrl,
+                });
+                await sendEmail(email, rendered.subject, rendered.html);
+                emailSent = true;
+            }
+            catch (mailErr) {
+                console.warn("Failed to send team email:", mailErr);
+            }
+        }
+        res.status(201).json({
+            success: true,
+            message: emailSent ? "Team member added and credentials sent!" : "Team member added",
+            data: member,
+            rows: nextRows,
+            credentials: email ? { email, password: tempPassword } : null
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const listInvestorTeam = async (req, res, next) => {
+    try {
+        const userId = req.user?.id || req.userId;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { getJsonSetting } = await import('../../common/helpers/portal-shared.js');
+        const rows = await getJsonSetting(userId, "team", []);
+        res.json({ success: true, rows, total: rows.length });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const deleteInvestorTeamMember = async (req, res, next) => {
+    try {
+        const userId = req.user?.id || req.userId;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id } = req.params;
+        if (!id)
+            return res.status(400).json({ success: false, message: "id is required" });
+        const { getJsonSetting, setJsonSetting } = await import('../../common/helpers/portal-shared.js');
+        const rows = await getJsonSetting(userId, "team", []);
+        const nextRows = rows.filter((r) => r.id !== id);
+        await setJsonSetting(userId, "team", nextRows);
+        res.json({ success: true, message: "Team member removed", rows: nextRows });
+    }
+    catch (err) {
+        next(err);
+    }
+};

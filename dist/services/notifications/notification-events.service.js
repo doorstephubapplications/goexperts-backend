@@ -26,11 +26,11 @@ function buildNotificationHtml(title, message, actionUrl, ctaText = "View in Go 
         <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
           <!-- Header -->
           <tr>
-            <td style="background-color: #ffffff; padding: 28px 32px; text-align: left; border-bottom: 2px solid #E30613;">
+            <td style="background-color: #ffffff; padding: 28px 32px; text-align: left; border-bottom: 2px solid #38B2AC;">
               <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td>
-                    <h2 style="color: #E30613; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Go Experts</h2>
+                    <h2 style="color: #38B2AC; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Go Experts</h2>
                   </td>
                   <td align="right">
                     <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Notification</span>
@@ -53,7 +53,7 @@ function buildNotificationHtml(title, message, actionUrl, ctaText = "View in Go 
               <!-- Call to Action -->
               <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin: 0 0 24px 0;">
                 <tr>
-                  <td align="center" style="border-radius: 10px; background-color: #E30613;">
+                  <td align="center" style="border-radius: 10px; background-color: #38B2AC;">
                     <a href="${fullCtaUrl}" target="_blank" rel="noopener noreferrer" style="font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; display: inline-block; letter-spacing: 0.2px;">
                       ${ctaText} &rarr;
                     </a>
@@ -63,7 +63,7 @@ function buildNotificationHtml(title, message, actionUrl, ctaText = "View in Go 
 
               <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0;">
                 If button does not work, copy and paste this secure link into your browser:<br>
-                <a href="${fullCtaUrl}" style="color: #E30613; text-decoration: underline; word-break: break-all;">${fullCtaUrl}</a>
+                <a href="${fullCtaUrl}" style="color: #38B2AC; text-decoration: underline; word-break: break-all;">${fullCtaUrl}</a>
               </p>
             </td>
           </tr>
