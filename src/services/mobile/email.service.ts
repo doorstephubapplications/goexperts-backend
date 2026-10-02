@@ -662,6 +662,27 @@ export const sendAdminWalletCreditEmail = async (to: string, name: string, amoun
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
+export const sendSubscriptionPurchasedEmail = async (to: string, name: string, planName: string, amount: number, invoicePdfPath?: string) => {
+  const rendered = await renderEmailTemplate("tpl_subscription_purchased", {
+    full_name: name || 'User',
+    plan_name: planName,
+    amount: amount,
+    dashboard_link: `${FRONTEND_URL}/dashboard/billing`,
+  });
+  
+  const attachments = invoicePdfPath ? [
+    {
+      filename: `Invoice_${planName.replace(/\s+/g, '_')}.pdf`,
+      path: invoicePdfPath
+    }
+  ] : [];
+
+  if (attachments.length > 0) {
+    return sendEmailWithAttachment(to, rendered.subject, rendered.html, attachments);
+  }
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
 
 type KycStatusDocument = {
   label: string;

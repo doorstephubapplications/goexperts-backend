@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database.js';
-import { sendFreePlanActivatedEmail, sendPlanExpiredEmail, sendReferralCashbackEmail } from './email.service.js';
+import { sendFreePlanActivatedEmail, sendPlanExpiredEmail, sendReferralCashbackEmail, sendSubscriptionPurchasedEmail } from './email.service.js';
+import { generateInvoicePdf } from '../invoice/invoice.service.js';
 import { NotificationEngine } from './notification.engine.js';
 import { getSettingsSection } from '../settings/settings.service.js';
 import { getVerificationStats } from '../../common/helpers/verification.js';
@@ -291,7 +292,7 @@ export const activateUserSubscription = async (
       try {
         const gst = plan.amount * 0.18;
         const invoiceNumber = 'INV-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
-        await prisma.invoice.create({
+        const invoiceObj = await prisma.invoice.create({
           data: {
             invoiceNumber,
             userId,
@@ -303,6 +304,17 @@ export const activateUserSubscription = async (
             status: 'paid',
           }
         });
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (user && user.email) {
+          try {
+            const { filePath } = await generateInvoicePdf(invoiceObj.id);
+            await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount, filePath);
+          } catch (pdfErr) {
+            console.error('Failed to generate PDF or send email:', pdfErr);
+            await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount);
+          }
+        }
       } catch (err) {
         console.error('Failed to generate subscription invoice:', err);
       }
