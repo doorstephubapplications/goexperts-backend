@@ -890,3 +890,126 @@ export const listInvestorReviews = async (req: AuthenticatedRequest, res: Respon
     next(err);
   }
 };
+
+export const addInvestorTeamMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { requireUser } = await import('../../middlewares/auth.middleware.js');
+    const userId = requireUser(req, res);
+    if (!userId) return;
+    const body = req.body || {};
+    const name = String(body.name || "").trim();
+    if (!name) return res.status(400).json({ success: false, message: "name is required" });
+    const email = body.email ? String(body.email).trim().toLowerCase() : "";
+
+    const { getJsonSetting, setJsonSetting } = await import('../../common/helpers/portal-shared.js');
+    const rows = await getJsonSetting(userId, "team", [] as any[]);
+    const member = {
+      id: `TM-${Date.now().toString(36).toUpperCase()}`,
+      name,
+      email,
+      role: body.role || "Member",
+      createdAt: new Date().toISOString(),
+    };
+    const nextRows = [member, ...rows];
+    await setJsonSetting(userId, "team", nextRows);
+
+    let emailSent = false;
+    let tempPassword = "";
+    if (email) {
+      tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
+      const bcrypt = await import("bcrypt");
+      const hashedPassword = await bcrypt.default.hash(tempPassword, 10);
+      
+      let existingUser = await prisma.user.findFirst({ where: { email } });
+      if (!existingUser) {
+        existingUser = await prisma.user.create({
+          data: {
+            email,
+            fullName: name,
+            password: hashedPassword,
+            role: "investor",
+            status: "active",
+            isVerified: true,
+            verified: true,
+          }
+        });
+      }
+
+      await prisma.teamMember.create({
+        data: {
+          ownerId: userId,
+          userId: existingUser.id,
+          email,
+          role: body.role || "Member"
+        }
+      });
+
+      const rootUser = await prisma.user.findUnique({ where: { id: userId } });
+      const rootName = rootUser?.fullName || "Your Investor Organization";
+      const frontendUrl = process.env.FRONTEND_URL || "https://goexperts.in";
+
+      try {
+        const { renderEmailTemplate, sendEmail } = await import("../../services/mobile/email.service.js");
+        const rendered = await renderEmailTemplate("tpl_team_invitation", {
+          full_name: name,
+          member_name: name,
+          client_name: rootName,
+          role: body.role || "Member",
+          department: body.department || "Operations",
+          email,
+          password: tempPassword,
+          temp_password: tempPassword,
+          login_url: `${frontendUrl}/login`,
+          app_url: frontendUrl,
+        });
+
+        await sendEmail(email, rendered.subject, rendered.html);
+        emailSent = true;
+      } catch (mailErr) {
+        console.warn("Failed to send team email:", mailErr);
+      }
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      message: emailSent ? "Team member added and credentials sent!" : "Team member added", 
+      data: member, 
+      rows: nextRows,
+      credentials: email ? { email, password: tempPassword } : null
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listInvestorTeam = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { requireUser } = await import('../../middlewares/auth.middleware.js');
+    const userId = requireUser(req, res);
+    if (!userId) return;
+    const { getJsonSetting } = await import('../../common/helpers/portal-shared.js');
+    const rows = await getJsonSetting(userId, "team", [] as any[]);
+    res.json({ success: true, rows, total: rows.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteInvestorTeamMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { requireUser } = await import('../../middlewares/auth.middleware.js');
+    const userId = requireUser(req, res);
+    if (!userId) return;
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+    const { getJsonSetting, setJsonSetting } = await import('../../common/helpers/portal-shared.js');
+    const rows = await getJsonSetting(userId, "team", [] as any[]);
+    const nextRows = rows.filter((r: any) => r.id !== id);
+    await setJsonSetting(userId, "team", nextRows);
+    
+    res.json({ success: true, message: "Team member removed", rows: nextRows });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -36,8 +36,10 @@ import {
   updateInvestorSettings,
   listAllFounders,
   listInvestorReviews,
+  addInvestorTeamMember,
+  deleteInvestorTeamMember,
+  listInvestorTeam,
 } from "../../controllers/investor/investor.controller.js";
-
 const router = Router();
 
 router.use(authMiddleware as any);
@@ -98,5 +100,10 @@ router.get("/all-founders", investorOnly, listAllFounders as any);
 router.post("/media/upload", investorOnly, upload.single("file"), uploadFile as any);
 
 router.get("/reviews", investorOnly, listInvestorReviews as any);
+
+// Team endpoints
+router.get("/team", listInvestorTeam as any);
+router.post("/team", addInvestorTeamMember as any);
+router.delete("/team/:id", deleteInvestorTeamMember as any);
 
 export default router;

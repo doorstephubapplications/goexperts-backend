@@ -21,6 +21,9 @@ import {
   createFreelancerPortfolioItem,
   updateFreelancerPortfolioItem,
   deleteFreelancerPortfolioItem,
+  addFreelancerTeamMember,
+  deleteFreelancerTeamMember,
+  listFreelancerTeam,
 } from "../../controllers/freelancer/freelancer.controller.js";
 import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
 import {
@@ -197,6 +200,9 @@ router.get("/earnings", getFreelancerEarnings as any);
 router.get("/activity", listFreelancerActivity as any);
 router.post("/activity", createFreelancerActivity as any);
 
-
+// Team endpoints
+router.get("/team", listFreelancerTeam as any);
+router.post("/team", addFreelancerTeamMember as any);
+router.delete("/team/:id", deleteFreelancerTeamMember as any);
 
 export default router;
