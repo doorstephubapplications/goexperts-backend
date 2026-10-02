@@ -258,7 +258,7 @@ export function wrapInMncEmailLayout(
     }
     
     .dark-logo {
-      display: none !important;
+      display: none;
       mso-hide: all;
     }
 
@@ -362,8 +362,14 @@ export function wrapInMncEmailLayout(
                       <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                         <tr>
                           <td style="vertical-align: middle; padding-right: 10px;">
-                            <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" class="light-logo" style="height: ${brand.logoHeight}px; width: auto; display: block; border: 0;" />
-                            <img src="${brand.logoUrlDark}" alt="Go Experts" height="${brand.logoHeight}" class="dark-logo" style="height: ${brand.logoHeight}px; width: auto; display: none; border: 0;" />
+                              <!--[if !mso]><! -->
+                              <div class="dark-logo" style="display:none; mso-hide:all; overflow:hidden; float:left; width:0px; max-height:0px; max-width:0px; line-height:0px; visibility:hidden;" align="center">
+                                <img src="${brand.logoUrlDark}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; border: 0;" />
+                              </div>
+                              <!--<![endif]-->
+                              <div class="light-logo">
+                                <img src="${brand.logoUrl}" alt="Go Experts" height="${brand.logoHeight}" style="height: ${brand.logoHeight}px; width: auto; border: 0;" />
+                              </div>
                           </td>
                         </tr>
                       </table>
