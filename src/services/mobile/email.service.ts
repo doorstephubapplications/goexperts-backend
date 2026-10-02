@@ -633,6 +633,7 @@ export const sendAccountDeletedEmail = async (to: string, name: string) => {
   const rendered = await renderEmailTemplate("tpl_account_deleted", {
     full_name: name || 'User',
     firstName,
+    email: to,
     support_email: 'servicedesk@goexperts.in',
     deletion_date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
   });
