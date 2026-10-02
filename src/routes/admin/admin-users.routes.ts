@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
-
+import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendAdminWalletCreditEmail } from "../../services/mobile/email.service.js";
 export const adminUsersRouter = Router();
 
 // ==========================================
@@ -203,12 +203,13 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
     
     // Normalize Verification Center Structure
     let profile = user.freelancerProfile || user.clientProfile || user.founderProfile || user.investorProfile;
-    let verificationCenter = {
+    let verificationCenter: any = {
       email: user.isVerified || user.verified ? "VERIFIED" : "PENDING",
       phone: user.phone ? "VERIFIED" : "PENDING",
       profile: user.completionPercentage && user.completionPercentage >= 80 ? "COMPLETED" : "PENDING",
       kyc: "PENDING",
-      documents: "PENDING"
+      documents: "PENDING",
+      documentsList: []
     };
 
     if (profile && (profile as any).verificationJson) {
@@ -221,6 +222,26 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
           verificationCenter.kyc = "IN_REVIEW";
           verificationCenter.documents = "SUBMITTED";
         }
+        
+        let docsArray: any[] = [];
+        if (Array.isArray(vJson.documentsList)) {
+          docsArray = vJson.documentsList;
+        } else if (Array.isArray(vJson.documents)) {
+          docsArray = vJson.documents;
+        } else {
+          // Extract nested document objects (e.g. vJson.pan, vJson.aadhaar)
+          docsArray = Object.values(vJson).filter((item: any) => 
+            item && typeof item === 'object' && item.label && (item.documentUrl || item.url)
+          );
+        }
+        
+        // Map to what the frontend expects (url and docNumber)
+        verificationCenter.documentsList = docsArray.map((doc: any) => ({
+          ...doc,
+          title: doc.title || doc.label,
+          url: doc.url || doc.documentUrl || "",
+          docNumber: doc.docNumber || doc.value || ""
+        }));
       } catch {}
     }
 
@@ -326,6 +347,13 @@ adminUsersRouter.post("/:id/wallet/adjust", async (req: Request, res: Response, 
         }
       })
     ]);
+
+    if (isCredit) {
+      const userForEmail = await prisma.user.findUnique({ where: { id: req.params.id } });
+      if (userForEmail && userForEmail.email) {
+        sendAdminWalletCreditEmail(userForEmail.email, userForEmail.fullName || 'User', numAmount, description || 'Admin adjustment').catch(console.error);
+      }
+    }
 
     res.json({
       success: true,
@@ -599,6 +627,15 @@ adminUsersRouter.delete("/bulk", async (req: Request, res: Response, next: NextF
       where: { id: { in: ids } },
       data: { deletedAt: new Date() }
     });
+    
+    // Send deleted emails
+    const deletedUsers = await prisma.user.findMany({ where: { id: { in: ids } } });
+    for (const u of deletedUsers) {
+      if (u.email) {
+        sendAccountDeletedEmail(u.email, u.fullName || 'User').catch(console.error);
+      }
+    }
+    
     res.json({ success: true, message: "Users deleted successfully" });
   } catch (err) {
     next(err);
@@ -607,16 +644,126 @@ adminUsersRouter.delete("/bulk", async (req: Request, res: Response, next: NextF
 
 adminUsersRouter.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: req.params.id },
       data: { deletedAt: new Date() }
     });
+    if (updatedUser.email) {
+      sendAccountDeletedEmail(updatedUser.email, updatedUser.fullName || 'User').catch(console.error);
+    }
     res.json({ success: true, message: "User deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+});
+// ==========================================
+// 7. PATCH /api/admin/users/:id/kyc-document
+// ==========================================
+adminUsersRouter.patch("/:id/kyc-document", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key, status, reason, unlockRequested } = req.body;
+    const userId = req.params.id;
+    
+    if (!key) {
+      return res.status(400).json({ success: false, message: "Document key is required" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        freelancerProfile: true,
+        clientProfile: true,
+        founderProfile: true,
+        investorProfile: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    let targetProfile = user.freelancerProfile || user.clientProfile || user.founderProfile || user.investorProfile;
+    let targetModelName = user.freelancerProfile ? "freelancerProfile" 
+                         : user.clientProfile ? "clientProfile" 
+                         : user.founderProfile ? "founderProfile" 
+                         : user.investorProfile ? "investorProfile" : null;
+
+    if (!targetProfile || !targetModelName) {
+      return res.status(404).json({ success: false, message: "User profile not found for document update" });
+    }
+
+    let verificationJsonStr = (targetProfile as any).verificationJson;
+    if (!verificationJsonStr) {
+      return res.status(404).json({ success: false, message: "No verification data found" });
+    }
+
+    let vJson: any = {};
+    if (typeof verificationJsonStr === "string") {
+      try {
+        vJson = JSON.parse(verificationJsonStr);
+      } catch (e) {
+        vJson = {};
+      }
+    } else {
+      vJson = verificationJsonStr;
+    }
+
+    let updated = false;
+
+    // Try finding the document directly by key (e.g., vJson.pan)
+    if (vJson[key] && typeof vJson[key] === "object") {
+      vJson[key].status = status;
+      if (reason !== undefined) vJson[key].rejectReason = reason;
+      if (unlockRequested !== undefined) vJson[key].unlockRequested = unlockRequested;
+      updated = true;
+    } else {
+      // Fallback: Check documents or documentsList array
+      let docsArray = vJson.documentsList || vJson.documents;
+      if (Array.isArray(docsArray)) {
+        let docIndex = docsArray.findIndex((d: any) => d.key === key || d.id === key);
+        if (docIndex !== -1) {
+          docsArray[docIndex].status = status;
+          if (reason !== undefined) docsArray[docIndex].rejectReason = reason;
+          if (unlockRequested !== undefined) docsArray[docIndex].unlockRequested = unlockRequested;
+          updated = true;
+        }
+      }
+    }
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Document not found in user records" });
+    }
+
+    // Save back to DB
+    const updateData = {
+      verificationJson: JSON.stringify(vJson)
+    };
+
+    await (prisma as any)[targetModelName].update({
+      where: { id: targetProfile.id },
+      data: updateData
+    });
+
+    if (user.email) {
+      let docLabel = key;
+      if (key === 'pan') docLabel = 'PAN Card';
+      if (key === 'aadhaar') docLabel = 'Aadhaar Card';
+      if (key === 'gst') docLabel = 'GST Certificate';
+
+      sendKycDocumentStatusEmail(
+        user.email,
+        user.fullName || 'User',
+        user.role || 'Member',
+        [{ label: docLabel, status: status, reason: reason }],
+        null
+      ).catch(console.error);
+    }
+
+    res.json({ success: true, message: `Document successfully marked as ${status}` });
   } catch (err) {
     next(err);
   }
 });
 
 export default adminUsersRouter;
-
 

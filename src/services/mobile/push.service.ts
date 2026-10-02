@@ -90,7 +90,7 @@ export const sendPushNotification = async (userId: string, title: string, body: 
     }
 
       const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-      let notificationColor = '#E30613'; // Default Go Experts Red
+      let notificationColor = '#38B2AC'; // Default Go Experts Red
       
       if (dbUser?.role) {
         try {

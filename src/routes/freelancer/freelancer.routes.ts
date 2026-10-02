@@ -21,6 +21,9 @@ import {
   createFreelancerPortfolioItem,
   updateFreelancerPortfolioItem,
   deleteFreelancerPortfolioItem,
+  addFreelancerTeamMember,
+  deleteFreelancerTeamMember,
+  listFreelancerTeam,
 } from "../../controllers/freelancer/freelancer.controller.js";
 import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
 import {
@@ -85,6 +88,10 @@ import {
 const router = Router();
 
 router.use(authMiddleware as any);
+
+// Portal media upload is needed DURING onboarding for avatars and documents
+router.post("/media/upload", upload.single("file"), uploadFile as any);
+
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["freelancer", "client", "investor", "founder", "admin", "super_admin"]) as any);
 
@@ -193,7 +200,9 @@ router.get("/earnings", getFreelancerEarnings as any);
 router.get("/activity", listFreelancerActivity as any);
 router.post("/activity", createFreelancerActivity as any);
 
-// Portal media upload (images/docs for avatar, verification, portfolio)
-router.post("/media/upload", upload.single("file"), uploadFile as any);
+// Team endpoints
+router.get("/team", listFreelancerTeam as any);
+router.post("/team", addFreelancerTeamMember as any);
+router.delete("/team/:id", deleteFreelancerTeamMember as any);
 
 export default router;

@@ -24,7 +24,11 @@ export async function generateInvoicePdf(invoiceId: string) {
   }
 
   const user = invoice.user || { fullName: "Customer", email: "" };
-  const itemsHtml = (invoice.items || []).map((it: any) => `<tr><td>${it.description}</td><td style="text-align:right">${Number(it.amount).toFixed(2)}</td></tr>`).join("");
+  let itemsHtml = (invoice.items || []).map((it: any) => `<tr><td>${it.description}</td><td style="text-align:right">${Number(it.amount).toFixed(2)}</td></tr>`).join("");
+  
+  if (!itemsHtml && invoice.subscription?.plan) {
+    itemsHtml = `<tr><td>Subscription: ${invoice.subscription.plan.name}</td><td style="text-align:right">${Number(invoice.total).toFixed(2)}</td></tr>`;
+  }
 
   // Try to load a CMS template named "Invoice Template" (cms_pages.name)
   let templateHtml: string | null = null;

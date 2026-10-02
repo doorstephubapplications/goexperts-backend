@@ -537,14 +537,17 @@ export async function createMeetingForUser(
       }
 
       // 3) Send email to the entered mail ID
-      await NotificationService.enqueue({
-        userId: recipient?.id || undefined,
-        type: "meeting",
-        title: `Meeting Scheduled: ${body.title || 'Discussion'}`,
-        message: `Hi,\n\nA meeting has been scheduled with ${user.fullName} on ${date} at ${time}.\n\nMode: ${body.mode || 'Online'}\n\nBest regards,\nGo Experts Team`,
-        channel: "email",
-        metadata: { toEmail: body.email }
-      });
+      const { sendMeetingCreatedEmail } = await import("../../services/mobile/email.service.js");
+      await sendMeetingCreatedEmail(
+        body.email || recipient?.email || "",
+        recipient?.fullName || counterpart,
+        body.title || 'Meeting',
+        date,
+        time,
+        body.mode || 'Online',
+        body.meetingLink || body.meeting_link || "",
+        user.fullName
+      ).catch(e => console.error("Meeting created email failed:", e));
     } catch (notifErr) {
       console.error("Failed to trigger meeting notification and message actions:", notifErr);
     }

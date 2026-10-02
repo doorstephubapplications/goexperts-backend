@@ -94,6 +94,18 @@ export const createTicket = async (req: AuthenticatedRequest, res: Response, nex
       io.to('admin').emit('support:ticket:new', ticket);
     }
 
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user) {
+      const { sendTicketCreatedEmail } = await import("../../services/mobile/email.service.js");
+      await sendTicketCreatedEmail(
+        user.email,
+        user.fullName,
+        ticket.ticketNumber || ticket.id,
+        ticket.subject,
+        `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/support`
+      ).catch(e => console.error("Failed to send ticket created email:", e));
+    }
+
     res.json({ success: true, ticket });
   } catch (err) {
     next(err);

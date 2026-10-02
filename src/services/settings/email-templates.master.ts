@@ -35,8 +35,8 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     ],
     body: "Hello {{full_name}},\n\nThank you for registering with Go Experts. Please click the button or link below to verify your email address (Link & Code expire in 15 minutes):\n\n{{verification_link}}\n\nYour Verification OTP Code: {{otp_code}}\n\nIf you did not create an account, you can safely ignore this email.\n\nThank you,\nGo Experts Team",
     html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; overflow: hidden;">
-  <div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613; background: #ffffff;">
-    <h1 style="color: #E30613; font-size: 26px; font-weight: 800; margin: 0;">Go Experts</h1>
+  <div style="padding: 24px; text-align: center; border-bottom: 3px solid #38B2AC; background: #ffffff;">
+    <h1 style="color: #38B2AC; font-size: 26px; font-weight: 800; margin: 0;">Go Experts</h1>
   </div>
   <div style="padding: 32px 24px;">
     <h2 style="color: #1a202c; font-size: 22px; font-weight: 800; margin-bottom: 12px;">Verify Your Email Address 📧</h2>
@@ -44,23 +44,22 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="font-size: 15px; color: #4a5568; line-height: 1.6;">Thank you for registering with <strong>Go Experts</strong>. Please click the button below to verify your email address and activate your account:</p>
     
     <div style="text-align: center; margin: 32px 0;">
-      <a href="{{verification_link}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(227, 6, 19, 0.25);">Verify Email Address &rarr;</a>
+      <a href="{{verification_link}}" target="_blank" style="background-color: #38B2AC; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(227, 6, 19, 0.25);">Verify Email Address &rarr;</a>
     </div>
 
     <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 16px; text-align: center; margin: 24px 0;">
       <p style="margin: 0 0 6px 0; font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Your Verification OTP Code</p>
-      <span style="font-size: 26px; font-weight: 800; color: #E30613; letter-spacing: 4px;">{{otp_code}}</span>
+      <span style="font-size: 26px; font-weight: 800; color: #38B2AC; letter-spacing: 4px;">{{otp_code}}</span>
     </div>
 
     <div style="background-color: #fff7ed; border-left: 4px solid #f97316; border-radius: 4px 8px 8px 4px; padding: 14px 16px; margin: 24px 0;">
       <p style="margin: 0; font-size: 13px; color: #78350f; line-height: 1.5;"><strong>⏰ Security Notice:</strong> This verification link and OTP code will expire in <strong>15 minutes</strong>. Never share your OTP with anyone.</p>
     </div>
     
-    <p style="font-size: 13px; color: #718096; margin-top: 24px; line-height: 1.5;">Button not working? Copy and paste this link into your browser:<br/><a href="{{verification_link}}" style="color: #E30613; word-break: break-all;">{{verification_link}}</a></p>
   </div>
   <div style="background-color: #fafbfc; padding: 24px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #edf2f7;">
     <p style="margin: 0 0 6px 0; font-weight: 600; color: #4a5568;">Go Experts &bull; Empowering Businesses & Global Talent</p>
-    <p style="margin: 0;">Need support? Contact us anytime at <a href="mailto:servicedesk@goexperts.in" style="color: #E30613; text-decoration: none;">servicedesk@goexperts.in</a></p>
+    <p style="margin: 0;">Need support? Contact us anytime at <a href="mailto:servicedesk@goexperts.in" style="color: #38B2AC; text-decoration: none;">servicedesk@goexperts.in</a></p>
   </div>
 </div>`,
     isDefault: true,
@@ -98,11 +97,11 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     </div>
 
     <div style="text-align: center; margin: 32px 0;">
-      <a href="{{dashboard_link}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Go to My Dashboard &rarr;</a>
+      <a href="{{dashboard_link}}" target="_blank" style="background-color: #38B2AC; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Go to My Dashboard &rarr;</a>
     </div>
   </div>
   <div style="background-color: #fafbfc; padding: 24px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #edf2f7;">
-    <p style="margin: 0;">Go Experts &bull; <a href="mailto:servicedesk@goexperts.in" style="color: #E30613; text-decoration: none;">servicedesk@goexperts.in</a></p>
+    <p style="margin: 0;">Go Experts &bull; <a href="mailto:servicedesk@goexperts.in" style="color: #38B2AC; text-decoration: none;">servicedesk@goexperts.in</a></p>
   </div>
 </div>`,
     isDefault: true,
@@ -122,8 +121,8 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     ],
     body: "Hi {{full_name}},\n\nWe received a request to reset your Go Experts account password. Use the verification code below or click the reset link:\n\nCode: {{otp_code}}\nLink: {{reset_link}}\n\nThis request is valid for {{expiry_time}}. If you did not request this, please secure your account immediately.\n\nGo Experts Security Team",
     html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; overflow: hidden;">
-  <div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613; background: #ffffff;">
-    <h1 style="color: #E30613; font-size: 26px; font-weight: 800; margin: 0;">Go Experts</h1>
+  <div style="padding: 24px; text-align: center; border-bottom: 3px solid #38B2AC; background: #ffffff;">
+    <h1 style="color: #38B2AC; font-size: 26px; font-weight: 800; margin: 0;">Go Experts</h1>
   </div>
   <div style="padding: 32px 24px;">
     <h2 style="color: #1a202c; font-size: 20px; font-weight: 800; margin-bottom: 12px;">Password Reset Request 🔐</h2>
@@ -132,12 +131,12 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
 
     <div style="background-color: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
       <p style="margin: 0 0 6px 0; font-size: 12px; color: #9f1239; font-weight: 700; text-transform: uppercase;">One-Time Security Code</p>
-      <span style="font-size: 32px; font-weight: 800; color: #E30613; letter-spacing: 6px;">{{otp_code}}</span>
+      <span style="font-size: 32px; font-weight: 800; color: #38B2AC; letter-spacing: 6px;">{{otp_code}}</span>
       <p style="margin: 8px 0 0 0; font-size: 12px; color: #9f1239;">Valid for 10 minutes</p>
     </div>
 
     <div style="text-align: center; margin: 28px 0;">
-      <a href="{{reset_link}}" target="_blank" style="background-color: #E30613; color: #ffffff; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Reset Password Online &rarr;</a>
+      <a href="{{reset_link}}" target="_blank" style="background-color: #38B2AC; color: #ffffff; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-block;">Reset Password Online &rarr;</a>
     </div>
 
     <p style="font-size: 13px; color: #718096; line-height: 1.5;">If you did not initiate this password reset, please ignore this email or contact support immediately.</p>
@@ -162,10 +161,10 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     ],
     body: "Hi {{full_name}},\n\nYou have requested to delete your Go Experts account ({{email}}). Your 6-digit confirmation code is: {{otp_code}}.\n\nThis verification code is valid for 10 minutes. If you did not request account deletion, ignore this email or contact support immediately.",
     html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; background-color: #ffffff;">
-  <h2 style="color: #E30613; margin-top: 0;">Go Experts &bull; Delete Account Request</h2>
+  <h2 style="color: #38B2AC; margin-top: 0;">Go Experts &bull; Delete Account Request</h2>
   <p style="color: #3f3f46; font-size: 15px;">You have requested to delete your account registered on Go Experts (<strong>{{email}}</strong>).</p>
   <p style="color: #3f3f46; font-size: 15px;">Your 6-digit OTP verification code is:</p>
-  <div style="background-color: #fff1f2; border: 1px solid #fecdd3; padding: 16px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #E30613; border-radius: 10px; margin: 20px 0;">
+  <div style="background-color: #fff1f2; border: 1px solid #fecdd3; padding: 16px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #38B2AC; border-radius: 10px; margin: 20px 0;">
     {{otp_code}}
   </div>
   <p style="color: #71717a; font-size: 13px;">This verification code is valid for 10 minutes. If you did not request account deletion, please ignore this email or contact support immediately.</p>
@@ -222,7 +221,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin:6px 0 0;color:#15803d;font-size:13px;">Your identity has been verified by our team. Your Go Experts account is now fully active and ready to use.</p>
   </div>
   <div style="text-align:center;margin:28px 0;">
-    <a href="{{dashboard_link}}" style="background-color:#E30613;color:#ffffff;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Go to My Dashboard &rarr;</a>
+    <a href="{{dashboard_link}}" style="background-color:#38B2AC;color:#ffffff;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Go to My Dashboard &rarr;</a>
   </div>
   <p style="margin:24px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
 </div>`,
@@ -255,7 +254,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin:6px 0 0;color:#15803d;font-size:13px;">Your {{plan_name}} has been activated automatically. Valid until <strong>{{valid_until}}</strong>.</p>
   </div>
   <div style="text-align:center;margin:28px 0;">
-    <a href="{{dashboard_link}}" style="background-color:#E30613;color:#ffffff;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Go to My Dashboard &rarr;</a>
+    <a href="{{dashboard_link}}" style="background-color:#38B2AC;color:#ffffff;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Go to My Dashboard &rarr;</a>
   </div>
   <p style="margin:24px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
 </div>`,
@@ -281,7 +280,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     Congratulations on getting approved! You're eligible for a <strong>Free 90-Day Access Plan</strong>. Click the button below, verify your email with a quick OTP, and your plan activates instantly.
   </p>
   <div style="text-align:center;margin:28px 0;">
-    <a href="{{activation_link}}" style="background-color:#E30613;color:#ffffff;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Activate Free Plan Now &rarr;</a>
+    <a href="{{activation_link}}" style="background-color:#38B2AC;color:#ffffff;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block;">Activate Free Plan Now &rarr;</a>
   </div>
   <p style="margin:24px 0 0;color:#374151;font-size:13px;font-weight:600;">The Go Experts Team</p>
 </div>`,
@@ -336,7 +335,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 4px 0; font-size: 14px;"><strong>Amount Paid:</strong> ₹{{billing_amount}}</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{dashboard_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Go to Dashboard &rarr;</a>
+    <a href="{{dashboard_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Go to Dashboard &rarr;</a>
   </div>
   <p style="font-size: 13px; color: #718096;">Team Go Experts &bull; servicedesk@goexperts.in</p>
 </div>`,
@@ -364,7 +363,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 0; color: #92400e; font-size: 14px;">Renew your plan today to keep uninterrupted access to proposals, clients, and workspace features.</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{renew_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Renew Subscription &rarr;</a>
+    <a href="{{renew_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Renew Subscription &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -387,7 +386,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
   <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
   <p style="font-size: 15px; color: #4a5568;">Your <strong>{{plan_name}}</strong> plan expired on <strong>{{expired_date}}</strong>. Your account access is limited until you renew.</p>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{upgrade_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Upgrade Your Plan &rarr;</a>
+    <a href="{{upgrade_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Upgrade Your Plan &rarr;</a>
   </div>
   <p style="font-size: 13px; color: #718096;">The Go Experts Team &bull; servicedesk@goexperts.in</p>
 </div>`,
@@ -412,7 +411,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
   <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
   <p style="font-size: 15px; color: #4a5568;">Your <strong>{{plan_name}}</strong> subscription has been renewed. New expiry date: <strong>{{end_date}}</strong>.</p>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{dashboard_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">View Workspace &rarr;</a>
+    <a href="{{dashboard_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">View Workspace &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -441,7 +440,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 4px 0; font-size: 14px;"><strong>Payment Method:</strong> {{payment_method}}</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{invoice_download_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Download Invoice PDF &rarr;</a>
+    <a href="{{invoice_download_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Download Invoice PDF &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -468,7 +467,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 0; color: #991b1b; font-size: 14px;"><strong>Reason:</strong> {{reason}}</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{retry_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Retry Payment &rarr;</a>
+    <a href="{{retry_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Retry Payment &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -523,7 +522,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 0; color: #166534; font-size: 13px;">New Wallet Balance: ₹{{new_balance}}</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{wallet_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">View My Wallet &rarr;</a>
+    <a href="{{wallet_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">View My Wallet &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -553,7 +552,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <div style="color:#10b981;font-size:32px;font-weight:800;">₹{{cashback_amount}}</div>
   </div>
   <div style="text-align:center;margin:24px 0;">
-    <a href="{{wallet_link}}" style="background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;display:inline-block;">Check Wallet Balance &rarr;</a>
+    <a href="{{wallet_link}}" style="background:#38B2AC;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;display:inline-block;">Check Wallet Balance &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -582,7 +581,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <div style="color:#10b981;font-size:32px;font-weight:800;">₹{{bonus_amount}}</div>
   </div>
   <div style="text-align:center;margin:24px 0;">
-    <a href="{{wallet_link}}" style="background:#E30613;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;display:inline-block;">Go to Wallet &rarr;</a>
+    <a href="{{wallet_link}}" style="background:#38B2AC;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;display:inline-block;">Go to Wallet &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -614,7 +613,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <div style="margin-top: 10px; font-size: 13px; color: #64748b;">{{document_summary}}</div>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{kyc_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Update KYC Documents &rarr;</a>
+    <a href="{{kyc_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Update KYC Documents &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -638,7 +637,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>KYC Incomplete:</strong> Upload your ID documents to activate your account and start sending proposals or hiring talent.</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{kyc_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Complete KYC Verification &rarr;</a>
+    <a href="{{kyc_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Complete KYC Verification &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -660,7 +659,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
   <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
   <p style="font-size: 15px; color: #4a5568;">Profiles with full details, portfolio links, and skills get up to <strong>5x more visibility</strong> on Go Experts.</p>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{profile_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Complete My Profile &rarr;</a>
+    <a href="{{profile_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Complete My Profile &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -682,7 +681,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
   <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
   <p style="font-size: 15px; color: #4a5568;">Finish your registration to start connecting with top professionals and verified clients.</p>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{login_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Resume Registration &rarr;</a>
+    <a href="{{login_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Resume Registration &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -708,17 +707,17 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     ],
     body: "Hi {{name}},\n\n{{client_name}} has invited you to join their organization as a {{role}} in the {{department}} department on Go Experts.\n\nLogin Portal: {{login_url}}\nUsername: {{email}}\nTemporary Password: {{temp_password}}\n\nGo Experts Team",
     html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-  <h2 style="color: #E30613; margin-top: 0;">Welcome to Go Experts!</h2>
+  <h2 style="color: #38B2AC; margin-top: 0;">Welcome to Go Experts!</h2>
   <p>Hi <strong>{{name}}</strong>,</p>
   <p><strong>{{client_name}}</strong> has invited you to join their organization as a <strong>{{role}}</strong> in the <strong>{{department}}</strong> department.</p>
   <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 18px; border-radius: 8px; margin: 20px 0;">
     <h3 style="margin-top: 0; color: #0f172a; font-size: 14px;">Your Dashboard Login Credentials:</h3>
-    <p style="margin: 6px 0; font-size: 13px;"><strong>Login Portal:</strong> <a href="{{login_url}}" target="_blank" style="color: #E30613;">{{login_url}}</a></p>
+    <p style="margin: 6px 0; font-size: 13px;"><strong>Login Portal:</strong> <a href="{{login_url}}" target="_blank" style="color: #38B2AC;">{{login_url}}</a></p>
     <p style="margin: 6px 0; font-size: 13px;"><strong>Username / Email:</strong> <code style="background: #e2e8f0; padding: 3px 6px; border-radius: 4px; font-weight: bold;">{{email}}</code></p>
     <p style="margin: 6px 0; font-size: 13px;"><strong>Temporary Password:</strong> <code style="background: #e2e8f0; padding: 3px 6px; border-radius: 4px; font-weight: bold;">{{temp_password}}</code></p>
   </div>
   <div style="text-align: center; margin: 24px 0;">
-    <a href="{{login_url}}" style="background-color: #E30613; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Sign In to Dashboard &rarr;</a>
+    <a href="{{login_url}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Sign In to Dashboard &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -740,16 +739,16 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     ],
     body: "Hi {{name}},\n\nHere are your access credentials for {{client_name}}'s team on Go Experts:\n\nLogin: {{login_url}}\nEmail: {{email}}\nPassword: {{temp_password}}\n\nGo Experts Team",
     html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-  <h2 style="color: #E30613; margin-top: 0;">Your Team Access Credentials</h2>
+  <h2 style="color: #38B2AC; margin-top: 0;">Your Team Access Credentials</h2>
   <p>Hi <strong>{{name}}</strong>,</p>
   <p>Here are your access credentials for <strong>{{client_name}}'s organization</strong> as a <strong>{{role}}</strong>:</p>
   <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 18px; border-radius: 8px; margin: 20px 0;">
-    <p style="margin: 6px 0; font-size: 13px;"><strong>Portal:</strong> <a href="{{login_url}}" style="color: #E30613;">{{login_url}}</a></p>
+    <p style="margin: 6px 0; font-size: 13px;"><strong>Portal:</strong> <a href="{{login_url}}" style="color: #38B2AC;">{{login_url}}</a></p>
     <p style="margin: 6px 0; font-size: 13px;"><strong>Email:</strong> {{email}}</p>
     <p style="margin: 6px 0; font-size: 13px;"><strong>Password:</strong> {{temp_password}}</p>
   </div>
   <div style="text-align: center; margin: 24px 0;">
-    <a href="{{login_url}}" style="background-color: #E30613; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Sign In to Dashboard &rarr;</a>
+    <a href="{{login_url}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Sign In to Dashboard &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -831,7 +830,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 4px 0; font-size: 14px;"><strong>Date & Time:</strong> {{meeting_date}} at {{meeting_time}}</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{meeting_url}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Join Video Meeting &rarr;</a>
+    <a href="{{meeting_url}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Join Video Meeting &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -860,7 +859,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
   <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
   <p style="font-size: 15px; color: #4a5568;">Contract <strong>{{contract_number}}</strong> for "<strong>{{project_title}}</strong>" has been digitally signed by all parties. Work can now begin!</p>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{contract_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">View Signed Contract &rarr;</a>
+    <a href="{{contract_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">View Signed Contract &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
@@ -888,7 +887,7 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <p style="margin: 4px 0; font-size: 14px;"><strong>Bid Amount:</strong> ₹{{bid_amount}}</p>
   </div>
   <div style="text-align: center; margin: 28px 0;">
-    <a href="{{proposal_link}}" style="background-color: #E30613; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Review Proposal &rarr;</a>
+    <a href="{{proposal_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Review Proposal &rarr;</a>
   </div>
 </div>`,
     isDefault: true,
