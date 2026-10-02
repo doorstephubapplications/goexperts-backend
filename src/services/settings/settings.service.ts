@@ -173,7 +173,7 @@ export function wrapInMncEmailLayout(
     logoUrl: rawLogoUrl,
     logoHeight: branding?.logoHeight || 34,
     showBrandText: branding?.showBrandText !== false,
-    primaryColor: branding?.primaryColor || "#E30613",
+    primaryColor: branding?.primaryColor || "#38B2AC",
     headerTag: branding?.headerTag || options?.module || "Security Notice",
     appSectionTitle: branding?.appSectionTitle || "Get the Go Experts App",
     playStoreUrl:
@@ -200,7 +200,7 @@ export function wrapInMncEmailLayout(
 
   // Clean old wrappers if any
   let cleanContent = innerContent
-    .replace(/<div style="padding: 24px; text-align: center; border-bottom: 3px solid #E30613; background: #ffffff;">[\s\S]*?<\/div>/gi, "")
+    .replace(/<div style="padding: 24px; text-align: center; border-bottom: 3px solid #38B2AC; background: #ffffff;">[\s\S]*?<\/div>/gi, "")
     .replace(/<div style="background-color: #f[78]faf[cd]; padding: 20px 24px; text-align: center; border-top: 1px solid #eaedf1;">[\s\S]*?<\/div>\s*<\/div>$/gi, "")
     .replace(/<div style="background-color: #f[78]faf[cd]; padding: 20px 24px; text-align: center; border-top: 1px solid #eaedf1;">[\s\S]*?<\/div>/gi, "")
     .replace(/^<div style="font-family: [^>]+max-width: 600px[^>]+>/i, "")
