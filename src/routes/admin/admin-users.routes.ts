@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
-import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendWelcomeBonusEmail } from "../../services/mobile/email.service.js";
+import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendAdminWalletCreditEmail } from "../../services/mobile/email.service.js";
 export const adminUsersRouter = Router();
 
 // ==========================================
@@ -351,7 +351,7 @@ adminUsersRouter.post("/:id/wallet/adjust", async (req: Request, res: Response, 
     if (isCredit) {
       const userForEmail = await prisma.user.findUnique({ where: { id: req.params.id } });
       if (userForEmail && userForEmail.email) {
-        sendWelcomeBonusEmail(userForEmail.email, userForEmail.fullName || 'User', numAmount).catch(console.error);
+        sendAdminWalletCreditEmail(userForEmail.email, userForEmail.fullName || 'User', numAmount, description || 'Admin adjustment').catch(console.error);
       }
     }
 

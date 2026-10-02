@@ -652,6 +652,16 @@ export const sendWelcomeBonusEmail = async (to: string, name: string, amount: nu
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
+export const sendAdminWalletCreditEmail = async (to: string, name: string, amount: number, reason: string) => {
+  const rendered = await renderEmailTemplate("tpl_admin_wallet_credit", {
+    full_name: name || 'User',
+    amount: amount,
+    reason: reason || 'Manual adjustment',
+    wallet_link: `${FRONTEND_URL}/dashboard/wallet`,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
 
 type KycStatusDocument = {
   label: string;
