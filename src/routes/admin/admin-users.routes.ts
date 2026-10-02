@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
-import { sendAccountDeletedEmail } from "../../services/mobile/email.service.js";
+import { sendAccountDeletedEmail, sendKycDocumentStatusEmail } from "../../services/mobile/email.service.js";
 export const adminUsersRouter = Router();
 
 // ==========================================
@@ -736,6 +736,21 @@ adminUsersRouter.patch("/:id/kyc-document", async (req: Request, res: Response, 
       where: { id: targetProfile.id },
       data: updateData
     });
+
+    if (user.email) {
+      let docLabel = key;
+      if (key === 'pan') docLabel = 'PAN Card';
+      if (key === 'aadhaar') docLabel = 'Aadhaar Card';
+      if (key === 'gst') docLabel = 'GST Certificate';
+
+      sendKycDocumentStatusEmail(
+        user.email,
+        user.fullName || 'User',
+        user.role || 'Member',
+        [{ label: docLabel, status: status, reason: reason }],
+        null
+      ).catch(console.error);
+    }
 
     res.json({ success: true, message: `Document successfully marked as ${status}` });
   } catch (err) {
