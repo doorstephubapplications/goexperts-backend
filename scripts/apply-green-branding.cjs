@@ -18,11 +18,19 @@ async function main() {
         t.body = t.body.replace(/#E30613/gi, '#38B2AC');
         updated = true;
       }
+      if (t.html && t.html.includes('#E30613')) {
+        t.html = t.html.replace(/#E30613/gi, '#38B2AC');
+        updated = true;
+      }
       
       // Specifically remove the redundant link section in verification
-      const redundantHtml = /<p[^>]*>Button not working\? Copy and paste this link into your browser:<br\/>.*?<\/a><\/p>/gi;
+      const redundantHtml = /<p[^>]*>Button not working\? Copy and paste this link into your browser:<br\/>[\s\S]*?<\/a><\/p>/gi;
       if (t.body && redundantHtml.test(t.body)) {
         t.body = t.body.replace(redundantHtml, '');
+        updated = true;
+      }
+      if (t.html && redundantHtml.test(t.html)) {
+        t.html = t.html.replace(redundantHtml, '');
         updated = true;
       }
     }
