@@ -933,4 +933,25 @@ export const sendProjectCreatedEmail = async (to: string, name: string, projectT
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
+export const sendTicketCreatedEmail = async (to: string, name: string, ticketNumber: string, ticketSubject: string, dashboardLink: string) => {
+  const rendered = await renderEmailTemplate("tpl_ticket_created", {
+    full_name: name || 'User',
+    ticket_number: ticketNumber,
+    ticket_subject: ticketSubject,
+    dashboard_link: dashboardLink || `${FRONTEND_URL}/dashboard/support`,
+    app_url: FRONTEND_URL,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
+
+export const sendTicketClosedEmail = async (to: string, name: string, ticketNumber: string, ticketSubject: string, dashboardLink: string) => {
+  const rendered = await renderEmailTemplate("tpl_ticket_closed", {
+    full_name: name || 'User',
+    ticket_number: ticketNumber,
+    ticket_subject: ticketSubject,
+    dashboard_link: dashboardLink || `${FRONTEND_URL}/dashboard/support`,
+    app_url: FRONTEND_URL,
+  });
+  return sendEmail(to, rendered.subject, rendered.html);
+};
 

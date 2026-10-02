@@ -127,19 +127,14 @@ export const updateAdminTicket = async (req: AuthenticatedRequest, res: Response
         }).catch(console.error);
 
         if (u.email) {
-          const rendered = await renderEmailTemplate("tpl_support_ticket_status", {
-            full_name: u.fullName || 'there',
-            ticket_number: ticket.ticketNumber?.slice(-8) || 'ticket',
-            subject: ticket.subject || 'your issue',
-            status,
-            status_lower: status.toLowerCase(),
-            support_url: `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/support`,
-            app_url: process.env.FRONTEND_URL || 'https://goexperts.in',
-          }).catch(() => ({
-            subject: `Support Ticket ${status} - Go Experts`,
-            html: `<p>Hi ${u.fullName || 'there'},</p><p>Your support ticket has been marked as <b>${status}</b>.</p>`,
-          }));
-          await sendEmail(u.email, rendered.subject, rendered.html).catch(console.error);
+          const { sendTicketClosedEmail } = await import("../../services/mobile/email.service.js");
+          await sendTicketClosedEmail(
+            u.email,
+            u.fullName,
+            ticket.ticketNumber || ticket.id,
+            ticket.subject,
+            `${process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/support`
+          ).catch(e => console.error("Failed to send ticket closed email:", e));
         }
       }
     }
