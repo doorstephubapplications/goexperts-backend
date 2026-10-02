@@ -223,11 +223,25 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
           verificationCenter.documents = "SUBMITTED";
         }
         
+        let docsArray: any[] = [];
         if (Array.isArray(vJson.documentsList)) {
-          verificationCenter.documentsList = vJson.documentsList;
+          docsArray = vJson.documentsList;
         } else if (Array.isArray(vJson.documents)) {
-          verificationCenter.documentsList = vJson.documents;
+          docsArray = vJson.documents;
+        } else {
+          // Extract nested document objects (e.g. vJson.pan, vJson.aadhaar)
+          docsArray = Object.values(vJson).filter((item: any) => 
+            item && typeof item === 'object' && item.label && (item.documentUrl || item.url)
+          );
         }
+        
+        // Map to what the frontend expects (url and docNumber)
+        verificationCenter.documentsList = docsArray.map((doc: any) => ({
+          ...doc,
+          title: doc.title || doc.label,
+          url: doc.url || doc.documentUrl || "",
+          docNumber: doc.docNumber || doc.value || ""
+        }));
       } catch {}
     }
 
