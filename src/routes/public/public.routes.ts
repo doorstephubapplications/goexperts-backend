@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
+import { sendAccountDeletedEmail } from "../../services/mobile/email.service.js";
 import { listFreelancersCompat } from "../../common/helpers/prisma-compat.js";
 import { SETTINGS_DEFAULTS } from "../../services/settings/settings.defaults.js";
 import {
@@ -1099,6 +1100,11 @@ router.post("/delete-requests/:id/approve", async (req: Request, res: Response, 
         deletedAt: new Date(),
       },
     });
+    
+    if (user.email) {
+      sendAccountDeletedEmail(user.email, user.fullName || 'User').catch(console.error);
+    }
+    
     res.json({ success: true, message: `Account deletion approved for ${user.email}. User has been deactivated.`, user });
   } catch (err) {
     next(err);

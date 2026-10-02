@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
-
+import { sendAccountDeletedEmail } from "../../services/mobile/email.service.js";
 export const adminUsersRouter = Router();
 
 // ==========================================
@@ -620,6 +620,15 @@ adminUsersRouter.delete("/bulk", async (req: Request, res: Response, next: NextF
       where: { id: { in: ids } },
       data: { deletedAt: new Date() }
     });
+    
+    // Send deleted emails
+    const deletedUsers = await prisma.user.findMany({ where: { id: { in: ids } } });
+    for (const u of deletedUsers) {
+      if (u.email) {
+        sendAccountDeletedEmail(u.email, u.fullName || 'User').catch(console.error);
+      }
+    }
+    
     res.json({ success: true, message: "Users deleted successfully" });
   } catch (err) {
     next(err);
@@ -628,10 +637,13 @@ adminUsersRouter.delete("/bulk", async (req: Request, res: Response, next: NextF
 
 adminUsersRouter.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: req.params.id },
       data: { deletedAt: new Date() }
     });
+    if (updatedUser.email) {
+      sendAccountDeletedEmail(updatedUser.email, updatedUser.fullName || 'User').catch(console.error);
+    }
     res.json({ success: true, message: "User deleted successfully" });
   } catch (err) {
     next(err);
