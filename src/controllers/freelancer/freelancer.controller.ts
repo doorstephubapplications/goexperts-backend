@@ -716,7 +716,7 @@ export const getFreelancerDashboard = async (
         client: c.client?.fullName || resolveClientName(project?.client),
         budget: money(Number(project?.budget ?? 0), currency),
         status: statusLabel(project?.status || c.status),
-        due: project?.timeline || "—",
+        due: project?.timeline || "",
         progress,
       };
     });
@@ -800,7 +800,7 @@ export const getFreelancerDashboard = async (
       {
         key: "rating",
         label: "Average Rating",
-        value: avgRating ? avgRating.toFixed(2) : "—",
+        value: avgRating ? avgRating.toFixed(2) : "",
         delta: `${reviewCount} review${reviewCount === 1 ? "" : "s"}`,
         trend: avgRating >= 4 ? "up" : "flat",
         accent: "success",
@@ -816,10 +816,10 @@ export const getFreelancerDashboard = async (
         : { title: "Complete your profile to unlock better project matches", cta: "Update profile" },
       completion.overall < 90
         ? {
-            title: `Your profile is ${completion.overall}% complete — finish the last sections`,
+            title: `Your profile is ${completion.overall}% complete  finish the last sections`,
             cta: "Complete profile",
           }
-        : { title: "Your profile looks strong — keep winning clients", cta: "View analytics" },
+        : { title: "Your profile looks strong  keep winning clients", cta: "View analytics" },
       proposalsPending > 0
         ? {
             title: `Follow up on ${proposalsPending} pending proposal${proposalsPending === 1 ? "" : "s"}`,
@@ -841,7 +841,7 @@ export const getFreelancerDashboard = async (
           bio: user.bio || "",
           headline:
             user.freelancerProfile?.industry
-              ? `${user.freelancerProfile.experience || "Freelancer"} · ${user.freelancerProfile.industry}`
+              ? `${user.freelancerProfile.experience || "Freelancer"}  ${user.freelancerProfile.industry}`
               : user.bio?.slice(0, 80) || "Freelancer",
           industry: user.freelancerProfile?.industry || null,
           experience: user.freelancerProfile?.experience || null,
@@ -892,7 +892,7 @@ export const getFreelancerDashboard = async (
             credit: t.direction === "credit" ? Number(t.amount) : 0,
             debit: t.direction === "debit" ? Number(t.amount) : 0,
             gateway: t.type || "Wallet",
-            ref: t.description || "—",
+            ref: t.description || "",
             status: "Completed",
             date: t.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           })),
@@ -905,7 +905,7 @@ export const getFreelancerDashboard = async (
           budgetRaw: Number(p.budget || 0),
           category: p.category,
           technology: p.technology,
-          timeline: p.timeline || "—",
+          timeline: p.timeline || "",
           status: statusLabel(p.status),
           createdAt: p.createdAt,
         })),
@@ -1087,7 +1087,7 @@ export const getFreelancerProfile = async (
     const headline =
       (user.bio && user.bio.trim()) ||
       (profile?.industry
-        ? `${profile.experience || "Freelancer"} · ${profile.industry}`
+        ? `${profile.experience || "Freelancer"}  ${profile.industry}`
         : "Freelancer");
 
     res.json({
@@ -1987,8 +1987,8 @@ export const acceptOffer = async (req: any, res: any, next: any) => {
 
 export const addFreelancerTeamMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { requireUser } = await import('../../middlewares/auth.middleware.js');
-    const userId = requireUser(req, res);
+    const userId = req.user?.id || (req as any).userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
     if (!userId) return;
     const body = req.body || {};
     const name = String(body.name || "").trim();
@@ -2034,7 +2034,8 @@ export const addFreelancerTeamMember = async (req: AuthenticatedRequest, res: Re
           ownerId: userId,
           userId: existingUser.id,
           email,
-          role: body.role || "Member"
+          role: body.role || "Member",
+          permissions: "[]"
         }
       });
 
@@ -2043,7 +2044,8 @@ export const addFreelancerTeamMember = async (req: AuthenticatedRequest, res: Re
       const frontendUrl = process.env.FRONTEND_URL || "https://goexperts.in";
 
       try {
-        const { renderEmailTemplate, sendEmail } = await import("../../services/mobile/email.service.js");
+        const { sendEmail } = await import("../../services/mobile/email.service.js");
+        const { renderEmailTemplate } = await import("../../services/settings/settings.service.js");
         const rendered = await renderEmailTemplate("tpl_team_invitation", {
           full_name: name,
           member_name: name,
@@ -2078,8 +2080,8 @@ export const addFreelancerTeamMember = async (req: AuthenticatedRequest, res: Re
 
 export const listFreelancerTeam = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { requireUser } = await import('../../middlewares/auth.middleware.js');
-    const userId = requireUser(req, res);
+    const userId = req.user?.id || (req as any).userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
     if (!userId) return;
     const { getJsonSetting } = await import('../../common/helpers/portal-shared.js');
     const rows = await getJsonSetting(userId, "team", [] as any[]);
@@ -2091,8 +2093,8 @@ export const listFreelancerTeam = async (req: AuthenticatedRequest, res: Respons
 
 export const deleteFreelancerTeamMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { requireUser } = await import('../../middlewares/auth.middleware.js');
-    const userId = requireUser(req, res);
+    const userId = req.user?.id || (req as any).userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
     if (!userId) return;
     const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "id is required" });
@@ -2106,4 +2108,4 @@ export const deleteFreelancerTeamMember = async (req: AuthenticatedRequest, res:
   } catch (err) {
     next(err);
   }
-}; 
+};

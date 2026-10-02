@@ -685,7 +685,8 @@ export const addFounderTeamMember = async (req: AuthenticatedRequest, res: Respo
           ownerId: userId,
           userId: existingUser.id,
           email,
-          role: body.role || "Member"
+          role: body.role || "Member",
+          permissions: "[]"
         }
       });
 
@@ -694,7 +695,8 @@ export const addFounderTeamMember = async (req: AuthenticatedRequest, res: Respo
       const frontendUrl = process.env.FRONTEND_URL || "https://goexperts.in";
 
       try {
-        const { renderEmailTemplate, sendEmail } = await import("../../services/mobile/email.service.js");
+        const { sendEmail } = await import("../../services/mobile/email.service.js");
+        const { renderEmailTemplate } = await import("../../services/settings/settings.service.js");
         const rendered = await renderEmailTemplate("tpl_team_invitation", {
           full_name: name,
           member_name: name,
