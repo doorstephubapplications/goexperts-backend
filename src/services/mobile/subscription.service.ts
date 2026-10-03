@@ -7,13 +7,13 @@ import { getVerificationStats } from '../../common/helpers/verification.js';
 
 export type BillingCycle = 'monthly' | 'yearly';
 
-const GST_RATE_FOR_INCLUDED_PLAN_PRICE = 0.18;
+import {
+  GST_RATE_FOR_INCLUDED_PLAN_PRICE,
+  calculateInclusiveGst,
+  getPlanBaseAmountExcludingGst,
+} from '../../utils/financial.util.js';
 
-const getPlanBaseAmountExcludingGst = (amountIncludingGst: number) => {
-  const amount = Number(amountIncludingGst || 0);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return parseFloat((amount / (1 + GST_RATE_FOR_INCLUDED_PLAN_PRICE)).toFixed(2));
-};
+export { GST_RATE_FOR_INCLUDED_PLAN_PRICE, calculateInclusiveGst, getPlanBaseAmountExcludingGst };
 
 const isFreeAlias = (value: string) => {
   const v = value.trim().toLowerCase();
@@ -315,17 +315,17 @@ export const activateUserSubscription = async (
 
     if (plan.amount > 0) {
       try {
-        const gst = plan.amount * 0.18;
+        const { subtotal, gst, total } = calculateInclusiveGst(plan.amount);
         const invoiceNumber = 'INV-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
         const invoiceObj = await prisma.invoice.create({
           data: {
             invoiceNumber,
             userId,
             subscriptionId: subscription.id,
-            subtotal: plan.amount - gst,
+            subtotal,
             gst,
             discount: 0,
-            total: plan.amount,
+            total,
             status: 'paid',
             items: {
               create: [

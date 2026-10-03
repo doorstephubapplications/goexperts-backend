@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database.js";
 import { generateInvoicePdf } from "../invoice/invoice.service.js";
 import { sendSubscriptionPurchasedEmail } from "../mobile/email.service.js";
+import { calculateInclusiveGst } from "../../utils/financial.util.js";
 
 export type RoleName = "freelancer" | "client" | "founder" | "investor";
 
@@ -744,17 +745,17 @@ export async function activateUserMonetizationPlan(
 
     // Generate Invoice if paid
     if (plan.amount > 0) {
-      const gst = parseFloat((plan.amount * 0.18).toFixed(2));
+      const { subtotal, gst, total } = calculateInclusiveGst(plan.amount);
       const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
           userId,
           subscriptionId: subscription.id,
-          subtotal: parseFloat((plan.amount - gst).toFixed(2)),
+          subtotal,
           gst,
           discount: 0,
-          total: plan.amount,
+          total,
           status: "paid",
           items: {
             create: [
