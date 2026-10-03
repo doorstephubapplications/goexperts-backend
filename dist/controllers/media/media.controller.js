@@ -88,14 +88,23 @@ export const uploadFile = async (req, res, next) => {
         next(err);
     }
 };
+import { assertMediaFileAccess, assertMediaFileDelete } from "../../services/projects/project-authorization.service.js";
 // ─── 2. DOWNLOAD ─────────────────────────────────────────────────────────────
 export const downloadFile = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const media = await prisma.mediaFile.findUnique({ where: { id } });
-        if (!media || media.deletedAt) {
-            return res.status(404).json({ success: false, message: "File not found" });
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         }
+        const access = await assertMediaFileAccess(userId, id);
+        if (!access.allowed) {
+            if (access.reason === "not_found") {
+                return res.status(404).json({ success: false, message: "File not found" });
+            }
+            return res.status(403).json({ success: false, message: "Access denied to media file" });
+        }
+        const media = access.media;
         const absolutePath = absoluteUploadPath(media.filepath);
         if (!fs.existsSync(absolutePath)) {
             return res.status(410).json({ success: false, message: "File missing from disk" });
@@ -112,17 +121,24 @@ export const downloadFile = async (req, res, next) => {
 export const previewFile = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const media = await prisma.mediaFile.findUnique({ where: { id } });
-        if (!media || media.deletedAt) {
-            return res.status(404).json({ success: false, message: "File not found" });
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         }
+        const access = await assertMediaFileAccess(userId, id);
+        if (!access.allowed) {
+            if (access.reason === "not_found") {
+                return res.status(404).json({ success: false, message: "File not found" });
+            }
+            return res.status(403).json({ success: false, message: "Access denied to media file" });
+        }
+        const media = access.media;
         const PREVIEWABLE = ["jpg", "jpeg", "png", "gif", "webp", "svg", "pdf", "mp4", "webm"];
         const isPreviewable = PREVIEWABLE.includes(media.filetype.toLowerCase());
         if (!isPreviewable) {
             return res.status(415).json({
                 success: false,
                 message: `Preview not supported for .${media.filetype} files. Use download instead.`,
-                downloadUrl: `${publicBaseUrl(req)}/api/admin/media/${id}/download`,
             });
         }
         const absolutePath = absoluteUploadPath(media.filepath);
@@ -173,10 +189,18 @@ export const listVersions = async (req, res, next) => {
 export const deleteFile = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const media = await prisma.mediaFile.findUnique({ where: { id } });
-        if (!media || media.deletedAt) {
-            return res.status(404).json({ success: false, message: "File not found or already deleted" });
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
         }
+        const canDelete = await assertMediaFileDelete(userId, id);
+        if (!canDelete.allowed) {
+            if (canDelete.reason === "not_found") {
+                return res.status(404).json({ success: false, message: "File not found or already deleted" });
+            }
+            return res.status(403).json({ success: false, message: "Forbidden: You are not authorized to delete this file" });
+        }
+        const media = canDelete.media;
         await prisma.mediaFile.update({
             where: { id },
             data: { deletedAt: new Date(), status: "deleted" },

@@ -39,7 +39,7 @@ export const getBusinessActivities = async (req, res, next) => {
             },
             orderBy: { createdAt: "desc" }
         });
-        res.json({ success: true, activities });
+        res.json({ success: true, activities, data: activities });
     }
     catch (error) {
         next(error);

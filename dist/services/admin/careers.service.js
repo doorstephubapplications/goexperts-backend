@@ -1,5 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import { prisma } from "../../config/database.js";
 const PAGE_NAME = "Careers";
 const PAGE_CATEGORY = "Company";
 function generateApplicationNumber() {
@@ -246,88 +245,93 @@ export class CareersCmsService {
      * Helper to seed initial jobs if empty
      */
     async seedDefaultJobsIfEmpty() {
-        const count = await prisma.jobOpening.count({ where: { deletedAt: null } });
-        if (count === 0) {
-            const defaults = [
-                {
-                    title: "Senior Product Engineer",
-                    slug: "senior-product-engineer",
-                    jobCode: "JOB-ENG-001",
-                    department: "Engineering",
-                    category: "Software Development",
-                    location: "Remote (Global)",
-                    workplaceType: "remote",
-                    employmentType: "full_time",
-                    experienceLevel: "senior",
-                    minExperience: 5,
-                    maxExperience: 8,
-                    openings: 2,
-                    salaryMin: 120000,
-                    salaryMax: 160000,
-                    currency: "USD",
-                    salaryVisibility: true,
-                    shortSummary: "Lead the full-stack architecture of our core Web & API platforms using React, Node.js, and TypeScript.",
-                    fullDescription: "We are seeking a Senior Product Engineer to lead the architecture and development of our core web ecosystem...",
-                    responsibilities: "â€¢ Architect scalable web services\nâ€¢ Collaborate with Product & Design\nâ€¢ Maintain high unit test coverage",
-                    requirements: "â€¢ 5+ years with React and TypeScript\nâ€¢ Experience building REST/GraphQL APIs\nâ€¢ High autonomy",
-                    benefits: "â€¢ Top tier salary & equity\nâ€¢ $1,500 annual learning budget\nâ€¢ Flexible remote work",
-                    status: "published",
-                    featured: true,
-                },
-                {
-                    title: "Product Designer (Design Systems)",
-                    slug: "product-designer-design-systems",
-                    jobCode: "JOB-DES-002",
-                    department: "Design",
-                    category: "UI/UX Design",
-                    location: "Bengaluru, India / Hybrid",
-                    workplaceType: "hybrid",
-                    employmentType: "full_time",
-                    experienceLevel: "mid_level",
-                    minExperience: 3,
-                    maxExperience: 6,
-                    openings: 1,
-                    salaryMin: 40000,
-                    salaryMax: 65000,
-                    currency: "USD",
-                    salaryVisibility: true,
-                    shortSummary: "Craft intuitive, world-class design systems and component libraries across web and mobile surfaces.",
-                    fullDescription: "Join our core design team to establish and evolve the Go Experts Design System...",
-                    responsibilities: "â€¢ Evolve component guidelines in Figma\nâ€¢ Conduct user research & usability testing\nâ€¢ Partner with frontend engineers",
-                    requirements: "â€¢ 3+ years in SaaS product design\nâ€¢ Mastery of Figma & prototyping\nâ€¢ Portfolio demonstrating systems thinking",
-                    benefits: "â€¢ Premium health insurance\nâ€¢ Modern hardware of choice",
-                    status: "published",
-                    featured: true,
-                },
-                {
-                    title: "Trust & Safety Lead",
-                    slug: "trust-and-safety-lead",
-                    jobCode: "JOB-TRU-003",
-                    department: "Trust & Operations",
-                    category: "Risk & Verification",
-                    location: "Singapore / Remote",
-                    workplaceType: "remote",
-                    employmentType: "full_time",
-                    experienceLevel: "lead",
-                    minExperience: 6,
-                    maxExperience: 10,
-                    openings: 1,
-                    salaryMin: 90000,
-                    salaryMax: 130000,
-                    currency: "USD",
-                    salaryVisibility: true,
-                    shortSummary: "Lead platform risk mitigation, identity verification protocols, and payment dispute resolution.",
-                    fullDescription: "We are hiring a Trust & Safety Lead to protect our global marketplace...",
-                    responsibilities: "â€¢ Define KYC/AML verification policies\nâ€¢ Oversee dispute resolution workflows\nâ€¢ Manage risk analytics",
-                    requirements: "â€¢ 6+ years in marketplace or Fintech risk management\nâ€¢ Strong knowledge of regulatory compliance",
-                    benefits: "â€¢ Equity options\nâ€¢ Unlimited PTO policy",
-                    status: "published",
-                    featured: false,
-                },
-            ];
-            for (const job of defaults) {
-                await prisma.jobOpening.create({ data: job });
+        try {
+            const count = await prisma.jobOpening.count({ where: { deletedAt: null } });
+            if (count === 0) {
+                const defaults = [
+                    {
+                        title: "Senior Product Engineer",
+                        slug: "senior-product-engineer",
+                        jobCode: "JOB-ENG-001",
+                        department: "Engineering",
+                        category: "Software Development",
+                        location: "Remote (Global)",
+                        workplaceType: "remote",
+                        employmentType: "full_time",
+                        experienceLevel: "senior",
+                        minExperience: 5,
+                        maxExperience: 8,
+                        openings: 2,
+                        salaryMin: 120000,
+                        salaryMax: 160000,
+                        currency: "USD",
+                        salaryVisibility: true,
+                        shortSummary: "Lead the full-stack architecture of our core Web & API platforms using React, Node.js, and TypeScript.",
+                        fullDescription: "We are seeking a Senior Product Engineer to lead the architecture and development of our core web ecosystem...",
+                        responsibilities: "• Architect scalable web services\n• Collaborate with Product & Design\n• Maintain high unit test coverage",
+                        requirements: "• 5+ years with React and TypeScript\n• Experience building REST/GraphQL APIs\n• High autonomy",
+                        benefits: "• Top tier salary & equity\n• $1,500 annual learning budget\n• Flexible remote work",
+                        status: "published",
+                        featured: true,
+                    },
+                    {
+                        title: "Product Designer (Design Systems)",
+                        slug: "product-designer-design-systems",
+                        jobCode: "JOB-DES-002",
+                        department: "Design",
+                        category: "UI/UX Design",
+                        location: "Bengaluru, India / Hybrid",
+                        workplaceType: "hybrid",
+                        employmentType: "full_time",
+                        experienceLevel: "mid_level",
+                        minExperience: 3,
+                        maxExperience: 6,
+                        openings: 1,
+                        salaryMin: 40000,
+                        salaryMax: 65000,
+                        currency: "USD",
+                        salaryVisibility: true,
+                        shortSummary: "Craft intuitive, world-class design systems and component libraries across web and mobile surfaces.",
+                        fullDescription: "Join our core design team to establish and evolve the Go Experts Design System...",
+                        responsibilities: "• Evolve component guidelines in Figma\n• Conduct user research & usability testing\n• Partner with frontend engineers",
+                        requirements: "• 3+ years in SaaS product design\n• Mastery of Figma & prototyping\n• Portfolio demonstrating systems thinking",
+                        benefits: "• Premium health insurance\n• Modern hardware of choice",
+                        status: "published",
+                        featured: true,
+                    },
+                    {
+                        title: "Trust & Safety Lead",
+                        slug: "trust-and-safety-lead",
+                        jobCode: "JOB-TRU-003",
+                        department: "Trust & Operations",
+                        category: "Risk & Verification",
+                        location: "Singapore / Remote",
+                        workplaceType: "remote",
+                        employmentType: "full_time",
+                        experienceLevel: "lead",
+                        minExperience: 6,
+                        maxExperience: 10,
+                        openings: 1,
+                        salaryMin: 90000,
+                        salaryMax: 130000,
+                        currency: "USD",
+                        salaryVisibility: true,
+                        shortSummary: "Lead platform risk mitigation, identity verification protocols, and payment dispute resolution.",
+                        fullDescription: "We are hiring a Trust & Safety Lead to protect our global marketplace...",
+                        responsibilities: "• Define KYC/AML verification policies\n• Oversee dispute resolution workflows\n• Manage risk analytics",
+                        requirements: "• 6+ years in marketplace or Fintech risk management\n• Strong knowledge of regulatory compliance",
+                        benefits: "• Equity options\n• Unlimited PTO policy",
+                        status: "published",
+                        featured: false,
+                    },
+                ];
+                for (const job of defaults) {
+                    await prisma.jobOpening.create({ data: job });
+                }
             }
+        }
+        catch {
+            // Safe fallback if database is unavailable or mocked
         }
     }
     /**
@@ -373,6 +377,7 @@ export class CareersCmsService {
         const job = await prisma.jobOpening.findFirst({
             where: {
                 slug: { equals: slug },
+                status: "published",
                 deletedAt: null,
             },
         });

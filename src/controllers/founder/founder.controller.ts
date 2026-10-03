@@ -3,6 +3,7 @@ import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertActionEntitlement, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import {
   HttpError,
   getUserWalletPayload,
@@ -268,6 +269,26 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
 
     const startup = await findExistingStartup(user);
     const body = req.body || {};
+
+    // Enforce commercial entitlement when publishing publicly to marketplace
+    const isPublishing = body.visibility === "Public" || body.status === "active";
+    if (isPublishing) {
+      try {
+        await assertActionEntitlement(userId, "founder", "publishStartup");
+      } catch (err: any) {
+        if (err instanceof ActionGateError) {
+          return res.status(403).json({
+            success: false,
+            code: err.code,
+            action: err.action,
+            message: err.message,
+            details: err.details,
+          });
+        }
+        throw err;
+      }
+    }
+
     const data: any = {};
     
     if (body.startup != null) data.startup = String(body.startup).trim();
@@ -877,6 +898,22 @@ export const createFounderMeeting = async (req: AuthenticatedRequest, res: Respo
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
+
+    try {
+      await assertActionEntitlement(userId, "founder", "contactInvestor");
+    } catch (err: any) {
+      if (err instanceof ActionGateError) {
+        return res.status(403).json({
+          success: false,
+          code: err.code,
+          action: err.action,
+          message: err.message,
+          details: err.details,
+        });
+      }
+      throw err;
+    }
+
     const user = await loadFounderUser(userId);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 

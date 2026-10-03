@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { approveProject, rejectProject, publishProject, shortlistProposal, rejectProposal, interviewProposal, offerProposal, acceptProposal, withdrawProposal, createContractFromProposal, patchContractStatus, createMilestone, approveMilestone, rejectMilestone, requestChangesMilestone, submitMilestone, deleteMilestone, patchTaskStatus, createTaskComment, createTaskAttachment, createReview, } from "../../controllers/workflows/workflows.controller.js";
+import { approveProject, rejectProject, publishProject, shortlistProposal, rejectProposal, interviewProposal, offerProposal, acceptProposal, withdrawProposal, createContractFromProposal, patchContractStatus, createMilestone, approveMilestone, rejectMilestone, requestChangesMilestone, submitMilestone, escalateMilestoneDispute, deleteMilestone, patchTaskStatus, createTaskComment, createTaskAttachment, downloadTaskAttachment, deleteTaskAttachment, createReview, } from "../../controllers/workflows/workflows.controller.js";
 const router = Router();
 // Protect all workflow routes
 router.use(authMiddleware);
@@ -24,11 +24,14 @@ router.patch("/milestones/:id/approve", approveMilestone);
 router.patch("/milestones/:id/reject", rejectMilestone);
 router.patch("/milestones/:id/request-changes", requestChangesMilestone);
 router.patch("/milestones/:id/submit", submitMilestone);
+router.post("/milestones/:id/dispute", escalateMilestoneDispute);
 router.delete("/milestones/:id", deleteMilestone);
 // Task Engine (status/comments/attachments — create/update go through admin CRUD)
 router.patch("/tasks/:id/status", patchTaskStatus);
 router.post("/tasks/:id/comments", createTaskComment);
 router.post("/tasks/:id/attachments", createTaskAttachment);
+router.get("/tasks/:id/attachments/:attachmentId/download", downloadTaskAttachment);
+router.delete("/tasks/:id/attachments/:attachmentId", deleteTaskAttachment);
 // Review Engine
 router.post("/reviews", createReview);
 export default router;

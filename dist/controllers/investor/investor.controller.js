@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertActionEntitlement, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import { HttpError, getUserWalletPayload, creditWalletForSelf, debitWalletForSelf, listInvoicesForUser, listMeetingsForUser, createMeetingForUser, listUserNotifications, markNotificationRead, markAllNotificationsRead, getJsonSetting, setJsonSetting, listConversationsForUser, listMessagesForConversation, createMessageForUser, purchaseSubscriptionForSelf, listSubscriptionsForUser, money, } from "../../common/helpers/portal-shared.js";
 async function loadInvestorUser(userId) {
     return prisma.user.findFirst({
@@ -371,23 +372,31 @@ export const createInvestorInvestment = async (req, res, next) => {
         const userId = requireUser(req, res);
         if (!userId)
             return;
-        // Enforce capabilities for investors
-        if (req.user?.role === "investor") {
-            try {
-                await requireCapability({ userId, action: "expressInterest" });
+        // Enforce capabilities and commercial entitlement for investors
+        try {
+            await requireCapability({ userId, action: "expressInterest" });
+            await assertActionEntitlement(userId, "investor", "expressInterest");
+        }
+        catch (err) {
+            if (err instanceof ActionRequirementsError) {
+                return res.status(403).json({
+                    success: false,
+                    code: err.code,
+                    action: err.action,
+                    message: err.message,
+                    missing: err.missing,
+                });
             }
-            catch (err) {
-                if (err instanceof ActionRequirementsError) {
-                    return res.status(403).json({
-                        success: false,
-                        code: err.code,
-                        action: err.action,
-                        message: err.message,
-                        missing: err.missing,
-                    });
-                }
-                throw err;
+            if (err instanceof ActionGateError) {
+                return res.status(403).json({
+                    success: false,
+                    code: err.code,
+                    action: err.action,
+                    message: err.message,
+                    details: err.details,
+                });
             }
+            throw err;
         }
         const user = await loadInvestorUser(userId);
         if (!user)
@@ -481,6 +490,21 @@ export const createInvestorMeeting = async (req, res, next) => {
         const userId = requireUser(req, res);
         if (!userId)
             return;
+        try {
+            await assertActionEntitlement(userId, "investor", "contactFounder");
+        }
+        catch (err) {
+            if (err instanceof ActionGateError) {
+                return res.status(403).json({
+                    success: false,
+                    code: err.code,
+                    action: err.action,
+                    message: err.message,
+                    details: err.details,
+                });
+            }
+            throw err;
+        }
         const user = await loadInvestorUser(userId);
         if (!user)
             return res.status(404).json({ success: false, message: "User not found" });

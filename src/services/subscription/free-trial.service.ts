@@ -52,18 +52,22 @@ export async function activateFreeTrialOnKycApproval(userId: string) {
       return { success: true, message: "User already has active subscription. Approved and emails sent." };
     }
 
-    // 5. Find 90-Day Free Plan (universal "all" role or role-specific)
+    // 5. Find 6-Month Free Access Plan (universal "all" role or role-specific)
     const userRole = (user.role || "freelancer").toLowerCase();
     let plan = await prisma.subscriptionPlan.findFirst({
       where: {
         status: "active",
         OR: [
+          { name: "6-Month Free Access" },
+          { duration: "180_days" },
+          { planType: "trial" },
           { role: "all" },
           { role: userRole },
         ],
         AND: [
           {
             OR: [
+              { duration: "180_days" },
               { duration: "90_days" },
               { amount: 0 },
             ],
@@ -74,13 +78,27 @@ export async function activateFreeTrialOnKycApproval(userId: string) {
     });
 
     if (!plan) {
-      console.warn(`[FreeTrialService] No 90-day free plan found for role: ${userRole}`);
-      return { success: false, message: `No active 90-day free plan configured for role: ${userRole}` };
+      plan = await prisma.subscriptionPlan.create({
+        data: {
+          name: "6-Month Free Access",
+          role: "all",
+          planType: "trial",
+          amount: 0,
+          currency: "INR",
+          duration: "180_days",
+          proposalsLimit: 36,
+          projectsLimit: 36,
+          sortOrder: 1,
+          visibility: "public",
+          status: "active",
+        },
+      });
     }
 
-    // 6. Calculate 90 days expiration from now
+    // 6. Calculate exactly 6 calendar months expiration from now for new KYC approvals
     const startDate = new Date();
-    const endDate = new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const endDate = new Date(startDate.getTime());
+    endDate.setMonth(endDate.getMonth() + 6);
 
     // 7. Create Subscription + Update User trial expiry + Record History
     const [createdSub] = await prisma.$transaction([
@@ -88,6 +106,8 @@ export async function activateFreeTrialOnKycApproval(userId: string) {
         data: {
           userId: user.id,
           planId: plan.id,
+          role: "all",
+          planType: "trial",
           startDate,
           endDate,
           status: "active",
@@ -96,19 +116,19 @@ export async function activateFreeTrialOnKycApproval(userId: string) {
       }),
       prisma.user.update({
         where: { id: user.id },
-        data: { trialEndsAt: endDate },
+        data: { trialEndsAt: endDate, status: "active" },
       }),
       prisma.subscriptionHistory.create({
         data: {
           userId: user.id,
           planId: plan.id,
-          action: "FREE_TRIAL_ACTIVATED_ON_KYC",
+          action: "6_MONTH_FREE_TRIAL_ACTIVATED_ON_KYC",
           metadata: JSON.stringify({
             grantedAt: startDate.toISOString(),
             expiresAt: endDate.toISOString(),
-            durationDays: 90,
+            durationDays: 180,
             planName: plan.name,
-            role: userRole,
+            role: "all",
           }),
         },
       }),
@@ -120,8 +140,8 @@ export async function activateFreeTrialOnKycApproval(userId: string) {
         data: {
           userId: user.id,
           type: "system",
-          title: "ÃƒÂ°Ã…Â¸Ã…Â½Ã¢â‚¬Â° KYC Approved & 90-Day Free Plan Activated!",
-          message: `Congratulations ${user.fullName || ""}! Your KYC has been approved. You have been granted a 90-Day Free Access Plan until ${endDate.toLocaleDateString("en-IN")}.`,
+          title: "🎉 KYC Approved & 6-Month Free Access Activated!",
+          message: `Congratulations ${user.fullName || ""}! Your KYC has been approved. You have been granted 6 Months of Free Access across all workspaces until ${endDate.toLocaleDateString("en-IN")}.`,
           channel: "in_app",
           priority: "high",
           status: "unread",
@@ -131,7 +151,7 @@ export async function activateFreeTrialOnKycApproval(userId: string) {
       console.error("[FreeTrialService] Failed to send notification:", notifErr);
     }
 
-    console.log(`[FreeTrialService] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Activated 90-day free plan for ${user.id} (${user.email}) until ${endDate.toISOString()}`);
+    console.log(`[FreeTrialService] ✅ Activated 6-month free plan for ${user.id} (${user.email}) until ${endDate.toISOString()}`);
 
     return { success: true, subscription: createdSub, expiresAt: endDate };
   } catch (err: any) {

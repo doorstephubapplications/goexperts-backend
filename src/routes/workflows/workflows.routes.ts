@@ -17,10 +17,13 @@ import {
   rejectMilestone,
   requestChangesMilestone,
   submitMilestone,
+  escalateMilestoneDispute,
   deleteMilestone,
   patchTaskStatus,
   createTaskComment,
   createTaskAttachment,
+  downloadTaskAttachment,
+  deleteTaskAttachment,
   createReview,
 } from "../../controllers/workflows/workflows.controller.js";
 
@@ -52,12 +55,15 @@ router.patch("/milestones/:id/approve", approveMilestone);
 router.patch("/milestones/:id/reject", rejectMilestone);
 router.patch("/milestones/:id/request-changes", requestChangesMilestone);
 router.patch("/milestones/:id/submit", submitMilestone);
+router.post("/milestones/:id/dispute", escalateMilestoneDispute);
 router.delete("/milestones/:id", deleteMilestone);
 
 // Task Engine (status/comments/attachments — create/update go through admin CRUD)
 router.patch("/tasks/:id/status", patchTaskStatus);
 router.post("/tasks/:id/comments", createTaskComment);
 router.post("/tasks/:id/attachments", createTaskAttachment);
+router.get("/tasks/:id/attachments/:attachmentId/download", downloadTaskAttachment);
+router.delete("/tasks/:id/attachments/:attachmentId", deleteTaskAttachment);
 
 // Review Engine
 router.post("/reviews", createReview);

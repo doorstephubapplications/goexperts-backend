@@ -48,34 +48,43 @@ server.listen(port, async () => {
 
   // Only launch background workers if DB is reachable
   if (isDbConnected) {
-    // Start Notification worker
-    try {
-      startQueueWorker();
-    } catch (err) {
-      console.error("Failed to start notification queue worker:", err);
-    }
+    const { evaluateSchedulerInstance } = await import("./config/scheduler-guard.js");
+    const guard = evaluateSchedulerInstance();
 
-    // Register and Start Scheduler Engine
-    try {
-      registerSystemJobs();
-      SchedulerService.startScheduler();
-    } catch (err) {
-      console.error("Failed to start background job scheduler:", err);
-    }
+    if (guard.isPrimary) {
+      console.log(`🚀 [SCHEDULER] ${guard.reason}. Initializing background tasks...`);
 
-    // Register and Start Cashback CRON Job
-    try {
-      initCashbackJob();
-    } catch (err) {
-      console.error("Failed to start cashback job:", err);
-    }
+      // Start Notification worker
+      try {
+        startQueueWorker();
+      } catch (err) {
+        console.error("Failed to start notification queue worker:", err);
+      }
 
-    // Register and Start Dynamic 3x Daily Push Campaign Dispatch Engine
-    try {
-      const { startPushCampaignCron } = await import("./services/notifications/push-campaign-engine.service.js");
-      startPushCampaignCron();
-    } catch (err) {
-      console.error("Failed to start push campaign scheduler:", err);
+      // Register and Start Scheduler Engine
+      try {
+        registerSystemJobs();
+        SchedulerService.startScheduler();
+      } catch (err) {
+        console.error("Failed to start background job scheduler:", err);
+      }
+
+      // Register and Start Cashback CRON Job
+      try {
+        initCashbackJob();
+      } catch (err) {
+        console.error("Failed to start cashback job:", err);
+      }
+
+      // Register and Start Dynamic 3x Daily Push Campaign Dispatch Engine
+      try {
+        const { startPushCampaignCron } = await import("./services/notifications/push-campaign-engine.service.js");
+        startPushCampaignCron();
+      } catch (err) {
+        console.error("Failed to start push campaign scheduler:", err);
+      }
+    } else {
+      console.log(`🛡️ [SCHEDULER] Schedulers bypassed: ${guard.reason}`);
     }
   }
 });

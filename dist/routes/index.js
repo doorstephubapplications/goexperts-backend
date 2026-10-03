@@ -82,6 +82,7 @@ router.use("/messages", messagesRoutes);
 router.use("/connections", connectionsRoutes);
 // Activity Timeline routes
 router.use("/activity", activityRoutes);
+router.use("/v1/activity", activityRoutes);
 // Support & Reports
 router.use("/support", supportRoutes);
 // Portal (role-scoped)
@@ -136,6 +137,10 @@ router.use("/public", publicRoutes);
 router.use("/public/resume-templates", publicResumeTemplateRouter);
 router.use("/public/resume-share", publicResumeShareRouter);
 router.use("/v1/public", publicRoutes);
+router.use("/jobs", publicRoutes);
+router.use("/v1/jobs", publicRoutes);
+router.use("/help-center", publicRoutes);
+router.use("/v1/help-center", publicRoutes);
 // 2.2 Admin operations
 router.use("/admin/users", authMiddleware, adminUsersRouter);
 router.use("/v1/admin/users", authMiddleware, adminUsersRouter);

@@ -551,22 +551,41 @@ router.post("/checkout", async (req: Request, res: Response) => {
 });
 
 async function markPaymentCompleted(transactionId: string | null | undefined, fallbackId?: string) {
+  let paymentRecord = null;
   if (transactionId) {
-    const byTxn = await prisma.payment.findFirst({ where: { transactionId } });
-    if (byTxn) {
-      return prisma.payment.update({
-        where: { id: byTxn.id },
-        data: { status: "completed" },
-      });
-    }
+    paymentRecord = await prisma.payment.findFirst({ where: { transactionId } });
+  } else if (fallbackId) {
+    paymentRecord = await prisma.payment.findUnique({ where: { id: fallbackId } });
   }
-  if (fallbackId) {
-    return prisma.payment.update({
-      where: { id: fallbackId },
+
+  if (paymentRecord && paymentRecord.status !== "completed") {
+    const updated = await prisma.payment.update({
+      where: { id: paymentRecord.id },
       data: { status: "completed" },
     });
+
+    try {
+      const { loadPaymentMeta } = await import("../../utils/mobile/payment-meta.js");
+      const meta = (await loadPaymentMeta(paymentRecord.id)) || {};
+      const purpose = String(meta.purpose || "");
+      const planId = String(meta.planId || "");
+
+      if (purpose === "subscription" && planId) {
+        const { activateUserMonetizationPlan } = await import("../../services/subscription/entitlement.service.js");
+        await activateUserMonetizationPlan(
+          paymentRecord.userId,
+          planId,
+          String(meta.billingCycle || "monthly").toLowerCase() === "yearly" ? "yearly" : "monthly",
+          meta.role ? String(meta.role) : undefined
+        );
+      }
+    } catch (actErr) {
+      console.warn("[PAYMENTS] Could not activate subscription on markPaymentCompleted:", actErr);
+    }
+
+    return updated;
   }
-  return null;
+  return paymentRecord;
 }
 
 // POST /webhooks/stripe — no auth (signature optional when secret set)
