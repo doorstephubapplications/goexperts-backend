@@ -69,6 +69,14 @@ server.listen(port, async () => {
     } catch (err) {
       console.error("Failed to start cashback job:", err);
     }
+
+    // Register and Start Dynamic 3x Daily Push Campaign Dispatch Engine
+    try {
+      const { startPushCampaignCron } = await import("./services/notifications/push-campaign-engine.service.js");
+      startPushCampaignCron();
+    } catch (err) {
+      console.error("Failed to start push campaign scheduler:", err);
+    }
   }
 });
 

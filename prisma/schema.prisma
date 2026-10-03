@@ -2962,3 +2962,65 @@ model SavedView {
   @@index([adminId, module])
   @@map("admin_saved_views")
 }
+
+model PushCampaign {
+  id               String                @id @default(uuid())
+  title            String
+  description      String                @db.Text
+  imageUrl         String?               @map("image_url") @db.Text
+  targetRole       String                @map("target_role") // FREELANCER, CLIENT, FOUNDER, INVESTOR, ALL
+  category         String                // Gigs, Hiring, Perks, Deals, Cashback, Networking, etc.
+  offer            String?               @db.Text
+  deepLink         String?               @map("deep_link")
+  status           String                @default("ACTIVE") // ACTIVE, PAUSED, DRAFT, COMPLETED
+  scheduleSlot     String?               @map("schedule_slot") // "SLOT_1", "SLOT_2", "SLOT_3", "CUSTOM"
+  customScheduleAt DateTime?             @map("custom_schedule_at")
+  lastSentAt       DateTime?             @map("last_sent_at")
+  sendCount        Int                   @default(0) @map("send_count")
+  clickCount       Int                   @default(0) @map("click_count")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  deletedAt        DateTime?             @map("deleted_at")
+  history          PushCampaignHistory[]
+
+  @@index([targetRole])
+  @@index([status])
+  @@index([category])
+  @@map("push_campaigns")
+}
+
+model PushCampaignHistory {
+  id              String        @id @default(uuid())
+  campaignId      String?       @map("campaign_id")
+  campaignTitle   String        @map("campaign_title")
+  targetRole      String        @map("target_role")
+  slotName        String?       @map("slot_name") // SLOT_1, SLOT_2, SLOT_3, MANUAL
+  scheduledTime   String?       @map("scheduled_time")
+  recipientsCount Int           @default(0) @map("recipients_count")
+  deliveredCount  Int           @default(0) @map("delivered_count")
+  failedCount     Int           @default(0) @map("failed_count")
+  status          String        @default("DELIVERED") // DELIVERED, PARTIAL, FAILED
+  payload         String?       @db.LongText
+  sentAt          DateTime      @default(now()) @map("sent_at")
+  campaign        PushCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@index([targetRole])
+  @@index([sentAt])
+  @@map("push_campaign_history")
+}
+
+model PushScheduleSetting {
+  id         String    @id @default(uuid())
+  slotKey    String    @unique @map("slot_key") // "slot_1", "slot_2", "slot_3"
+  label      String    // "Morning Dispatch", "Midday Rush", "Evening Wrap-up"
+  time       String    // "09:30", "12:30", "18:30" (in 24-hr IST)
+  isEnabled  Boolean   @default(true) @map("is_enabled")
+  targetRole String    @default("ALL") @map("target_role") // "ALL" or specific role
+  lastRunAt  DateTime? @map("last_run_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@map("push_schedule_settings")
+}
+

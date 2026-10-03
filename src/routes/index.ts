@@ -57,6 +57,7 @@ import kycRouter from "./admin/kyc.routes.js";
 import adminSupportDeskRouter from "./admin/support-desk.routes.js";
 import adminWithdrawalsRouter from "./admin/withdrawals.routes.js";
 import { adminUsersRouter } from "./admin/admin-users.routes.js";
+import { adminPushCampaignsRouter } from "./admin/admin-push-campaigns.routes.js";
 import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
@@ -165,6 +166,8 @@ router.use("/v1/public", publicRoutes);
 // 2.2 Admin operations
 router.use("/admin/users", authMiddleware as any, adminUsersRouter);
 router.use("/v1/admin/users", authMiddleware as any, adminUsersRouter);
+router.use("/admin/push-campaigns", adminPushCampaignsRouter);
+router.use("/v1/admin/push-campaigns", adminPushCampaignsRouter);
 router.use("/admin/dashboard", adminDashboardRouter);
 router.use("/admin/dashboard-old", dashboardRoutes);
 router.use("/admin/dashboard", dashboardInsightsRouter);
