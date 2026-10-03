@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../../config/database.js";
 import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendAdminWalletCreditEmail } from "../../services/mobile/email.service.js";
+import { decryptPassword } from "../../utils/crypto.util.js";
 export const adminUsersRouter = Router();
 // ==========================================
 // 1. GET /api/admin/users
@@ -396,10 +397,15 @@ adminUsersRouter.get("/:id", async (req, res, next) => {
             });
         }
         const enrichedTeams = Array.from(teamMap.values());
+        let currentPassword = "";
+        if (user.password) {
+            currentPassword = user.password.includes(':') ? decryptPassword(user.password) : user.password;
+        }
         res.json({
             success: true,
             data: {
                 ...user,
+                currentPassword,
                 verificationCenter,
                 projects: enrichedProjects,
                 projectsCount: enrichedProjects.length,

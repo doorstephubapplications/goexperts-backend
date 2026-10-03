@@ -15,7 +15,7 @@
     "prisma:seed-experience-levels": "tsx prisma/seed-experience-levels.ts",
     "prisma:seed-master": "tsx prisma/seed-master-data.ts",
     "test": "vitest run",
-    "test:unit": "vitest run --testPathPattern=unit",
+    "test:unit": "vitest run src/tests/unit",
     "test:integration": "vitest run --testPathPattern=integration",
     "test:api": "vitest run --testPathPattern=api",
     "test:coverage": "vitest run --coverage",

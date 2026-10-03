@@ -1413,7 +1413,6 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       isOwner,
       accountType,
       primaryRole: user.role,
-      role: user.role,
       permittedDashboards: activatedRoles,
       activatedRoles,
       activeRoles: activatedRoles,

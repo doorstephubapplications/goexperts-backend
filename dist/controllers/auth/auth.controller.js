@@ -427,18 +427,39 @@ export const login = async (req, res, next) => {
         const isPlanExpired = subscriptionGate.planExpired === true || subscriptionGate.status === 'expired';
         const effectiveStatus = isPlanExpired ? 'inactive' : user.status;
         const kycReadiness = buildKycReadiness(user);
+        const ownerActivatedRoles = [];
+        if (user.freelancerProfile || user.role === "freelancer")
+            ownerActivatedRoles.push("freelancer");
+        if (user.clientProfile || user.role === "client" || user.role === "business")
+            ownerActivatedRoles.push("client");
+        if (user.founderProfile || user.role === "founder" || user.role === "startup")
+            ownerActivatedRoles.push("founder");
+        if (user.investorProfile || user.role === "investor")
+            ownerActivatedRoles.push("investor");
+        const normPrimary = String(effectiveRole || user.role || "freelancer").toLowerCase();
+        if (!ownerActivatedRoles.includes(normPrimary)) {
+            ownerActivatedRoles.push(normPrimary);
+        }
+        const activatedRoles = teamInfo ? teamInfo.permittedDashboards : ownerActivatedRoles;
         const userPayload = {
             id: user.id,
             email: user.email,
             fullName: user.fullName,
             avatarUrl: user.avatarUrl,
             role: effectiveRole,
+            primaryRole: user.role,
             isOwner: !teamInfo,
             accountType: teamInfo ? "team_member" : "owner",
-            permittedDashboards: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
-            modulePermissions: teamInfo ? teamInfo.modulePermissions : null,
-            activeRoles: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
-            roles: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
+            permittedDashboards: activatedRoles,
+            activatedRoles,
+            activeRoles: activatedRoles,
+            roles: activatedRoles,
+            activeProfiles: {
+                freelancer: Boolean(user.freelancerProfile),
+                client: Boolean(user.clientProfile),
+                founder: Boolean(user.founderProfile),
+                investor: Boolean(user.investorProfile),
+            },
             teamMembership: teamInfo ? {
                 id: teamInfo.membership.id,
                 clientId: teamInfo.membership.clientId,
