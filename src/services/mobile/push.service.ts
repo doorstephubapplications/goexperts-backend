@@ -137,7 +137,7 @@ export const sendPushNotification = async (userId: string, title: string, body: 
         },
         fcmOptions: data?.imageUrl ? { imageUrl: data.imageUrl } : undefined,
       },
-      data: data || {}
+      data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
     }));
 
     const response = await getMessaging().sendEach(messages);
