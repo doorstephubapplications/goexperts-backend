@@ -1,5 +1,8 @@
 import { PrismaClient } from "@prisma/client";
+import { sendEmail, shell } from "../mobile/email.service.js";
 const prisma = new PrismaClient();
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://goexperts.in";
+const SUPPORT_MAILBOX = process.env.SMTP_SUPPORT_EMAIL || process.env.SMTP_USER || "servicedesk@goexperts.in";
 const PAGE_NAME = "Contact";
 const PAGE_CATEGORY = "Company";
 function generateContactReference() {
@@ -15,7 +18,6 @@ export class ContactCmsService {
         let page = await prisma.cmsPage.findFirst({
             where: {
                 OR: [
-                    { name: { equals: "Help Center" } },
                     { name: { equals: "Contact" } },
                     { name: { equals: "Contact Us" } },
                 ],
@@ -43,11 +45,11 @@ export class ContactCmsService {
                     supportEmail: "servicedesk@goexperts.in",
                     careersEmail: "careers@goexperts.in",
                     businessEmail: "enterprise@goexperts.in",
-                    phone: "+91 80 4567 8900",
+                    phone: "+91 94414 57677",
                     secondaryPhone: "+91 80 4567 8901",
-                    whatsappNumber: "+91 98765 43210",
+                    whatsappNumber: "+91 94414 57677",
                     tollFreeNumber: "1800 123 4567",
-                    mainAddress: "Go Experts Tower, 100 Feet Road, Indiranagar, Bengaluru, KA 560038, India",
+                    mainAddress: "6-3-712/86, Ground Floor, panjagutta colony, beside Dr.Agarwal Eye Hospital, Hyderabad, Telangana 500082",
                     registeredAddress: "Go Experts Inc., 500 Howard Street, Suite 400, San Francisco, CA 94105, USA",
                     websiteUrl: "https://goexperts.in",
                 },
@@ -66,7 +68,7 @@ export class ContactCmsService {
                     enabled: true,
                 },
                 officeLocations: [
-                    { id: "loc-1", officeName: "Bengaluru HQ", city: "Bengaluru, India", address: "100 Feet Road, Indiranagar, Bengaluru 560038", phone: "+91 80 4567 8900", email: "india@goexperts.in", order: 1, enabled: true },
+                    { id: "loc-1", officeName: "Hyderabad HQ", city: "Hyderabad, India", address: "6-3-712/86, Ground Floor, panjagutta colony, beside Dr.Agarwal Eye Hospital, Hyderabad, Telangana 500082", phone: "+91 94414 57677", email: "info@goexperts.in", order: 1, enabled: true },
                     { id: "loc-2", officeName: "San Francisco Office", city: "San Francisco, USA", address: "500 Howard St, Suite 400, San Francisco, CA 94105", phone: "+1 415 555 0199", email: "us@goexperts.in", order: 2, enabled: true },
                     { id: "loc-3", officeName: "Singapore Hub", city: "Singapore", address: "Marina Bay Financial Centre, Tower 1, Singapore 018981", phone: "+65 6789 0123", email: "sg@goexperts.in", order: 3, enabled: true },
                 ],
@@ -84,7 +86,7 @@ export class ContactCmsService {
                 faqs: [
                     { id: "faq-1", question: "What are your support operating hours?", answer: "Our customer support team is available Monday through Saturday. For urgent enterprise issues, 24/7 emergency support is provided to contracted clients.", order: 1 },
                     { id: "faq-2", question: "How fast do you respond to enquiries?", answer: "We aim to respond to all general enquiries within 24 hours. Priority support ticket SLA is under 2 hours.", order: 2 },
-                    { id: "faq-3", question: "Where is Go Experts headquartered?", answer: "Go Experts is headquartered in Bengaluru, India with global operations in San Francisco and Singapore.", order: 3 },
+                    { id: "faq-3", question: "Where is Go Experts headquartered?", answer: "Go Experts is headquartered in Hyderabad, Telangana, India with global operations in San Francisco and Singapore.", order: 3 },
                 ],
                 seo: {
                     metaTitle: "Contact Us — Go Experts Enterprise Platform",
@@ -227,27 +229,173 @@ export class ContactCmsService {
      * Public: Submit Contact Enquiry
      */
     async submitPublicEnquiry(input) {
-        if (!input.fullName || !input.email || !input.subject || !input.message) {
-            throw new Error("Full name, email, subject, and message are required fields.");
+        // 1. Honeypot anti-spam check
+        if (input.botField && input.botField.trim().length > 0) {
+            console.warn(`[CONTACT SPAM BLOCKED] Honeypot field filled by IP: ${input.ipAddress}`);
+            return {
+                success: true,
+                referenceNumber: `GE-CON-${Date.now().toString().slice(-8)}`,
+                message: "Enquiry submitted successfully.",
+            };
+        }
+        // 2. Strict input validation
+        const fullName = (input.fullName || "").trim();
+        const email = (input.email || "").trim().toLowerCase();
+        const subject = (input.subject || "").trim();
+        const message = (input.message || "").trim();
+        const enquiryType = (input.enquiryType || "General Enquiry").trim();
+        const phone = input.phone?.trim() || null;
+        const company = input.company?.trim() || null;
+        const preferredContactMethod = input.preferredContactMethod?.trim() || "Email";
+        if (!fullName || fullName.length < 2 || fullName.length > 100) {
+            throw new Error("Please enter a valid full name (2–100 characters).");
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            throw new Error("Please enter a valid email address.");
+        }
+        if (!subject || subject.length < 5 || subject.length > 150) {
+            throw new Error("Subject must be between 5 and 150 characters.");
+        }
+        if (!message || message.length < 15 || message.length > 3000) {
+            throw new Error("Message must be between 15 and 3000 characters.");
         }
         const referenceNumber = generateContactReference();
+        // 3. Database Persistence
         const enquiry = await prisma.contactEnquiry.create({
             data: {
                 referenceNumber,
-                fullName: input.fullName.trim(),
-                email: input.email.trim().toLowerCase(),
-                phone: input.phone?.trim() || null,
-                company: input.company?.trim() || null,
-                enquiryType: input.enquiryType || "General Enquiry",
-                subject: input.subject.trim(),
-                message: input.message.trim(),
-                preferredContactMethod: input.preferredContactMethod || "Email",
+                fullName,
+                email,
+                phone,
+                company,
+                enquiryType,
+                subject,
+                message,
+                preferredContactMethod,
                 status: "new",
                 priority: "normal",
                 ipAddress: input.ipAddress || null,
                 userAgent: input.userAgent || null,
             },
         });
+        // 4. Safe Asynchronous Transactional Email Dispatch (Non-blocking)
+        (async () => {
+            try {
+                const page = await this.getOrCreatePage();
+                let configuredSupportEmail = SUPPORT_MAILBOX;
+                try {
+                    const content = JSON.parse(page.publishedJson || page.content || "{}");
+                    if (content.formConfig?.recipientEmail) {
+                        configuredSupportEmail = content.formConfig.recipientEmail;
+                    }
+                    else if (content.contactInfo?.supportEmail) {
+                        configuredSupportEmail = content.contactInfo.supportEmail;
+                    }
+                }
+                catch { }
+                const nowFormatted = new Date().toLocaleString("en-US", {
+                    timeZone: "Asia/Kolkata",
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                });
+                // EMAIL A — Internal Support Notification
+                const internalSubject = `[Go Experts] New Contact Enquiry — ${enquiryType} [${referenceNumber}]`;
+                const internalBody = `
+          <div style="background-color:#ffffff;border-radius:12px;padding:24px;border:1px solid #e2e8f0;margin-bottom:24px;">
+            <h2 style="margin:0 0 16px 0;color:#0f172a;font-size:20px;font-weight:700;">New Contact Form Enquiry</h2>
+            <p style="margin:0 0 20px 0;color:#64748b;font-size:14px;">A new enquiry was submitted through the Go Experts Contact page.</p>
+
+            <table style="width:100%;border-collapse:collapse;font-size:14px;color:#334155;">
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;width:160px;color:#64748b;">Reference Number</td>
+                <td style="padding:10px 0;font-weight:700;color:#ea580c;font-family:monospace;">${referenceNumber}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Date &amp; Time (IST)</td>
+                <td style="padding:10px 0;">${nowFormatted}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Full Name</td>
+                <td style="padding:10px 0;font-weight:600;color:#0f172a;">${fullName}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Email Address</td>
+                <td style="padding:10px 0;"><a href="mailto:${email}" style="color:#2563eb;text-decoration:none;">${email}</a></td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Phone Number</td>
+                <td style="padding:10px 0;">${phone || "Not provided"}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Company / Org</td>
+                <td style="padding:10px 0;">${company || "Not provided"}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">User Role</td>
+                <td style="padding:10px 0;">${input.userRole || "Guest / Unauthenticated"}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Category</td>
+                <td style="padding:10px 0;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;background-color:#eff6ff;color:#1d4ed8;font-weight:600;font-size:12px;">${enquiryType}</span></td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Preferred Method</td>
+                <td style="padding:10px 0;">${preferredContactMethod}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 0;font-weight:600;color:#64748b;">Subject</td>
+                <td style="padding:10px 0;font-weight:600;color:#0f172a;">${subject}</td>
+              </tr>
+            </table>
+
+            <div style="margin-top:20px;padding:16px;background-color:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+              <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:8px;">Message Content</div>
+              <div style="color:#1e293b;font-size:14px;line-height:1.6;white-space:pre-wrap;">${message}</div>
+            </div>
+
+            <div style="margin-top:24px;text-align:center;">
+              <a href="${FRONTEND_URL}/admin/contact-enquiries" style="display:inline-block;background-color:#0f172a;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;">View in Super Admin Queue →</a>
+            </div>
+          </div>
+        `;
+                await sendEmail(configuredSupportEmail, internalSubject, shell("New Contact Form Enquiry", internalBody));
+                // EMAIL B — User Acknowledgement
+                const firstName = fullName.split(" ")[0] || fullName;
+                const userSubject = `We've received your enquiry — Go Experts [${referenceNumber}]`;
+                const userBody = `
+          <div style="background-color:#ffffff;border-radius:12px;padding:28px;border:1px solid #e2e8f0;margin-bottom:24px;">
+            <h2 style="margin:0 0 16px 0;color:#0f172a;font-size:20px;font-weight:700;">Hello ${firstName},</h2>
+            <p style="margin:0 0 16px 0;color:#334155;font-size:15px;line-height:1.6;">
+              Thank you for contacting Go Experts. We've received your enquiry regarding:
+            </p>
+            <div style="padding:12px 16px;background-color:#f8fafc;border-left:4px solid #ea580c;border-radius:4px;margin-bottom:20px;font-weight:600;color:#0f172a;font-size:15px;">
+              "${subject}"
+            </div>
+            <div style="margin-bottom:20px;padding:14px 18px;background-color:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+              <span style="font-size:13px;color:#166534;font-weight:600;">Your Enquiry Reference Number:</span>
+              <div style="font-size:18px;font-weight:800;color:#15803d;font-family:monospace;margin-top:4px;">${referenceNumber}</div>
+              <p style="margin:6px 0 0 0;font-size:12px;color:#166534;">Please keep this reference if you contact our support team regarding this enquiry.</p>
+            </div>
+            <p style="margin:0 0 24px 0;color:#475569;font-size:14px;line-height:1.6;">
+              Our dedicated support team will review your message and respond through your preferred contact channel as soon as possible.
+            </p>
+
+            <div style="text-align:center;margin:28px 0 20px 0;">
+              <a href="${FRONTEND_URL}/help" style="display:inline-block;background-color:#ea580c;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;">Visit Help Center →</a>
+            </div>
+
+            <div style="border-top:1px solid #f1f5f9;margin-top:24px;padding-top:16px;font-size:12px;color:#64748b;text-align:center;">
+              Quick Links: <a href="${FRONTEND_URL}/faqs" style="color:#2563eb;text-decoration:none;margin:0 8px;">Frequently Asked Questions</a> · <a href="${FRONTEND_URL}" style="color:#2563eb;text-decoration:none;margin:0 8px;">Go Experts Home</a>
+            </div>
+          </div>
+        `;
+                await sendEmail(email, userSubject, shell("We've received your enquiry", userBody));
+            }
+            catch (mailError) {
+                console.error(`[CONTACT NOTIFICATION EMAIL FAILED] Ref: ${referenceNumber}`, mailError);
+            }
+        })().catch((err) => console.error("[CONTACT NOTIFICATION EXCEPTION]", err));
         return {
             success: true,
             referenceNumber: enquiry.referenceNumber,

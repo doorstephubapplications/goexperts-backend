@@ -12,8 +12,10 @@ export async function submitContactEnquiry(req, res, next) {
     try {
         const ipAddress = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "";
         const userAgent = req.headers["user-agent"] || "";
+        const userRole = req.user?.role || req.body.userRole || undefined;
         const result = await contactCmsService.submitPublicEnquiry({
             ...req.body,
+            userRole,
             ipAddress,
             userAgent,
         });

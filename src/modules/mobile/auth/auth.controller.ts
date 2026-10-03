@@ -1138,6 +1138,22 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       resolveUserSubscriptionGate(user.id),
     ]);
 
+    const ownerActivatedRoles: string[] = [];
+    if (dbUser?.freelancerProfile || user.role === 'freelancer') ownerActivatedRoles.push('freelancer');
+    if (dbUser?.clientProfile || user.role === 'client' || user.role === 'business') ownerActivatedRoles.push('client');
+    if (dbUser?.founderProfile || user.role === 'founder' || user.role === 'startup') ownerActivatedRoles.push('founder');
+    if (dbUser?.investorProfile || user.role === 'investor') ownerActivatedRoles.push('investor');
+
+    const normPrimary = String(user.role || 'freelancer').toLowerCase();
+    if (!ownerActivatedRoles.includes(normPrimary)) {
+      ownerActivatedRoles.push(normPrimary);
+    }
+
+    const activatedRoles = isOwner ? ownerActivatedRoles : permittedDashboards;
+    if (isOwner) {
+      permittedDashboards = activatedRoles;
+    }
+
     const activeUser = dbUser || user;
     let regData: any = {};
     if (activeUser.registrationData) {
@@ -1396,7 +1412,18 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       // Role Access Management
       isOwner,
       accountType,
-      permittedDashboards,
+      primaryRole: user.role,
+      role: user.role,
+      permittedDashboards: activatedRoles,
+      activatedRoles,
+      activeRoles: activatedRoles,
+      roles: activatedRoles,
+      activeProfiles: {
+        freelancer: Boolean(dbUser?.freelancerProfile),
+        client: Boolean(dbUser?.clientProfile),
+        founder: Boolean(dbUser?.founderProfile),
+        investor: Boolean(dbUser?.investorProfile),
+      },
       modulePermissions,
     };
     return res.json(successResponse('User profile retrieved', { user: userData }));

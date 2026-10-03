@@ -14,9 +14,11 @@ export async function submitContactEnquiry(req: Request, res: Response, next: Ne
   try {
     const ipAddress = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "";
     const userAgent = req.headers["user-agent"] || "";
+    const userRole = (req as any).user?.role || req.body.userRole || undefined;
 
     const result = await contactCmsService.submitPublicEnquiry({
       ...req.body,
+      userRole,
       ipAddress,
       userAgent,
     });
