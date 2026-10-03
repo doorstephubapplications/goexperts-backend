@@ -125,6 +125,7 @@ export const sendPushNotification = async (userId: string, title: string, body: 
           defaultLightSettings: true,
           defaultVibrateTimings: true,
           defaultSound: true,
+          ...((data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : {})
         },
       },
       apns: {
