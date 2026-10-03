@@ -245,11 +245,184 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
       } catch {}
     }
 
+    // Fetch user projects (as client, freelancer, or contract/proposal participant)
+    const userProjects = await prisma.project.findMany({
+      where: {
+        OR: [
+          { client: user.id },
+          { client: user.email },
+          { freelancer: user.id },
+          { freelancer: user.email },
+          { contracts: { some: { OR: [{ clientId: user.id }, { freelancerId: user.id }] } } },
+          { proposals: { some: { freelancerId: user.id } } }
+        ],
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        title: true,
+        client: true,
+        freelancer: true,
+        budget: true,
+        budgetMin: true,
+        budgetMax: true,
+        category: true,
+        technology: true,
+        timeline: true,
+        status: true,
+        description: true,
+        workMode: true,
+        createdAt: true,
+        updatedAt: true,
+        contracts: {
+          select: {
+            id: true,
+            contractNumber: true,
+            status: true,
+            clientId: true,
+            freelancerId: true,
+            createdAt: true
+          }
+        },
+        _count: {
+          select: {
+            tasks: true,
+            milestones: true,
+            proposals: true
+          }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    }).catch(() => []);
+
+    const enrichedProjects = (userProjects || []).map((p: any) => ({
+      ...p,
+      roleInProject: (p.client === user.id || p.client === user.email)
+        ? "Client / Owner"
+        : (p.freelancer === user.id || p.freelancer === user.email)
+          ? "Assigned Freelancer"
+          : "Contract Participant",
+      tasksCount: p._count?.tasks || 0,
+      milestonesCount: p._count?.milestones || 0,
+      proposalsCount: p._count?.proposals || 0,
+    }));
+
+    // Fetch user teams & team members
+    const [clientTeamAsClient, clientTeamAsMember, teamsAsOwner, teamsAsMember] = await Promise.all([
+      prisma.clientTeamMember.findMany({
+        where: {
+          OR: [
+            { clientId: user.id },
+            { email: user.email }
+          ]
+        },
+        include: {
+          client: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } },
+          user: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } }
+        },
+        orderBy: { createdAt: "desc" }
+      }).catch(() => []),
+      prisma.clientTeamMember.findMany({
+        where: {
+          OR: [
+            { userId: user.id },
+            { email: user.email }
+          ]
+        },
+        include: {
+          client: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } },
+          user: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } }
+        },
+        orderBy: { createdAt: "desc" }
+      }).catch(() => []),
+      prisma.teamMember.findMany({
+        where: {
+          OR: [
+            { ownerId: user.id },
+            { email: user.email }
+          ]
+        },
+        include: {
+          owner: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } },
+          user: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } }
+        },
+        orderBy: { createdAt: "desc" }
+      }).catch(() => []),
+      prisma.teamMember.findMany({
+        where: {
+          OR: [
+            { userId: user.id },
+            { email: user.email }
+          ]
+        },
+        include: {
+          owner: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } },
+          user: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } }
+        },
+        orderBy: { createdAt: "desc" }
+      }).catch(() => [])
+    ]);
+
+    const teamMap = new Map<string, any>();
+
+    for (const m of [...(clientTeamAsClient || []), ...(clientTeamAsMember || [])]) {
+      const isOwner = m.clientId === user.id;
+      teamMap.set(m.id, {
+        id: m.id,
+        name: m.name || m.user?.fullName || m.email?.split("@")[0] || "Team Member",
+        email: m.email,
+        role: m.role || "Member",
+        department: m.department || "General",
+        status: m.status || "Active",
+        permissions: m.permissions,
+        type: "Client Team",
+        relationship: isOwner ? "Owner / Manager" : "Team Member",
+        ownerName: m.client?.fullName || "Organization",
+        ownerEmail: m.client?.email,
+        ownerId: m.clientId,
+        memberUserId: m.userId,
+        avatar: m.user?.avatarUrl || null,
+        createdAt: m.createdAt,
+        updatedAt: m.updatedAt
+      });
+    }
+
+    for (const m of [...(teamsAsOwner || []), ...(teamsAsMember || [])]) {
+      if (teamMap.has(m.id)) continue;
+      const isOwner = m.ownerId === user.id;
+      teamMap.set(m.id, {
+        id: m.id,
+        name: m.user?.fullName || m.email?.split("@")[0] || "Team Member",
+        email: m.email,
+        role: m.role || "Member",
+        department: "Operations",
+        status: m.status || "Active",
+        permissions: m.permissions,
+        type: "Workspace Team",
+        relationship: isOwner ? "Owner / Manager" : "Team Member",
+        ownerName: m.owner?.fullName || "Organization",
+        ownerEmail: m.owner?.email,
+        ownerId: m.ownerId,
+        memberUserId: m.userId,
+        avatar: m.user?.avatarUrl || null,
+        createdAt: m.createdAt,
+        updatedAt: m.updatedAt
+      });
+    }
+
+    const enrichedTeams = Array.from(teamMap.values());
+
     res.json({
       success: true,
       data: {
         ...user,
-        verificationCenter
+        verificationCenter,
+        projects: enrichedProjects,
+        projectsCount: enrichedProjects.length,
+        teams: enrichedTeams,
+        teamsCount: enrichedTeams.length,
+        teamMembers: enrichedTeams,
+        teamMembersCount: enrichedTeams.length,
       }
     });
   } catch (err) {
