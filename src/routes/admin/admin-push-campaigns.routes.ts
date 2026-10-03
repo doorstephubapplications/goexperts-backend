@@ -153,6 +153,78 @@ adminPushCampaignsRouter.post("/schedules/:slotKey/trigger", async (req: Request
 });
 
 // ==========================================
+// 2B. GLOBAL CAMPAIGN LAYOUT MANAGEMENT
+// ==========================================
+export const DEFAULT_GLOBAL_LAYOUT = {
+  appName: "GoExperts",
+  appLogoUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80",
+  brandColor: "#2563EB",
+  headerBadgeText: "OFFICIAL",
+  layoutStyle: "zomato_punch", // "zomato_punch" | "ios_modern" | "material_rich" | "compact_alert"
+  ctaButton1Text: "Explore Now",
+  ctaButton2Text: "Dismiss",
+  showCtaButtons: true,
+  defaultBannerUrl: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=800&auto=format&fit=crop&q=80",
+  footerSubtext: "DoorstepHub GoExperts • Push Dispatcher",
+  soundEnabled: true,
+  badgeCount: 1,
+  showOfferBadge: true
+};
+
+adminPushCampaignsRouter.get("/layout", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { key: "PUSH_CAMPAIGN_GLOBAL_LAYOUT" }
+    });
+
+    let layout = DEFAULT_GLOBAL_LAYOUT;
+    if (setting?.value) {
+      try {
+        layout = { ...DEFAULT_GLOBAL_LAYOUT, ...JSON.parse(setting.value) };
+      } catch (e) {
+        layout = DEFAULT_GLOBAL_LAYOUT;
+      }
+    }
+
+    res.json({ success: true, data: layout });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminPushCampaignsRouter.put("/layout", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const newLayout = req.body;
+    if (!newLayout || typeof newLayout !== "object") {
+      return res.status(400).json({ success: false, message: "Invalid layout payload" });
+    }
+
+    const merged = { ...DEFAULT_GLOBAL_LAYOUT, ...newLayout };
+
+    await prisma.setting.upsert({
+      where: { key: "PUSH_CAMPAIGN_GLOBAL_LAYOUT" },
+      update: {
+        value: JSON.stringify(merged),
+        category: "push_campaigns"
+      },
+      create: {
+        key: "PUSH_CAMPAIGN_GLOBAL_LAYOUT",
+        value: JSON.stringify(merged),
+        category: "push_campaigns"
+      }
+    });
+
+    res.json({
+      success: true,
+      message: "Global campaign layout updated successfully. All 120 campaigns now reflect these changes.",
+      data: merged
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
 // 3. CAMPAIGN HISTORY
 // ==========================================
 adminPushCampaignsRouter.get("/history", async (req: Request, res: Response, next: NextFunction) => {

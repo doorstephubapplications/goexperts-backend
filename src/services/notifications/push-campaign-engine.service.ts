@@ -42,6 +42,25 @@ export async function dispatchCampaign(campaignId: string, slotName = "MANUAL") 
     take: 500 // Batch safe limit
   });
 
+  // Load Global Campaign Layout Settings (Admin Managed Globally)
+  let globalLayout: any = {
+    appName: "GoExperts",
+    appLogoUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=80",
+    brandColor: "#2563EB",
+    ctaButton1Text: "Explore Now",
+    ctaButton2Text: "Dismiss"
+  };
+  try {
+    const layoutSetting = await prisma.setting.findUnique({
+      where: { key: "PUSH_CAMPAIGN_GLOBAL_LAYOUT" }
+    });
+    if (layoutSetting?.value) {
+      globalLayout = { ...globalLayout, ...JSON.parse(layoutSetting.value) };
+    }
+  } catch (e) {
+    // fallback to defaults
+  }
+
   let deliveredCount = 0;
   let failedCount = 0;
 
@@ -49,14 +68,20 @@ export async function dispatchCampaign(campaignId: string, slotName = "MANUAL") 
     try {
       const title = campaign.title.replace("{{fullName}}", u.fullName || "User");
       const body = campaign.description.replace("{{fullName}}", u.fullName || "User");
+      const resolvedImage = campaign.imageUrl || globalLayout.defaultBannerUrl || null;
 
       // 1. Send Mobile Push Notification via device token
       const pushSuccess = await sendPushNotification(u.id, title, body, {
         campaignId: campaign.id,
         category: campaign.category,
         deepLink: campaign.deepLink || "/dashboard",
-        imageUrl: campaign.imageUrl,
-        offer: campaign.offer
+        imageUrl: resolvedImage,
+        offer: campaign.offer,
+        appName: globalLayout.appName,
+        appLogoUrl: globalLayout.appLogoUrl,
+        brandColor: globalLayout.brandColor,
+        cta1: globalLayout.ctaButton1Text,
+        cta2: globalLayout.ctaButton2Text
       });
 
       if (pushSuccess) {
