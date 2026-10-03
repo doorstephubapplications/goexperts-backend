@@ -19,11 +19,18 @@ export async function dispatchCampaign(campaignId: string, slotName = "MANUAL") 
   const targetRoleUpper = campaign.targetRole.toUpperCase();
 
   if (targetRoleUpper !== "ALL") {
+    const singularRole = targetRoleUpper.endsWith("S") ? targetRoleUpper.slice(0, -1) : targetRoleUpper;
+    
     roleFilter = {
       OR: [
         { role: targetRoleUpper.toLowerCase() },
         { role: targetRoleUpper },
-        { role: targetRoleUpper.charAt(0) + targetRoleUpper.slice(1).toLowerCase() }
+        { role: targetRoleUpper.charAt(0) + targetRoleUpper.slice(1).toLowerCase() },
+        { role: singularRole.toLowerCase() },
+        { role: singularRole },
+        { role: singularRole.charAt(0) + singularRole.slice(1).toLowerCase() },
+        // Hardcode fallback for Customers -> client
+        ...(targetRoleUpper === "CUSTOMERS" || targetRoleUpper === "CUSTOMER" ? [{ role: "client" }, { role: "CLIENT" }, { role: "Client" }] : [])
       ]
     };
   }
