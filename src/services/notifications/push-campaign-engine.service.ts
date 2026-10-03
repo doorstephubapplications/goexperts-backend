@@ -256,6 +256,32 @@ export function startPushCampaignCron() {
         console.log(`[PushCampaignScheduler] Triggering automated slot: ${slot.slotKey} (${slot.label}) at IST ${istTime}`);
         await executeScheduledSlot(slot.slotKey);
       }
+
+      // 2. Dispatch custom campaigns scheduled for this exact minute (or past due)
+      const customCampaigns = await prisma.pushCampaign.findMany({
+        where: {
+          scheduleSlot: "CUSTOM",
+          status: "ACTIVE",
+          deletedAt: null,
+          customScheduleAt: { lte: now }
+        }
+      });
+
+      for (const camp of customCampaigns) {
+        // Prevent double sending (if sent within last 24h)
+        if (camp.lastSentAt && (now.getTime() - new Date(camp.lastSentAt).getTime() < 24 * 60 * 60 * 1000)) {
+          continue;
+        }
+
+        console.log(`[PushCampaignScheduler] Triggering CUSTOM EXACT TIME campaign: ${camp.title}`);
+        await dispatchCampaign(camp.id, "CUSTOM_EXACT_TIME");
+
+        // Set status to PAUSED after one-shot delivery to prevent firing again
+        await prisma.pushCampaign.update({
+          where: { id: camp.id },
+          data: { status: "PAUSED" }
+        });
+      }
     } catch (err) {
       console.error("[PushCampaignScheduler] Cron error:", err);
     }
