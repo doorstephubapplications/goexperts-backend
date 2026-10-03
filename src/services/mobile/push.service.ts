@@ -114,7 +114,7 @@ export const sendPushNotification = async (userId: string, title: string, body: 
         notification: { 
           title, 
           body,
-          ...(imageUrl || data?.appLogoUrl ? { imageUrl: imageUrl || data?.appLogoUrl } : {})
+          ...((data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : {})
         },
         android: {
           notification: {
@@ -135,7 +135,7 @@ export const sendPushNotification = async (userId: string, title: string, body: 
             mutableContent: true,
           }
         },
-        fcmOptions: (imageUrl || data?.appLogoUrl) ? { imageUrl: imageUrl || data?.appLogoUrl } : undefined,
+        fcmOptions: (data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : undefined,
       },
       data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
     }));
