@@ -427,7 +427,7 @@ adminPushCampaignsRouter.get("/:id", async (req: Request, res: Response, next: N
 // ==========================================
 adminPushCampaignsRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { title, description, imageUrl, targetRole, category, offer, deepLink, status = "ACTIVE", scheduleSlot = "SLOT_1" } = req.body;
+    const { title, description, imageUrl, targetRole, category, offer, deepLink, status = "ACTIVE", scheduleSlot = "SLOT_1", customScheduleAt } = req.body;
 
     if (!title || !description || !targetRole) {
       return res.status(400).json({ success: false, message: "title, description, and targetRole are required" });
@@ -443,7 +443,8 @@ adminPushCampaignsRouter.post("/", async (req: Request, res: Response, next: Nex
         offer: offer || null,
         deepLink: deepLink || "/dashboard",
         status: String(status).toUpperCase(),
-        scheduleSlot
+        scheduleSlot,
+        customScheduleAt: customScheduleAt ? new Date(customScheduleAt) : null
       }
     });
 
@@ -497,7 +498,7 @@ adminPushCampaignsRouter.delete("/categories/:name", async (req: Request, res: R
 // ==========================================
 adminPushCampaignsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { title, description, imageUrl, targetRole, category, offer, deepLink, status, scheduleSlot } = req.body;
+    const { title, description, imageUrl, targetRole, category, offer, deepLink, status, scheduleSlot, customScheduleAt } = req.body;
 
     const existing = await prisma.pushCampaign.findFirst({
       where: { id: req.params.id, deletedAt: null }
@@ -518,7 +519,8 @@ adminPushCampaignsRouter.put("/:id", async (req: Request, res: Response, next: N
         ...(offer !== undefined && { offer }),
         ...(deepLink !== undefined && { deepLink }),
         ...(status && { status: String(status).toUpperCase() }),
-        ...(scheduleSlot && { scheduleSlot })
+        ...(scheduleSlot && { scheduleSlot }),
+        ...(customScheduleAt !== undefined && { customScheduleAt: customScheduleAt ? new Date(customScheduleAt) : null })
       }
     });
 
