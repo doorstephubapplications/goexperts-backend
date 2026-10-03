@@ -79,6 +79,8 @@ export async function dispatchCampaign(campaignId: string, slotName = "MANUAL") 
         offer: campaign.offer,
         appName: globalLayout.appName,
         appLogoUrl: globalLayout.appLogoUrl,
+        appLogoDarkUrl: globalLayout.appLogoDarkUrl || globalLayout.appLogoUrl,
+        themeMode: globalLayout.themeMode || "auto",
         brandColor: globalLayout.brandColor,
         cta1: globalLayout.ctaButton1Text,
         cta2: globalLayout.ctaButton2Text
