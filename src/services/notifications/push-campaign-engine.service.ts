@@ -89,8 +89,8 @@ export async function dispatchCampaign(campaignId: string, slotName = "MANUAL") 
       if (pushSuccess) {
         deliveredCount++;
       } else {
-        // In dev or no tokens, treat as staged/sent
-        deliveredCount++;
+        // Production Level Analytics: If push fails (no token or FCM error), count it as a failure, not a success.
+        failedCount++;
       }
 
       // 2. Create In-App Notification record
