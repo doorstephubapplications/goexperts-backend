@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database.js";
 import { generateInvoicePdf } from "../invoice/invoice.service.js";
-import { sendSubscriptionPurchasedEmail } from "../mobile/email.service.js";
+import { sendSubscriptionPurchasedEmail, sendFreePlanActivatedEmail } from "../mobile/email.service.js";
 import { calculateInclusiveGst } from "../../utils/financial.util.js";
 
 export type RoleName = "freelancer" | "client" | "founder" | "investor";
@@ -644,6 +644,14 @@ export async function activateCanonicalFreeTrial(userId: string): Promise<{ succ
 
     return sub;
   });
+
+  if (user.email) {
+    try {
+      await sendFreePlanActivatedEmail(user.email, user.fullName || "User", "all", plan.name, endDate);
+    } catch (e) {
+      console.warn("[EntitlementEngine] Free trial activation email failed:", e);
+    }
+  }
 
   return { success: true, expiresAt: endDate, subscriptionId: createdSub.id };
 }

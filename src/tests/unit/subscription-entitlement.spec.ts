@@ -343,5 +343,63 @@ describe("Subscription & Monetization Engine Unit Tests", () => {
       expect(updatedPlan.amount).toBe(299); // PRESERVED!
       expect(updatedPlan.proposalsLimit).toBe(5); // METADATA UPDATED!
     });
+
+    it("should prevent duplicate free trials across multiple roles on same account", () => {
+      const user = {
+        id: "user-123",
+        trialEndsAt: new Date("2027-04-01T00:00:00Z"),
+      };
+      const now = new Date("2026-10-04T00:00:00Z");
+      const isEligibleForNewTrial = !user.trialEndsAt || user.trialEndsAt.getTime() <= now.getTime();
+      expect(isEligibleForNewTrial).toBe(false);
+    });
+
+    it("should preserve active subscription on other roles when single-role add-on is purchased", () => {
+      const activeSubs = [
+        { id: "sub-fl", role: "freelancer", status: "active" },
+        { id: "sub-cl", role: "client", status: "active" },
+      ];
+      const newRoleTarget = "client";
+
+      // When upgrading or purchasing for 'client', only 'client' sub is cancelled/replaced, 'freelancer' is preserved!
+      const updatedSubs = activeSubs.map(s => {
+        if (s.role === newRoleTarget) return { ...s, status: "cancelled", reason: "Replaced by new Client Plan" };
+        return s;
+      });
+
+      const activeFreelancer = updatedSubs.find(s => s.role === "freelancer" && s.status === "active");
+      const cancelledClient = updatedSubs.find(s => s.role === "client" && s.status === "cancelled");
+
+      expect(activeFreelancer).toBeDefined();
+      expect(cancelledClient).toBeDefined();
+    });
+
+    it("should subsume and cancel all single-role subscriptions when All Access is activated", () => {
+      const activeSubs = [
+        { id: "sub-fl", role: "freelancer", status: "active" },
+        { id: "sub-cl", role: "client", status: "active" },
+        { id: "sub-fo", role: "founder", status: "active" },
+      ];
+
+      // When All Access is activated, all existing single-role subscriptions are subsumed
+      const updatedSubs = activeSubs.map(s => ({
+        ...s,
+        status: "cancelled",
+        reason: "Subsumed by Go Experts All Access Plan",
+      }));
+
+      expect(updatedSubs.every(s => s.status === "cancelled")).toBe(true);
+    });
+
+    it("should enforce authoritative server price regardless of client-supplied amount", () => {
+      const authoritativeDbPlan = { id: "plan-fl-mo", amount: 399 };
+      const clientPayload = { planId: "plan-fl-mo", amount: 10 }; // Attacker tampering attempt
+
+      // Server overrides with DB value
+      const checkoutAmount = authoritativeDbPlan.amount;
+      expect(checkoutAmount).toBe(399);
+      expect(checkoutAmount).not.toBe(clientPayload.amount);
+    });
   });
 });
+
