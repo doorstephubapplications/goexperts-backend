@@ -733,6 +733,41 @@ router.get("/status/:paymentId", authMiddleware as any, async (req: Authenticate
   }
 });
 
+// POST /reconcile/:paymentId — reconcile single payment authoritatively
+router.post("/reconcile/:paymentId", authMiddleware as any, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.paymentId },
+    });
+    if (!payment) return res.status(404).json({ success: false, message: "Payment not found" });
+    if (req.user?.type === "portal" && payment.userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    const { reconcilePaymentById } = await import("../../services/payments/payment-reconciliation.service.js");
+    const result = await reconcilePaymentById(payment.id, { force: true });
+    return res.json({ success: true, data: result });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// POST /reconcile-stale — batch reconcile stale pending payments (admin only)
+router.post("/reconcile-stale", authMiddleware as any, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.type !== "admin") {
+      return res.status(403).json({ success: false, message: "Admin access required" });
+    }
+
+    const { reconcileStalePendingPayments } = await import("../../services/payments/payment-reconciliation.service.js");
+    const summary = await reconcileStalePendingPayments();
+    return res.json({ success: true, data: summary });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+
 /**
  * POST /refund — marks refund + best-effort gateway call; logs gateway refund id in reason/response
  */

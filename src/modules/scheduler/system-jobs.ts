@@ -300,6 +300,34 @@ export function registerSystemJobs() {
     }
   });
 
+  // 7.1. Stale Pending Payment Reconciliation (Stage 2B.2)
+  SchedulerService.registerHandler("Stale Pending Payment Reconciliation", async () => {
+    try {
+      const { reconcileStalePendingPayments } = await import("../../services/payments/payment-reconciliation.service.js");
+      await reconcileStalePendingPayments();
+    } catch (reconcileErr: any) {
+      console.error("[SYSTEM JOB] Stale Pending Payment Reconciliation error:", reconcileErr?.message);
+    }
+  });
+
+  // Ensure scheduled job row exists in DB for primary scheduler instance ticker
+  prisma.scheduledJob.upsert({
+    where: { name: "Stale Pending Payment Reconciliation" },
+    update: {},
+    create: {
+      name: "Stale Pending Payment Reconciliation",
+      type: "cron",
+      cronExpression: "*/15 * * * *",
+      timezone: "UTC",
+      status: "active",
+      nextRun: new Date(),
+    },
+  }).catch((err: any) => {
+    // Non-blocking in test or disconnected DB environments
+    console.warn("[SCHEDULER] ScheduledJob upsert note:", err?.message);
+  });
+
+
   // 8. Pending Withdrawal Reminder
   SchedulerService.registerHandler("Pending Withdrawal Reminder", async () => {
     // Wallet debit transactions represent withdrawals

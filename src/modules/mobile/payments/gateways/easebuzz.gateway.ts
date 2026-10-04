@@ -173,3 +173,107 @@ export const verifyEasebuzzReverseHash = (
 
   return receivedHash === expected;
 };
+
+export interface EasebuzzTransactionStatusResult {
+  success: boolean;
+  gatewayStatus?: string;
+  amount?: number;
+  easepayId?: string;
+  errorMessage?: string;
+  rawResponse?: any;
+  error?: string;
+}
+
+/**
+ * Authoritatively query Easebuzz for a transaction status via /transaction/v2/retrieve.
+ */
+export const queryEasebuzzTransactionStatus = async (
+  txnid: string
+): Promise<EasebuzzTransactionStatusResult> => {
+  let key = process.env.EASEBUZZ_KEY || '';
+  let salt = process.env.EASEBUZZ_SALT || '';
+  let easeEnv = (process.env.EASEBUZZ_ENV || 'live').toLowerCase();
+
+  try {
+    const pmSetting = await prisma.setting.findUnique({
+      where: { key: 'settings:section:payments' },
+    });
+    if (pmSetting?.value) {
+      const pmData = JSON.parse(pmSetting.value);
+      if (pmData.merchantKey || pmData.apiKey) {
+        key = String(pmData.merchantKey || pmData.apiKey).trim();
+      }
+      if (pmData.salt || pmData.webhookSecret) {
+        salt = String(pmData.salt || pmData.webhookSecret).trim();
+      }
+      if (pmData.environment) {
+        easeEnv = String(pmData.environment).toLowerCase().trim();
+      }
+    }
+  } catch (err) {
+    console.warn('[EASEBUZZ RETRIEVE] Setting lookup warning, using env config only', err);
+  }
+
+  if (!key || !salt) {
+    return { success: false, error: 'EASEBUZZ_GATEWAY_NOT_CONFIGURED' };
+  }
+
+  const isProd = easeEnv === 'live' || easeEnv === 'prod' || easeEnv === 'production';
+  const retrieveUrl = isProd
+    ? 'https://dashboard.easebuzz.in/transaction/v2/retrieve'
+    : 'https://testdashboard.easebuzz.in/transaction/v2/retrieve';
+
+  const hashString = `${key}|${txnid}|${salt}`;
+  const hash = crypto.createHash('sha512').update(hashString).digest('hex');
+
+  const body = new URLSearchParams({ key, txnid, hash });
+
+  try {
+    const response = await fetch(retrieveUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `HTTP_${response.status}`,
+      };
+    }
+
+    const data: any = await response.json();
+    if (data && data.status === true && typeof data.msg === 'object' && data.msg !== null) {
+      const status = String(data.msg.status || '').toLowerCase().trim();
+      const amount = parseFloat(data.msg.amount || data.msg.net_amount_debit || '0');
+      return {
+        success: true,
+        gatewayStatus: status,
+        amount,
+        easepayId: data.msg.easepayid,
+        errorMessage: data.msg.error || data.msg.error_Message,
+        rawResponse: data.msg,
+      };
+    } else if (data && data.status === false) {
+      const msg = typeof data.msg === 'string' ? data.msg : 'TRANSACTION_NOT_FOUND';
+      return {
+        success: true,
+        gatewayStatus: 'not_found',
+        errorMessage: msg,
+        rawResponse: data,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'INVALID_GATEWAY_RESPONSE',
+      rawResponse: data,
+    };
+  } catch (netErr: any) {
+    return {
+      success: false,
+      error: netErr?.message || 'NETWORK_ERROR',
+    };
+  }
+};
+
