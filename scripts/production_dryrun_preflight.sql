@@ -79,7 +79,7 @@ FROM subscription_plans;
 SELECT 
   id, 
   name, 
-  role as current_role,
+  role as subscription_role,
   amount,
   duration,
   CASE 

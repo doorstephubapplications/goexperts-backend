@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertAndConsumeActionQuota, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import {
   HttpError,
@@ -566,10 +567,12 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
     const category = String(body.category || "").trim() || "Engineering";
     const technology = String(body.technology || "").trim() || "Various";
     const requestedStatus = body.status ? String(body.status) : "open";
+    const isPublishing = requestedStatus.toLowerCase() === "published" || requestedStatus.toLowerCase() === "open";
 
-    if (requestedStatus.toLowerCase() === "published" || requestedStatus.toLowerCase() === "open") {
+    if (isPublishing) {
       try {
         await requireCapability({ userId, action: "publishProject" });
+        await assertAndConsumeActionQuota(userId, "client", "publishProject");
       } catch (err: any) {
         if (err instanceof ActionRequirementsError) {
           return res.status(403).json({
@@ -578,6 +581,15 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
             action: err.action,
             message: err.message,
             missing: err.missing,
+          });
+        }
+        if (err instanceof ActionGateError) {
+          return res.status(403).json({
+            success: false,
+            code: err.code,
+            action: err.action,
+            message: err.message,
+            details: err.details,
           });
         }
         throw err;
@@ -840,19 +852,33 @@ export const updateClientProject = async (req: AuthenticatedRequest, res: Respon
     if (body.freelancer != null) data.freelancer = String(body.freelancer).trim() || null;
 
     if (data.status && (data.status.toLowerCase() === "published" || data.status.toLowerCase() === "open")) {
-      try {
-        await requireCapability({ userId, action: "publishProject" });
-      } catch (err: any) {
-        if (err instanceof ActionRequirementsError) {
-          return res.status(403).json({
-            success: false,
-            code: err.code,
-            action: err.action,
-            message: err.message,
-            missing: err.missing,
-          });
+      const currentStatus = String(project.status || "").toLowerCase();
+      const isNewlyPublishing = currentStatus !== "published" && currentStatus !== "open";
+      if (isNewlyPublishing) {
+        try {
+          await requireCapability({ userId, action: "publishProject" });
+          await assertAndConsumeActionQuota(userId, "client", "publishProject");
+        } catch (err: any) {
+          if (err instanceof ActionRequirementsError) {
+            return res.status(403).json({
+              success: false,
+              code: err.code,
+              action: err.action,
+              message: err.message,
+              missing: err.missing,
+            });
+          }
+          if (err instanceof ActionGateError) {
+            return res.status(403).json({
+              success: false,
+              code: err.code,
+              action: err.action,
+              message: err.message,
+              details: err.details,
+            });
+          }
+          throw err;
         }
-        throw err;
       }
     }
 

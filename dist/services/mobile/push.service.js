@@ -111,7 +111,7 @@ export const sendPushNotification = async (userId, title, body, data) => {
             notification: {
                 title,
                 body,
-                ...(data?.imageUrl ? { imageUrl: data.imageUrl } : {})
+                ...((data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : {})
             },
             android: {
                 notification: {
@@ -122,6 +122,7 @@ export const sendPushNotification = async (userId, title, body, data) => {
                     defaultLightSettings: true,
                     defaultVibrateTimings: true,
                     defaultSound: true,
+                    ...((data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : {})
                 },
             },
             apns: {
@@ -132,9 +133,9 @@ export const sendPushNotification = async (userId, title, body, data) => {
                         mutableContent: true,
                     }
                 },
-                fcmOptions: data?.imageUrl ? { imageUrl: data.imageUrl } : undefined,
+                fcmOptions: (data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : undefined,
             },
-            data: data || {}
+            data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
         }));
         const response = await getMessaging().sendEach(messages);
         console.log(`Successfully sent ${response.successCount} messages; ${response.failureCount} failed.`);

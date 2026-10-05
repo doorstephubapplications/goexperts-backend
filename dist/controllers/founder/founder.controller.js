@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertActionEntitlement, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import { HttpError, getUserWalletPayload, creditWalletForSelf, debitWalletForSelf, listInvoicesForUser, listMeetingsForUser, createMeetingForUser, listUserNotifications, markNotificationRead, markAllNotificationsRead, getJsonSetting, setJsonSetting, listConversationsForUser, listMessagesForConversation, createMessageForUser, purchaseSubscriptionForSelf, listSubscriptionsForUser, } from "../../common/helpers/portal-shared.js";
 async function loadFounderUser(userId) {
     return prisma.user.findFirst({
@@ -238,6 +239,25 @@ export const updateFounderStartup = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "User not found" });
         const startup = await findExistingStartup(user);
         const body = req.body || {};
+        // Enforce commercial entitlement when publishing publicly to marketplace
+        const isPublishing = body.visibility === "Public" || body.status === "active";
+        if (isPublishing) {
+            try {
+                await assertActionEntitlement(userId, "founder", "publishStartup");
+            }
+            catch (err) {
+                if (err instanceof ActionGateError) {
+                    return res.status(403).json({
+                        success: false,
+                        code: err.code,
+                        action: err.action,
+                        message: err.message,
+                        details: err.details,
+                    });
+                }
+                throw err;
+            }
+        }
         const data = {};
         if (body.startup != null)
             data.startup = String(body.startup).trim();
@@ -853,6 +873,21 @@ export const createFounderMeeting = async (req, res, next) => {
         const userId = requireUser(req, res);
         if (!userId)
             return;
+        try {
+            await assertActionEntitlement(userId, "founder", "contactInvestor");
+        }
+        catch (err) {
+            if (err instanceof ActionGateError) {
+                return res.status(403).json({
+                    success: false,
+                    code: err.code,
+                    action: err.action,
+                    message: err.message,
+                    details: err.details,
+                });
+            }
+            throw err;
+        }
         const user = await loadFounderUser(userId);
         if (!user)
             return res.status(404).json({ success: false, message: "User not found" });

@@ -695,29 +695,41 @@ router.get("/page-by-slug/:slug", async (req, res, next) => {
 router.get("/cms_pages", async (req, res, next) => {
     try {
         const pageName = req.query.name;
-        if (!pageName) {
-            return res.status(400).json({ success: false, message: "Query parameter 'name' is required" });
+        if (pageName) {
+            const row = await prisma.cmsPage.findFirst({
+                where: {
+                    name: String(pageName),
+                    status: { in: ["active", "published"] },
+                    deletedAt: null,
+                },
+            });
+            if (!row) {
+                return res.status(404).json({ success: false, message: `Page '${pageName}' not found` });
+            }
+            let content = null;
+            if (row.content) {
+                try {
+                    content = JSON.parse(row.content);
+                }
+                catch {
+                    content = sanitizeCmsContent(row.content);
+                }
+            }
+            return res.json({ success: true, data: { ...row, content } });
         }
-        const row = await prisma.cmsPage.findFirst({
-            where: {
-                name: String(pageName),
-                status: "active",
-                deletedAt: null,
-            },
+        const category = req.query.category;
+        const defaultWhere = { status: { in: ["active", "published"] }, deletedAt: null };
+        if (category) {
+            defaultWhere.category = category;
+        }
+        return await listModel({
+            req,
+            res,
+            next,
+            modelName: "CmsPage",
+            searchColumns: ["name", "category"],
+            defaultWhere,
         });
-        if (!row) {
-            return res.status(404).json({ success: false, message: `Page '${pageName}' not found` });
-        }
-        let content = null;
-        if (row.content) {
-            try {
-                content = JSON.parse(row.content);
-            }
-            catch {
-                content = sanitizeCmsContent(row.content);
-            }
-        }
-        res.json({ success: true, data: { ...row, content } });
     }
     catch (e) {
         next(e);
@@ -726,6 +738,7 @@ router.get("/cms_pages", async (req, res, next) => {
 import { AboutController } from "../../controllers/about.controller.js";
 const newAboutController = new AboutController();
 import { getPublicContactPage, submitContactEnquiry } from "../../controllers/admin/contact.controller.js";
+import { contactRateLimiter } from "../../middlewares/contact-limiter.middleware.js";
 import { getPublicCareersPage, listPublicJobs, getPublicJobBySlug, submitCareerApplication } from "../../controllers/admin/careers.controller.js";
 import { faqPublicRouter } from "./faq.routes.js";
 import footerPublicRouter from "./footer.routes.js";
@@ -734,7 +747,7 @@ router.use("/faqs", faqPublicRouter);
 router.use("/footer", footerPublicRouter);
 router.get("/contact-page", getPublicContactPage);
 router.get("/contact", getPublicContactPage);
-router.post("/contact", submitContactEnquiry);
+router.post("/contact", contactRateLimiter, submitContactEnquiry);
 router.get("/careers-page", getPublicCareersPage);
 router.get("/careers", getPublicCareersPage);
 import { documentUpload, handleUploadError } from "../../middleware/upload.js";
@@ -759,8 +772,16 @@ const getPublicHelpCenter = async (req, res, next) => {
     try {
         // 1. Load Help Center page settings from CmsPage
         const pageConfig = await prisma.cmsPage.findFirst({
-            where: { name: "Help Center", status: "active" }
-        });
+            where: {
+                OR: [
+                    { name: "Help Center" },
+                    { name: "help-center" },
+                    { category: "help_center" },
+                    { category: "Help Center" }
+                ],
+                status: { in: ["active", "published"] }
+            }
+        }).catch(() => null);
         let settings = {
             heroEyebrow: "GO EXPERTS HELP CENTER",
             heroTitle: "How can we help you?",
@@ -1547,7 +1568,10 @@ router.get("/pricing_plans", async (req, res, next) => {
     try {
         const industryId = req.query.industryId;
         const role = req.query.role;
-        const whereCondition = { status: "active" };
+        const whereCondition = {
+            status: "active",
+            visibility: { notIn: ["grandfathered", "archived", "private", "internal"] },
+        };
         if (role) {
             whereCondition.role = role;
         }
@@ -2145,6 +2169,33 @@ router.get("/help-center/articles/:slug", async (req, res, next) => {
             }
         }).catch(() => null);
         if (!article || article.status !== "published") {
+            const cmsArticle = await prisma.cmsPage.findFirst({
+                where: {
+                    OR: [
+                        { name: slug },
+                        { name: slug.replace(/-/g, " ") }
+                    ],
+                    category: { in: ["help_center", "Help Center"] },
+                    status: { in: ["published", "active"] },
+                    deletedAt: null
+                }
+            }).catch(() => null);
+            if (cmsArticle) {
+                let content = cmsArticle.content;
+                return res.json({
+                    success: true,
+                    data: {
+                        id: cmsArticle.id,
+                        title: cmsArticle.name,
+                        slug,
+                        content,
+                        status: "published",
+                        createdAt: cmsArticle.createdAt,
+                        updatedAt: cmsArticle.updatedAt,
+                        category: { name: "Help Center", slug: "help-center", articles: [] }
+                    }
+                });
+            }
             return res.status(404).json({ success: false, message: "Article not found" });
         }
         res.json({ success: true, data: article });

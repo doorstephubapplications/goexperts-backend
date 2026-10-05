@@ -7,13 +7,13 @@ import { getVerificationStats } from '../../common/helpers/verification.js';
 
 export type BillingCycle = 'monthly' | 'yearly';
 
-const GST_RATE_FOR_INCLUDED_PLAN_PRICE = 0.18;
+import {
+  GST_RATE_FOR_INCLUDED_PLAN_PRICE,
+  calculateInclusiveGst,
+  getPlanBaseAmountExcludingGst,
+} from '../../utils/financial.util.js';
 
-const getPlanBaseAmountExcludingGst = (amountIncludingGst: number) => {
-  const amount = Number(amountIncludingGst || 0);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return parseFloat((amount / (1 + GST_RATE_FOR_INCLUDED_PLAN_PRICE)).toFixed(2));
-};
+export { GST_RATE_FOR_INCLUDED_PLAN_PRICE, calculateInclusiveGst, getPlanBaseAmountExcludingGst };
 
 const isFreeAlias = (value: string) => {
   const v = value.trim().toLowerCase();
@@ -267,19 +267,44 @@ export const activateUserSubscription = async (
     throw new Error('PLAN_NOT_FOUND');
   }
 
-  await prisma.subscription.updateMany({
-    where: { userId, status: 'active' },
-    data: {
-      status: 'cancelled',
-      cancelledAt: new Date(),
-      cancellationReason: 'Replaced by new plan',
-    },
-  });
+  const targetRole = role ? normalizeRoleForPlan(role) : (plan.role === 'all' ? 'all' : normalizeRoleForPlan(plan.role));
+  const planType = (plan as any).planType || (plan.role === 'all' ? 'all_access' : 'single_role');
+
+  if (planType === 'all_access' || targetRole === 'all') {
+    // All Access replaces all single-role subscriptions
+    await prisma.subscription.updateMany({
+      where: { userId, status: 'active' },
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancellationReason: 'Replaced by Go Experts All Access Plan',
+      },
+    });
+  } else {
+    // Single-role or Add-on replaces only subscriptions for the target role
+    await prisma.subscription.updateMany({
+      where: {
+        userId,
+        status: 'active',
+        OR: [
+          { role: targetRole },
+          { plan: { role: targetRole } },
+        ],
+      },
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancellationReason: `Replaced by ${plan.name}`,
+      },
+    });
+  }
 
   const subscription = await prisma.subscription.create({
       data: {
         userId,
         planId: plan.id,
+        role: targetRole,
+        planType,
         status: 'active',
         startDate: new Date(),
         endDate: computeSubscriptionEndDate(billingCycle),
@@ -290,17 +315,17 @@ export const activateUserSubscription = async (
 
     if (plan.amount > 0) {
       try {
-        const gst = plan.amount * 0.18;
+        const { subtotal, gst, total } = calculateInclusiveGst(plan.amount);
         const invoiceNumber = 'INV-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2,6).toUpperCase();
         const invoiceObj = await prisma.invoice.create({
           data: {
             invoiceNumber,
             userId,
             subscriptionId: subscription.id,
-            subtotal: plan.amount - gst,
+            subtotal,
             gst,
             discount: 0,
-            total: plan.amount,
+            total,
             status: 'paid',
             items: {
               create: [
@@ -469,11 +494,13 @@ const markSubscriptionExpired = async (sub: any, planName: string | null) => {
     data: { status: 'expired' },
   }).catch(() => null);
 
-  if (user && user.status === 'active') {
+  if (user) {
+    // CRITICAL: NEVER mark user.status as 'inactive' on subscription expiry.
+    // Expired users retain access to log in, browse, view profiles, and receive messages.
+    // Only paid actions (submitting proposals, publishing projects) are gated.
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        status: 'inactive',
         registrationData: JSON.stringify({
           ...reg,
           planExpired: true,
@@ -481,22 +508,7 @@ const markSubscriptionExpired = async (sub: any, planName: string | null) => {
           planExpiredSubscriptionId: sub.id,
           planExpiredPlanId: sub.planId,
           planExpiredPlanName: planName,
-          accountInactiveReason: 'subscription_expired',
-        }),
-      },
-    }).catch(() => null);
-  } else if (user && inactiveBecausePlanExpired(user.registrationData)) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        registrationData: JSON.stringify({
-          ...reg,
-          planExpired: true,
-          planExpiredAt: reg.planExpiredAt || sub.endDate?.toISOString?.() || now.toISOString(),
-          planExpiredSubscriptionId: sub.id,
-          planExpiredPlanId: sub.planId,
-          planExpiredPlanName: planName,
-          accountInactiveReason: 'subscription_expired',
+          accountInactiveReason: null,
         }),
       },
     }).catch(() => null);

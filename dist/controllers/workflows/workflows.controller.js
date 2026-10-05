@@ -1,6 +1,11 @@
+import path from "path";
+import fs from "fs";
 import { prisma } from "../../config/database.js";
+import { UPLOADS_DIR } from "../../config/uploads.js";
 import { NotificationService } from "../../modules/notifications/notification.service.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertActionEntitlement, recordActionUsage, assertAndConsumeActionQuota, ActionGateError } from "../../services/subscription/entitlement.service.js";
+import { assertProjectParticipant } from "../../services/projects/project-authorization.service.js";
 function toAuditString(val, maxLen = 3000) {
     if (val == null)
         return null;
@@ -150,9 +155,21 @@ export const rejectProject = async (req, res, next) => {
 export const publishProject = async (req, res, next) => {
     try {
         const { id } = req.params;
-        // Ensure capability is met before publishing
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const project = await prisma.project.findUnique({ where: { id } });
+        if (!project)
+            return res.status(404).json({ success: false, message: "Project not found" });
+        // Idempotency: If already published/open, do not re-consume quota
+        const currentStatus = String(project.status || "").toLowerCase();
+        if (currentStatus === "published" || currentStatus === "open") {
+            return res.json({ success: true, message: "Project is already published", project });
+        }
+        // Ensure capability and subscription entitlement are met before publishing
         try {
-            await requireCapability({ userId: req.user.id, action: "publishProject" });
+            await requireCapability({ userId, action: "publishProject" });
+            await assertAndConsumeActionQuota(userId, "client", "publishProject");
         }
         catch (err) {
             if (err instanceof ActionRequirementsError) {
@@ -164,11 +181,17 @@ export const publishProject = async (req, res, next) => {
                     missing: err.missing,
                 });
             }
+            if (err instanceof ActionGateError) {
+                return res.status(403).json({
+                    success: false,
+                    code: err.code,
+                    action: err.action,
+                    message: err.message,
+                    details: err.details,
+                });
+            }
             throw err;
         }
-        const project = await prisma.project.findUnique({ where: { id } });
-        if (!project)
-            return res.status(404).json({ success: false, message: "Project not found" });
         const updated = await prisma.project.update({
             where: { id },
             data: { status: "published" },
@@ -289,9 +312,11 @@ export const completeProject = async (req, res, next) => {
 // ─── 2. PROPOSAL ENGINE ────────────────────────────────────────────────────
 export const submitProposal = async (req, res, next) => {
     try {
-        // Ensure capability is met before submitting proposal
+        let freelancerEntitlement = null;
+        // Ensure capability and subscription entitlement are met before submitting proposal
         try {
             await requireCapability({ userId: req.user.id, action: "submitProposal" });
+            freelancerEntitlement = await assertActionEntitlement(req.user.id, "freelancer", "submitProposal");
         }
         catch (err) {
             if (err instanceof ActionRequirementsError) {
@@ -301,6 +326,15 @@ export const submitProposal = async (req, res, next) => {
                     action: err.action,
                     message: err.message,
                     missing: err.missing,
+                });
+            }
+            if (err instanceof ActionGateError) {
+                return res.status(403).json({
+                    success: false,
+                    code: err.code,
+                    action: err.action,
+                    message: err.message,
+                    details: err.details,
                 });
             }
             throw err;
@@ -318,6 +352,10 @@ export const submitProposal = async (req, res, next) => {
                 status: "pending",
             },
         });
+        // Record action quota usage
+        if (freelancerEntitlement?.subscriptionId) {
+            await recordActionUsage(freelancerEntitlement.subscriptionId, "submitProposal").catch(() => null);
+        }
         await logWorkflowAction({
             userId: freelancerId,
             action: "submit",
@@ -949,6 +987,142 @@ export const deleteMilestone = async (req, res, next) => {
         next(err);
     }
 };
+export const escalateMilestoneDispute = async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id } = req.params;
+        const { reason, description, projectId: bodyProjectId } = req.body || {};
+        if (!reason || typeof reason !== "string" || !reason.trim()) {
+            return res.status(400).json({ success: false, message: "Dispute reason is required" });
+        }
+        // Milestone ownership: resolve milestone -> canonical project
+        const milestone = await prisma.milestone.findUnique({
+            where: { id },
+            include: {
+                project: {
+                    include: {
+                        contracts: { where: { deletedAt: null } },
+                    },
+                },
+            },
+        });
+        if (!milestone || !milestone.project || milestone.project.deletedAt) {
+            return res.status(404).json({ success: false, message: "Milestone not found" });
+        }
+        // Prevent cross-project mismatch/IDOR if projectId was supplied
+        if (bodyProjectId && bodyProjectId !== milestone.projectId) {
+            return res.status(403).json({ success: false, message: "Milestone does not belong to specified project" });
+        }
+        // Project status check
+        if (milestone.project.status === "completed" || milestone.project.status === "cancelled") {
+            return res.status(409).json({ success: false, message: "Cannot escalate milestones on a completed or cancelled project" });
+        }
+        // Duplicate escalation protection: check if milestone is already Disputed
+        if (milestone.status === "Disputed") {
+            return res.status(409).json({ success: false, message: "This milestone is already in dispute status" });
+        }
+        // Completed milestones cannot be escalated
+        if (milestone.status === "Completed") {
+            return res.status(400).json({ success: false, message: "Completed milestones cannot be escalated" });
+        }
+        // Centralized project authorization: only project participants can escalate
+        const authResult = await assertProjectParticipant({
+            userId,
+            projectId: milestone.projectId,
+        });
+        if (!authResult.isParticipant) {
+            return res.status(403).json({ success: false, message: "Only project participants can escalate milestone disputes" });
+        }
+        // 1. Update milestone status
+        const updated = await prisma.milestone.update({
+            where: { id },
+            data: { status: "Disputed" },
+        });
+        // 2. Reuse SupportTicket architecture for Super Admin dispute visibility
+        const cleanReason = reason.trim();
+        const cleanDesc = description && typeof description === "string" ? description.trim() : "";
+        const ticketSubject = `[Milestone Dispute] ${milestone.title} - Project: ${milestone.project.title}`;
+        let createdTicket = null;
+        try {
+            createdTicket = await prisma.supportTicket.create({
+                data: {
+                    requesterId: userId,
+                    requesterRole: authResult.role || "client",
+                    subject: ticketSubject,
+                    categoryId: "milestone_dispute",
+                    priority: "High",
+                    status: "OPEN",
+                    messages: {
+                        create: {
+                            senderId: userId,
+                            senderRole: authResult.role || "user",
+                            message: cleanDesc ? `${cleanReason}\n\nDetails: ${cleanDesc}` : cleanReason,
+                        },
+                    },
+                },
+            });
+        }
+        catch (ticketErr) {
+            console.error("[MilestoneDispute] Failed to create support ticket record:", ticketErr);
+        }
+        // 3. Activity timeline log
+        await logWorkflowAction({
+            userId,
+            action: "dispute",
+            entity: "Milestone",
+            entityId: id,
+            description: `Milestone "${milestone.title}" escalated for mediation: ${cleanReason}`,
+            oldValue: milestone,
+            newValue: updated,
+        });
+        // 4. Notify counterpart & notification engine
+        const activeContract = milestone.project.contracts.find((c) => c.status === "active" || c.status === "pending_acceptance") || milestone.project.contracts[0];
+        const isClientInitiator = authResult.role === "client";
+        const targetUserId = isClientInitiator
+            ? activeContract?.freelancerId
+            : milestone.project.client;
+        if (targetUserId) {
+            const recipientUser = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { id: targetUserId },
+                        { fullName: targetUserId },
+                        { email: targetUserId },
+                    ],
+                },
+            });
+            if (recipientUser?.id && recipientUser.id !== userId) {
+                await NotificationService.enqueue({
+                    userId: recipientUser.id,
+                    type: "milestone",
+                    title: "Milestone Dispute Escalation",
+                    message: `Milestone "${milestone.title}" on project "${milestone.project.title}" has been escalated for mediation. Reason: ${cleanReason}`,
+                    priority: "high",
+                    channel: "omnichannel",
+                    metadata: {
+                        projectId: milestone.projectId,
+                        milestoneId: milestone.id,
+                        ticketId: createdTicket?.id || null,
+                        actionUrl: isClientInitiator
+                            ? `/dashboard/projects/${milestone.projectId}?tab=milestones`
+                            : `/business/projects/${milestone.projectId}?tab=milestones`,
+                    },
+                }).catch(() => { });
+            }
+        }
+        res.status(200).json({
+            success: true,
+            message: "Milestone dispute escalated successfully",
+            milestone: updated,
+            ticketId: createdTicket?.id || null,
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
 // ─── 5. TASK ENGINE ────────────────────────────────────────────────────────
 export const patchTaskStatus = async (req, res, next) => {
     try {
@@ -1027,6 +1201,14 @@ export const createTaskAttachment = async (req, res, next) => {
         });
         if (!task)
             return res.status(404).json({ success: false, message: "Task not found" });
+        // Assert project participation before allowing upload/attachment
+        const { isParticipant } = await assertProjectParticipant({
+            userId,
+            projectId: task.projectId,
+        });
+        if (!isParticipant) {
+            return res.status(403).json({ success: false, message: "Forbidden: You are not an authorized participant in this project" });
+        }
         if (task.project.status === "completed" || task.project.status === "cancelled") {
             return res.status(409).json({ success: false, message: "Cannot add attachments to a completed or cancelled project" });
         }
@@ -1039,6 +1221,65 @@ export const createTaskAttachment = async (req, res, next) => {
             },
         });
         res.status(201).json({ success: true, attachment });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const downloadTaskAttachment = async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id, attachmentId } = req.params;
+        const attachment = await prisma.taskAttachment.findUnique({
+            where: { id: attachmentId },
+            include: { task: true },
+        });
+        if (!attachment || attachment.taskId !== id) {
+            return res.status(404).json({ success: false, message: "Attachment not found" });
+        }
+        const { isParticipant } = await assertProjectParticipant({
+            userId,
+            projectId: attachment.task.projectId,
+        });
+        if (!isParticipant) {
+            return res.status(403).json({ success: false, message: "Forbidden: You are not authorized to access attachments in this project" });
+        }
+        const filename = path.basename(attachment.filepath);
+        const absPath = path.join(UPLOADS_DIR, filename);
+        if (!fs.existsSync(absPath)) {
+            return res.status(410).json({ success: false, message: "File missing from disk" });
+        }
+        res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename}"`);
+        res.sendFile(absPath);
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const deleteTaskAttachment = async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        const { id, attachmentId } = req.params;
+        const attachment = await prisma.taskAttachment.findUnique({
+            where: { id: attachmentId },
+            include: { task: true },
+        });
+        if (!attachment || attachment.taskId !== id) {
+            return res.status(404).json({ success: false, message: "Attachment not found" });
+        }
+        const { isParticipant } = await assertProjectParticipant({
+            userId,
+            projectId: attachment.task.projectId,
+        });
+        if (!isParticipant) {
+            return res.status(403).json({ success: false, message: "Forbidden: You are not authorized to delete attachments in this project" });
+        }
+        await prisma.taskAttachment.delete({ where: { id: attachmentId } });
+        res.json({ success: true, message: "Attachment deleted successfully" });
     }
     catch (err) {
         next(err);

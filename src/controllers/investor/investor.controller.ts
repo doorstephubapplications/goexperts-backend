@@ -3,6 +3,7 @@ import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertActionEntitlement, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import {
   HttpError,
   getUserWalletPayload,
@@ -409,22 +410,30 @@ export const createInvestorInvestment = async (req: AuthenticatedRequest, res: R
     const userId = requireUser(req, res);
     if (!userId) return;
 
-    // Enforce capabilities for investors
-    if ((req.user as any)?.role === "investor") {
-      try {
-        await requireCapability({ userId, action: "expressInterest" });
-      } catch (err: any) {
-        if (err instanceof ActionRequirementsError) {
-          return res.status(403).json({
-            success: false,
-            code: err.code,
-            action: err.action,
-            message: err.message,
-            missing: err.missing,
-          });
-        }
-        throw err;
+    // Enforce capabilities and commercial entitlement for investors
+    try {
+      await requireCapability({ userId, action: "expressInterest" });
+      await assertActionEntitlement(userId, "investor", "expressInterest");
+    } catch (err: any) {
+      if (err instanceof ActionRequirementsError) {
+        return res.status(403).json({
+          success: false,
+          code: err.code,
+          action: err.action,
+          message: err.message,
+          missing: err.missing,
+        });
       }
+      if (err instanceof ActionGateError) {
+        return res.status(403).json({
+          success: false,
+          code: err.code,
+          action: err.action,
+          message: err.message,
+          details: err.details,
+        });
+      }
+      throw err;
     }
 
     const user = await loadInvestorUser(userId);
@@ -523,6 +532,22 @@ export const createInvestorMeeting = async (req: AuthenticatedRequest, res: Resp
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
+
+    try {
+      await assertActionEntitlement(userId, "investor", "contactFounder");
+    } catch (err: any) {
+      if (err instanceof ActionGateError) {
+        return res.status(403).json({
+          success: false,
+          code: err.code,
+          action: err.action,
+          message: err.message,
+          details: err.details,
+        });
+      }
+      throw err;
+    }
+
     const user = await loadInvestorUser(userId);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 

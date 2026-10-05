@@ -651,7 +651,9 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const { email: _email, password: _password, fullName: _fullName, role: _role, phone: _phone, country: _country, state: _state, city: _city, bio: _bio, latitude: _lat, longitude: _lng, countryId: _countryId, stateId: _stateId, cityId: _cityId, ...restData } = req.body || {};
     const registrationData = Object.keys(restData).length > 0 ? JSON.stringify(restData) : undefined;
 
-    const trialEndsAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    // 6-Month Free Trial: Exactly 6 calendar months platform-wide access for new signups
+    const trialEndsAt = new Date();
+    trialEndsAt.setMonth(trialEndsAt.getMonth() + 6);
 
     // Generate unique referral code for the new user
     let baseCode = (fullName.split(' ')[0] || "USER").toUpperCase().replace(/[^A-Z]/g, '');

@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
+import { assertAndConsumeActionQuota, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import { HttpError, getUserWalletPayload, creditWalletForSelf, debitWalletForSelf, listInvoicesForUser, listMeetingsForUser, createMeetingForUser, listUserNotifications, markNotificationRead, markAllNotificationsRead, getJsonSetting, setJsonSetting, listConversationsForUser, listMessagesForConversation, createMessageForUser, purchaseSubscriptionForSelf, listSubscriptionsForUser, money, } from "../../common/helpers/portal-shared.js";
 import { logActivityEvent } from "../../services/activity/activity.service.js";
 import { renderEmailTemplate } from "../../services/settings/settings.service.js";
@@ -502,9 +503,11 @@ export const createClientProject = async (req, res, next) => {
         const category = String(body.category || "").trim() || "Engineering";
         const technology = String(body.technology || "").trim() || "Various";
         const requestedStatus = body.status ? String(body.status) : "open";
-        if (requestedStatus.toLowerCase() === "published" || requestedStatus.toLowerCase() === "open") {
+        const isPublishing = requestedStatus.toLowerCase() === "published" || requestedStatus.toLowerCase() === "open";
+        if (isPublishing) {
             try {
                 await requireCapability({ userId, action: "publishProject" });
+                await assertAndConsumeActionQuota(userId, "client", "publishProject");
             }
             catch (err) {
                 if (err instanceof ActionRequirementsError) {
@@ -514,6 +517,15 @@ export const createClientProject = async (req, res, next) => {
                         action: err.action,
                         message: err.message,
                         missing: err.missing,
+                    });
+                }
+                if (err instanceof ActionGateError) {
+                    return res.status(403).json({
+                        success: false,
+                        code: err.code,
+                        action: err.action,
+                        message: err.message,
+                        details: err.details,
                     });
                 }
                 throw err;
@@ -768,20 +780,34 @@ export const updateClientProject = async (req, res, next) => {
         if (body.freelancer != null)
             data.freelancer = String(body.freelancer).trim() || null;
         if (data.status && (data.status.toLowerCase() === "published" || data.status.toLowerCase() === "open")) {
-            try {
-                await requireCapability({ userId, action: "publishProject" });
-            }
-            catch (err) {
-                if (err instanceof ActionRequirementsError) {
-                    return res.status(403).json({
-                        success: false,
-                        code: err.code,
-                        action: err.action,
-                        message: err.message,
-                        missing: err.missing,
-                    });
+            const currentStatus = String(project.status || "").toLowerCase();
+            const isNewlyPublishing = currentStatus !== "published" && currentStatus !== "open";
+            if (isNewlyPublishing) {
+                try {
+                    await requireCapability({ userId, action: "publishProject" });
+                    await assertAndConsumeActionQuota(userId, "client", "publishProject");
                 }
-                throw err;
+                catch (err) {
+                    if (err instanceof ActionRequirementsError) {
+                        return res.status(403).json({
+                            success: false,
+                            code: err.code,
+                            action: err.action,
+                            message: err.message,
+                            missing: err.missing,
+                        });
+                    }
+                    if (err instanceof ActionGateError) {
+                        return res.status(403).json({
+                            success: false,
+                            code: err.code,
+                            action: err.action,
+                            message: err.message,
+                            details: err.details,
+                        });
+                    }
+                    throw err;
+                }
             }
         }
         if (data.status === "completed") {
