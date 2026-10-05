@@ -583,6 +583,8 @@ model Subscription {
   id                 String                    @id @default(uuid())
   userId             String                    @map("user_id")
   planId             String                    @map("plan_id")
+  role               String?
+  planType           String?                   @default("single_role") @map("plan_type")
   startDate          DateTime                  @default(now()) @map("start_date")
   endDate            DateTime                  @map("end_date")
   status             String                    @default("active")
@@ -600,6 +602,7 @@ model Subscription {
   plan               SubscriptionPlan          @relation(fields: [planId], references: [id], onDelete: Cascade)
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([role])
   @@index([status])
   @@index([createdAt])
   @@index([planId], map: "subscriptions_plan_id_fkey")
@@ -697,6 +700,7 @@ model SubscriptionTransaction {
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId], map: "subscription_transactions_subscription_id_fkey")
+  @@index([createdAt])
   @@map("subscription_transactions")
 }
 
@@ -765,6 +769,7 @@ model WalletTransaction {
   wallet       Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([walletId], map: "wallet_transactions_wallet_id_fkey")
+  @@index([createdAt])
   @@map("wallet_transactions")
 }
 
@@ -1075,11 +1080,15 @@ model SubscriptionPlan {
   id             String                @id @default(uuid())
   name           String                @unique
   role           String                @default("freelancer")
+  planType       String                @default("single_role") @map("plan_type")
   amount         Float
   currency       String                @default("INR")
   duration       String
   features       String?
   limits         String?
+  proposalsLimit Int                   @default(36) @map("proposals_limit")
+  projectsLimit  Int                   @default(36) @map("projects_limit")
+  sortOrder      Int                   @default(0) @map("sort_order")
   popular        Boolean               @default(false)
   recommended    Boolean               @default(false)
   visibility     String                @default("public")
