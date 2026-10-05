@@ -9,5 +9,6 @@ uploads/
 *.local
 *.sql
 !prisma/migrations/**/*.sql
+!scripts/*.sql
 *.db
 src/scripts/
