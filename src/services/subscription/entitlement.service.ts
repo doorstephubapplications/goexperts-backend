@@ -23,7 +23,7 @@ export class ActionGateError extends Error {
 export type RoleEntitlementResult = {
   isEntitled: boolean;
   role: string;
-  planType: "trial" | "single_role" | "add_on" | "all_access" | "none";
+  planType: "trial" | "single_role" | "addon" | "add_on" | "all_access" | "none";
   planName: string | null;
   subscriptionId: string | null;
   isTrial: boolean;
@@ -218,59 +218,21 @@ export async function resolveRoleEntitlement(
     };
   }
 
-  // 1. Check 6-Month Free Trial
-  if (user.trialEndsAt && user.trialEndsAt.getTime() > now.getTime()) {
-    const trialSub = user.subscriptions.find(
-      (s) => s.plan?.planType === "trial" || s.plan?.duration === "180_days" || s.plan?.amount === 0
-    );
-
-    let quotaUsed = 0;
-    const quotaLimit = trialSub?.plan?.proposalsLimit || 36;
-
-    if (trialSub && action) {
-      const featureKey = action === "submitProposal" ? "proposals_submitted" : "projects_published";
-      const usage = await prisma.subscriptionUsage.findUnique({
-        where: {
-          subscriptionId_featureKey: {
-            subscriptionId: trialSub.id,
-            featureKey,
-          },
-        },
-      });
-      quotaUsed = usage?.used || 0;
-    }
-
-    const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
-
-    return {
-      isEntitled: true,
-      role: normalizedRole,
-      planType: "trial",
-      planName: trialSub?.plan?.name || "6-Month Free Access",
-      subscriptionId: trialSub?.id || null,
-      isTrial: true,
-      isUnlimited: false,
-      quotaLimit,
-      quotaUsed,
-      quotaRemaining,
-      expiresAt: user.trialEndsAt,
-      gateReason: null,
-    };
-  }
-
-  // 2. Check Paid Subscriptions (All Access or Role-Specific)
-  const activeSubs = (user.subscriptions || []).filter(
+  // Filter valid, non-expired active subscriptions
+  const validActiveSubs = (user.subscriptions || []).filter(
     (sub) => sub.endDate && sub.endDate.getTime() > now.getTime()
   );
 
-  // 2a. All Access Check
-  const allAccessSub = activeSubs.find(
+  // --------------------------------------------------------------------------
+  // PRECEDENCE 1: ACTIVE PAID ALL ACCESS
+  // --------------------------------------------------------------------------
+  const allAccessSub = validActiveSubs.find(
     (s) =>
-      (s as any).planType === "all_access" ||
-      s.plan?.planType === "all_access" ||
-      (s as any).role === "all" ||
-      s.plan?.role === "all" ||
-      s.plan?.name?.toLowerCase().includes("all access")
+      ((s as any).planType === "all_access" ||
+        s.plan?.planType === "all_access" ||
+        s.plan?.name?.toLowerCase().includes("all access")) &&
+      s.plan?.planType !== "trial" &&
+      (s.plan?.amount ?? 0) > 0
   );
 
   if (allAccessSub) {
@@ -290,8 +252,17 @@ export async function resolveRoleEntitlement(
     };
   }
 
-  // 2b. Role-Specific or Add-on Check
-  const roleSub = activeSubs.find((s) => {
+  // --------------------------------------------------------------------------
+  // PRECEDENCE 2: ACTIVE PAID ROLE ENTITLEMENT (single_role or addon)
+  // --------------------------------------------------------------------------
+  const roleSub = validActiveSubs.find((s) => {
+    const isTrial =
+      (s as any).planType === "trial" ||
+      s.plan?.planType === "trial" ||
+      s.plan?.duration === "180_days" ||
+      s.plan?.amount === 0;
+    if (isTrial) return false;
+
     const subRole = (s as any).role || s.plan?.role;
     return subRole && normalizeRoleKey(subRole) === normalizedRole;
   });
@@ -319,13 +290,15 @@ export async function resolveRoleEntitlement(
       quotaUsed = usage?.used || 0;
     }
 
-    const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
+    const quotaRemaining = quotaLimit === -1 ? 999999 : Math.max(0, quotaLimit - quotaUsed);
+    const rawPlanType = ((roleSub as any).planType || roleSub.plan?.planType || "single_role") as string;
+    const planType: "single_role" | "addon" = rawPlanType === "add_on" ? "addon" : (rawPlanType as any);
 
     if (quotaLimit > 0 && quotaUsed >= quotaLimit) {
       return {
         isEntitled: false,
         role: normalizedRole,
-        planType: ((roleSub as any).planType || roleSub.plan?.planType || "single_role") as any,
+        planType,
         planName: roleSub.plan?.name || "Single Role Plan",
         subscriptionId: roleSub.id,
         isTrial: false,
@@ -341,7 +314,7 @@ export async function resolveRoleEntitlement(
     return {
       isEntitled: true,
       role: normalizedRole,
-      planType: ((roleSub as any).planType || roleSub.plan?.planType || "single_role") as any,
+      planType,
       planName: roleSub.plan?.name || "Single Role Plan",
       subscriptionId: roleSub.id,
       isTrial: false,
@@ -354,8 +327,93 @@ export async function resolveRoleEntitlement(
     };
   }
 
-  // 3. User has subscriptions, but not for this role
-  if (activeSubs.length > 0) {
+  // --------------------------------------------------------------------------
+  // PRECEDENCE 3: ACTIVE FREE INTRO ACCESS / TRIAL
+  // Covers all 4 roles if user has active trial and no paid subscription for targetRole
+  // --------------------------------------------------------------------------
+  const isTrialActive = Boolean(
+    (user.trialEndsAt && user.trialEndsAt.getTime() > now.getTime()) ||
+      validActiveSubs.some(
+        (s) =>
+          (s as any).planType === "trial" ||
+          s.plan?.planType === "trial" ||
+          s.plan?.duration === "180_days" ||
+          s.plan?.amount === 0
+      )
+  );
+
+  if (isTrialActive) {
+    const trialSub = (user.subscriptions || []).find(
+      (s) =>
+        s.status === "active" &&
+        ((s as any).planType === "trial" ||
+          s.plan?.planType === "trial" ||
+          s.plan?.duration === "180_days" ||
+          s.plan?.amount === 0)
+    );
+
+    let quotaUsed = 0;
+    const quotaLimit =
+      normalizedRole === "freelancer"
+        ? (trialSub?.plan?.proposalsLimit || 36)
+        : normalizedRole === "client"
+        ? (trialSub?.plan?.projectsLimit || 36)
+        : -1;
+
+    if (trialSub && action) {
+      const featureKey = action === "submitProposal" ? "proposals_submitted" : "projects_published";
+      const usage = await prisma.subscriptionUsage.findUnique({
+        where: {
+          subscriptionId_featureKey: {
+            subscriptionId: trialSub.id,
+            featureKey,
+          },
+        },
+      });
+      quotaUsed = usage?.used || 0;
+    }
+
+    const quotaRemaining = quotaLimit === -1 ? 999999 : Math.max(0, quotaLimit - quotaUsed);
+    const trialExpiry = user.trialEndsAt || trialSub?.endDate || null;
+
+    if (quotaLimit > 0 && quotaUsed >= quotaLimit) {
+      return {
+        isEntitled: false,
+        role: normalizedRole,
+        planType: "trial",
+        planName: trialSub?.plan?.name || "6-Month Free Access",
+        subscriptionId: trialSub?.id || null,
+        isTrial: true,
+        isUnlimited: false,
+        quotaLimit,
+        quotaUsed,
+        quotaRemaining: 0,
+        expiresAt: trialExpiry,
+        gateReason: "QUOTA_EXHAUSTED",
+      };
+    }
+
+    return {
+      isEntitled: true,
+      role: normalizedRole,
+      planType: "trial",
+      planName: trialSub?.plan?.name || "6-Month Free Access",
+      subscriptionId: trialSub?.id || null,
+      isTrial: true,
+      isUnlimited: quotaLimit === -1,
+      quotaLimit,
+      quotaUsed,
+      quotaRemaining,
+      expiresAt: trialExpiry,
+      gateReason: null,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // PRECEDENCE 4: ROLE NOT ENTITLED
+  // (User has other active paid subscriptions, but none for targetRole and no active trial)
+  // --------------------------------------------------------------------------
+  if (validActiveSubs.length > 0) {
     return {
       isEntitled: false,
       role: normalizedRole,
@@ -372,7 +430,9 @@ export async function resolveRoleEntitlement(
     };
   }
 
-  // 4. No active subscription
+  // --------------------------------------------------------------------------
+  // PRECEDENCE 5: NO SUBSCRIPTION
+  // --------------------------------------------------------------------------
   return {
     isEntitled: false,
     role: normalizedRole,
