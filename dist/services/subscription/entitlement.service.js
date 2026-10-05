@@ -1,5 +1,5 @@
 import { prisma } from "../../config/database.js";
-import { sendSubscriptionPurchasedEmail } from "../mobile/email.service.js";
+import { sendSubscriptionPurchasedEmail, sendFreePlanActivatedEmail } from "../mobile/email.service.js";
 import { calculateInclusiveGst } from "../../utils/financial.util.js";
 export class ActionGateError extends Error {
     code;
@@ -532,6 +532,14 @@ export async function activateCanonicalFreeTrial(userId) {
         });
         return sub;
     });
+    if (user.email) {
+        try {
+            await sendFreePlanActivatedEmail(user.email, user.fullName || "User", "all", plan.name, endDate);
+        }
+        catch (e) {
+            console.warn("[EntitlementEngine] Free trial activation email failed:", e);
+        }
+    }
     return { success: true, expiresAt: endDate, subscriptionId: createdSub.id };
 }
 /**

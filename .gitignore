@@ -8,5 +8,6 @@ uploads/
 .DS_Store
 *.local
 *.sql
+!prisma/migrations/**/*.sql
 *.db
 src/scripts/
