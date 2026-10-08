@@ -2,13 +2,45 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.*.example
 *.zip
 *.log
 uploads/
 .DS_Store
 *.local
+*.db
+
+# Keep only versioned SQL migration files
 *.sql
 !prisma/migrations/**/*.sql
 !scripts/*.sql
-*.db
+
+# Scratch / one-off debug scripts at repo root
+*.cjs
+*.mjs
+!scripts/*.cjs
+
+# Backup and temp files
+*.bak
+*.tmp
+
+# Large seed data files at root level
+seed-*.cjs
+seed-*.js
+seed-*.ts
+seed_*.cjs
+seed_*.ts
+
+# Scratch directories
+scratch/
+
+# Source scripts directory (one-off utilities)
 src/scripts/
+
+# Large data files
+src/seed_all_masters.cjs
+src/seed_masters.cjs
+
+# SQLite dev database
+prisma/dev.db
+prisma/*.db
