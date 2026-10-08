@@ -19,6 +19,7 @@ export const corsConfig = cors({
     "Cache-Control",
     "Pragma",
     "X-CSRF-Token",
+    "x-active-workspace",
   ],
   exposedHeaders: ["*"],
   optionsSuccessStatus: 200,
