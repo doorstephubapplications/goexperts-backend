@@ -56,7 +56,7 @@ export const authMiddleware = async (
       });
 
       if (admin) {
-        if (admin.status !== "active") {
+        if (admin.status?.toLowerCase() !== "active") {
           return res.status(403).json({ success: false, message: "Admin account deactivated." });
         }
         req.user = {
@@ -106,7 +106,7 @@ export const authMiddleware = async (
     });
 
     if (admin) {
-      if (admin.status !== "active") {
+      if (admin.status?.toLowerCase() !== "active") {
         return res.status(403).json({ success: false, message: "Admin account deactivated." });
       }
       req.user = {
