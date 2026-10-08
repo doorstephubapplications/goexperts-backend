@@ -88,13 +88,16 @@ export const authMiddleware = async (
         return res.status(403).json({ success: false, message: `Account ${userStatus.toLowerCase()}.` });
       }
 
+      const requestedWorkspace = req.headers['x-active-workspace'] as string | undefined;
+
       req.user = {
         id: user.id,
         email: user.email,
-        role: user.role, // from DB!
-        onboardingStatus: user.onboardingStatus, // from DB!
-        currentStep: user.currentStep, // from DB!
+        role: user.role, // primary role
+        onboardingStatus: user.onboardingStatus,
+        currentStep: user.currentStep,
         type: "portal",
+        activeWorkspace: requestedWorkspace || user.role,
       };
       return next();
     }

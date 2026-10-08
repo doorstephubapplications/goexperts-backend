@@ -70,12 +70,6 @@ export const portalRoleMiddleware = (roles: string[]) => {
         });
       }
 
-      // If Account Owner:
-      // 1. Direct role match on primary user role
-      if (allowed.includes(userRole)) {
-        return next();
-      }
-
       // 2. Profile setup/management routes are accessible so owners can activate the workspace
       if (isProfileActivationPath) {
         return next();
@@ -87,9 +81,23 @@ export const portalRoleMiddleware = (roles: string[]) => {
         ["client", "investor", "founder", "freelancer"].every((r) =>
           roles.map((x) => x.toLowerCase()).includes(r)
         );
-      if (isSharedPortalRoute) {
-        return next();
+
+      const requestedWorkspace = String(req.user.activeWorkspace || userRole).toLowerCase();
+
+      // Workspace context check (unless shared route)
+      if (!isSharedPortalRoute && !isProfileActivationPath) {
+        if (!roles.map(r => r.toLowerCase()).includes(requestedWorkspace)) {
+           return res.status(403).json({
+             success: false,
+             code: "WORKSPACE_MISMATCH",
+             message: `Forbidden: requested route requires [${roles.join(", ")}] but current workspace is ${requestedWorkspace}`,
+           });
+        }
       }
+
+      // We now need to prove the user actually OWNS the requestedWorkspace
+      // For shared routes, we MUST verify the specific requested workspace they are trying to act as.
+      const targetRolesToVerify = isProfileActivationPath ? allowed : [requestedWorkspace];
 
       // 4. Role-specific routes: Check if owner has activated the target profile in DB
       const { prisma } = await import("../config/database.js");
@@ -97,6 +105,7 @@ export const portalRoleMiddleware = (roles: string[]) => {
         where: { id: req.user.id },
         select: {
           role: true,
+          userRoles: true,
           freelancerProfile: { select: { id: true } },
           clientProfile: { select: { id: true } },
           founderProfile: { select: { id: true } },
@@ -105,21 +114,14 @@ export const portalRoleMiddleware = (roles: string[]) => {
       });
 
       if (userWithProfiles) {
-        const hasFreelancer = Boolean(userWithProfiles.freelancerProfile) || userWithProfiles.role === "freelancer";
-        const hasClient = Boolean(userWithProfiles.clientProfile) || ["client", "business"].includes(userWithProfiles.role);
-        const hasFounder = Boolean(userWithProfiles.founderProfile) || ["founder", "startup"].includes(userWithProfiles.role);
-        const hasInvestor = Boolean(userWithProfiles.investorProfile) || userWithProfiles.role === "investor";
-
-        const hasRequiredRole = roles.some((r) => {
+        // Strict Check: Primary Role OR explicitly activated in UserRole table
+        const hasPrimaryOrActivatedRole = targetRolesToVerify.some((r) => {
           const norm = r.toLowerCase();
-          if (norm === "freelancer" && hasFreelancer) return true;
-          if ((norm === "client" || norm === "business") && hasClient) return true;
-          if ((norm === "founder" || norm === "startup") && hasFounder) return true;
-          if (norm === "investor" && hasInvestor) return true;
-          return false;
+          if (userWithProfiles.role.toLowerCase() === norm) return true;
+          return userWithProfiles.userRoles?.some(ur => ur.role.toLowerCase() === norm && ur.status === "active");
         });
 
-        if (hasRequiredRole) {
+        if (hasPrimaryOrActivatedRole) {
           return next();
         }
       }
@@ -127,12 +129,9 @@ export const portalRoleMiddleware = (roles: string[]) => {
       return res.status(403).json({
         success: false,
         code: "ROLE_NOT_ACTIVATED",
-        message: `Forbidden: requires an activated [${roles.join(", ")}] profile or workspace permission.`,
+        message: `Forbidden: requires an activated [${targetRolesToVerify.join(", ")}] profile or workspace permission.`,
       });
     } catch (e) {
-      if (allowed.includes(userRole)) {
-        return next();
-      }
       return res.status(403).json({
         success: false,
         message: `Forbidden: requires one of the following roles: [${roles.join(", ")}]`,

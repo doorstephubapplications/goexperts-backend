@@ -1333,6 +1333,7 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           ...sanitized,
           originalPassword: rawPassword,
           role: effectiveRole,
+          activeWorkspace: req.user.activeWorkspace || effectiveRole,
           status: effectiveStatus,
           subscriptionStatus: subscriptionGate.status,
           subscriptionPlanId: subscriptionGate.planId,
@@ -2929,4 +2930,101 @@ export const checkEmailVerification = async (req: Request, res: Response, next: 
     if (!user) return res.json({ success: true, message: 'User not found', data: { verified: false } });
     return res.json({ success: true, message: 'Check complete', data: { verified: user.isVerified } });
   } catch (error) { next(error); }
+};
+
+export const checkActivationEligibility = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { role } = req.query;
+    if (!role) return res.status(400).json(errorResponse('Role is required', 'BAD_REQUEST'));
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { userRoles: true } });
+    if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
+
+    const isActivated = user.userRoles.find(r => r.role === role && r.status === 'active');
+    if (isActivated) return res.status(400).json(errorResponse('Role is already activated', 'ROLE_ALREADY_ACTIVATED'));
+
+    const { resolveUserSubscriptionGate } = await import("../../services/mobile/subscription.service.js");
+    const gate = await resolveUserSubscriptionGate(user.id);
+    const hasPaidPlan = gate.status === 'active' && Number(gate.subscription?.plan?.amount || 0) > 0;
+
+    if (!hasPaidPlan) {
+      return res.status(403).json(errorResponse(
+        'To activate an additional role, please subscribe to an eligible paid monthly or yearly plan.',
+        'PAID_PLAN_REQUIRED_FOR_MULTI_ROLE',
+        [{ requestedRole: role, upgradeRequired: true }]
+      ));
+    }
+
+    return res.status(200).json(successResponse('Eligibility checked', { eligible: true, requestedRole: role as string }));
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const activateRole = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { role } = req.body;
+    if (!role) return res.status(400).json(errorResponse('Role is required', 'BAD_REQUEST'));
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { userRoles: true } });
+    if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
+
+    if (user.role === role) return res.status(400).json(errorResponse('Cannot activate your primary role', 'INVALID_ROLE'));
+
+    const isActivated = user.userRoles.find(r => r.role === role && r.status === 'active');
+    if (isActivated) return res.status(200).json(successResponse('Role already activated', { activated: true, role: role as string }));
+
+    const { resolveUserSubscriptionGate } = await import("../../services/mobile/subscription.service.js");
+    const gate = await resolveUserSubscriptionGate(user.id);
+    const hasPaidPlan = gate.status === 'active' && Number(gate.subscription?.plan?.amount || 0) > 0;
+
+    if (!hasPaidPlan) {
+      return res.status(403).json(errorResponse(
+        'To activate an additional role, please subscribe to an eligible paid monthly or yearly plan.',
+        'PAID_PLAN_REQUIRED_FOR_MULTI_ROLE',
+        [{ requestedRole: role, upgradeRequired: true }]
+      ));
+    }
+
+    await prisma.userRole.create({
+      data: {
+        userId: user.id,
+        role: String(role),
+        status: 'active'
+      }
+    });
+
+    return res.status(200).json(successResponse('Role activated successfully', { activated: true, role: role as string }));
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getAvailableRoles = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { userRoles: true } });
+    if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
+    const subscriptions = await prisma.subscription.findMany({ where: { userId: user.id, status: 'active' }, include: { plan: true } });
+    return res.status(200).json(successResponse('Available roles retrieved', { primaryRole: user.role, activeWorkspace: req.user.activeWorkspace || user.role, activatedRoles: user.userRoles, subscriptions }));
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const switchRole = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { role } = req.body;
+    if (!role) return res.status(400).json(errorResponse('Role is required', 'BAD_REQUEST'));
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { userRoles: true } });
+    if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
+    let isAllowed = user.role === role;
+    if (!isAllowed) {
+      const isActivated = user.userRoles.find(r => r.role === role && r.status === 'active');
+      if (!isActivated) return res.status(403).json(errorResponse('Role is not activated', 'ROLE_NOT_ENTITLED'));
+    }
+    
+    return res.status(200).json(successResponse('Switched workspace successfully', { activeWorkspace: role as string }));
+  } catch (err) {
+    next(err);
+  }
 };

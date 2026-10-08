@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
 import {
   listConversations,
@@ -16,8 +17,9 @@ import {
 
 const router = Router();
 
-// All message routes require authentication
+// All message routes require authentication and valid workspace
 router.use(authMiddleware);
+router.use(portalRoleMiddleware(["freelancer", "client", "founder", "investor"]));
 
 router.get("/conversations", listConversations as any);
 router.post("/conversations", createOrFindConversation as any);

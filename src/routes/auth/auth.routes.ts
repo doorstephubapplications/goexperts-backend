@@ -20,6 +20,10 @@ import {
   updateVerificationData,
   saveOnboardingDraft,
   checkEmailVerification,
+  switchRole,
+  getAvailableRoles,
+  checkActivationEligibility,
+  activateRole,
 } from "../../controllers/auth/auth.controller.js";
 import {
   googleAuthStart,
@@ -53,6 +57,10 @@ router.post("/forgot-password", forgotPasswordLimiter, forgotPassword);
 router.post("/verify-password-reset-otp", forgotPasswordLimiter, verifyPasswordResetOtp);
 router.post("/reset-password", forgotPasswordLimiter, resetPassword);
 router.post("/change-password", authMiddleware as any, changePassword as any);
+router.post("/switch-role", authMiddleware as any, switchRole as any);
+router.post("/activate-role", authMiddleware as any, activateRole as any);
+router.get("/roles", authMiddleware as any, getAvailableRoles as any);
+router.get("/check-activation-eligibility", authMiddleware as any, checkActivationEligibility as any);
 router.get("/me", authMiddleware as any, me as any);
 router.put("/me", authMiddleware as any, updateProfile as any);
 router.put("/profile", authMiddleware as any, updateProfile as any);
