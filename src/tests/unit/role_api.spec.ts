@@ -51,7 +51,7 @@ describe('Role API Contracts - switchRole', () => {
       userRoles: [{ role: 'investor', status: 'active' }]
     });
 
-    await switchRole(req, res);
+    await switchRole(req, res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -71,7 +71,7 @@ describe('Role API Contracts - switchRole', () => {
       userRoles: [{ role: 'investor', status: 'inactive' }]
     });
 
-    await switchRole(req, res);
+    await switchRole(req, res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -86,7 +86,7 @@ describe('Role API Contracts - switchRole', () => {
       userRoles: []
     });
 
-    await switchRole(req, res);
+    await switchRole(req, res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
