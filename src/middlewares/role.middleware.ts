@@ -7,10 +7,12 @@ export const roleMiddleware = (allowedRoles: string[]) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    if (allowedRoles.includes(req.user.role) || (req.user.role === "super_admin" && allowedRoles.includes("admin"))) {
+    const roleStr = String(req.user.role || "").toLowerCase().replace(/\s+/g, "_");
+    if (allowedRoles.includes(req.user.role) || allowedRoles.includes(roleStr) || (roleStr === "super_admin" && allowedRoles.includes("admin"))) {
       return next();
     }
 
+    console.error(`[RoleMiddleware] 403 Forbidden. User ID: ${req.user.id}, Role: "${req.user.role}", Normalized Role: "${roleStr}". Expected one of: [${allowedRoles.join(", ")}]`);
     return res.status(403).json({
       success: false,
       message: `Forbidden: requires one of the following roles: [${allowedRoles.join(", ")}]`,
