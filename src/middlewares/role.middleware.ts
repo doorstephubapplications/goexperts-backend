@@ -7,7 +7,7 @@ export const roleMiddleware = (allowedRoles: string[]) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    if (allowedRoles.includes(req.user.role)) {
+    if (allowedRoles.includes(req.user.role) || (req.user.role === "super_admin" && allowedRoles.includes("admin"))) {
       return next();
     }
 
