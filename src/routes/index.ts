@@ -37,6 +37,7 @@ import {
   upsertFreelancerProfileCompat,
 } from "../common/helpers/prisma-compat.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { roleMiddleware } from "../middlewares/role.middleware.js";
 import { auditMiddleware } from "../middlewares/audit.middleware.js";
 import publicRoutes from "./public/public.routes.js";
 import publicResumeTemplateRouter from "./public/resume-template.routes.js";
@@ -169,39 +170,39 @@ router.use("/help-center", publicRoutes);
 router.use("/v1/help-center", publicRoutes);
 
 // 2.2 Admin operations
-router.use("/admin/users", authMiddleware as any, adminUsersRouter);
-router.use("/v1/admin/users", authMiddleware as any, adminUsersRouter);
-router.use("/admin/push-campaigns", adminPushCampaignsRouter);
-router.use("/v1/admin/push-campaigns", adminPushCampaignsRouter);
-router.use("/admin/dashboard", adminDashboardRouter);
-router.use("/admin/dashboard-old", dashboardRoutes);
-router.use("/admin/dashboard", dashboardInsightsRouter);
-router.use("/admin/notifications", notificationRoutes);
-router.use("/admin/notification-queue", queueRouter);
-router.use("/admin/notification-logs", logsRouter);
-router.use("/admin/media", mediaRoutes);
-router.use("/admin/financials", financialsRoutes);
+router.use("/admin/users", authMiddleware as any, roleMiddleware(["admin"]) as any, adminUsersRouter);
+router.use("/v1/admin/users", authMiddleware as any, roleMiddleware(["admin"]) as any, adminUsersRouter);
+router.use("/admin/push-campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
+router.use("/v1/admin/push-campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
+router.use("/admin/dashboard", authMiddleware as any, roleMiddleware(["admin"]) as any, adminDashboardRouter);
+router.use("/admin/dashboard-old", authMiddleware as any, roleMiddleware(["admin"]) as any, dashboardRoutes);
+router.use("/admin/dashboard", authMiddleware as any, roleMiddleware(["admin"]) as any, dashboardInsightsRouter);
+router.use("/admin/notifications", authMiddleware as any, roleMiddleware(["admin"]) as any, notificationRoutes);
+router.use("/admin/notification-queue", authMiddleware as any, roleMiddleware(["admin"]) as any, queueRouter);
+router.use("/admin/notification-logs", authMiddleware as any, roleMiddleware(["admin"]) as any, logsRouter);
+router.use("/admin/media", authMiddleware as any, roleMiddleware(["admin"]) as any, mediaRoutes);
+router.use("/admin/financials", authMiddleware as any, roleMiddleware(["admin"]) as any, financialsRoutes);
 router.use("/payments", paymentsRoutes);
-router.use("/admin/roles", rolesRoutes);
-router.use("/admin/permissions", permissionsRouter);
-router.use("/admin/jobs", jobsRouter);
-router.use("/admin/automation-rules", automationRulesRouter);
-router.use("/admin/system-ops", systemOpsRouter);
-router.use("/admin/analytics", analyticsRouter);
-router.use("/admin/analytics", analyticsInsightsRouter);
-router.use("/admin/reports", reportsRouter);
-router.use("/admin/reports", reportsInsightsRouter);
-router.use("/admin/marketing", marketingRouter);
-router.use("/admin/system", systemRouter);
-router.use("/admin/settings", settingsRouter);
-router.use("/admin/developer", developerRouter);
-router.use("/admin/kyc", authMiddleware as any, kycRouter); 
-router.use("/admin", adminReferralsRouter);
-router.use("/admin/about", aboutRouter);
-router.use("/admin/support", adminSupportDeskRouter);
-router.use("/admin/withdrawals", adminWithdrawalsRouter);
-router.use("/admin", workflowsRoutes);
-router.use("/admin/resume-templates", authMiddleware as any, resumeTemplateRouter);
+router.use("/admin/roles", authMiddleware as any, roleMiddleware(["admin"]) as any, rolesRoutes);
+router.use("/admin/permissions", authMiddleware as any, roleMiddleware(["admin"]) as any, permissionsRouter);
+router.use("/admin/jobs", authMiddleware as any, roleMiddleware(["admin"]) as any, jobsRouter);
+router.use("/admin/automation-rules", authMiddleware as any, roleMiddleware(["admin"]) as any, automationRulesRouter);
+router.use("/admin/system-ops", authMiddleware as any, roleMiddleware(["admin"]) as any, systemOpsRouter);
+router.use("/admin/analytics", authMiddleware as any, roleMiddleware(["admin"]) as any, analyticsRouter);
+router.use("/admin/analytics", authMiddleware as any, roleMiddleware(["admin"]) as any, analyticsInsightsRouter);
+router.use("/admin/reports", authMiddleware as any, roleMiddleware(["admin"]) as any, reportsRouter);
+router.use("/admin/reports", authMiddleware as any, roleMiddleware(["admin"]) as any, reportsInsightsRouter);
+router.use("/admin/marketing", authMiddleware as any, roleMiddleware(["admin"]) as any, marketingRouter);
+router.use("/admin/system", authMiddleware as any, roleMiddleware(["admin"]) as any, systemRouter);
+router.use("/admin/settings", authMiddleware as any, roleMiddleware(["admin"]) as any, settingsRouter);
+router.use("/admin/developer", authMiddleware as any, roleMiddleware(["admin"]) as any, developerRouter);
+router.use("/admin/kyc", authMiddleware as any, roleMiddleware(["admin"]) as any, kycRouter); 
+router.use("/admin", authMiddleware as any, roleMiddleware(["admin"]) as any, adminReferralsRouter);
+router.use("/admin/about", authMiddleware as any, roleMiddleware(["admin"]) as any, aboutRouter);
+router.use("/admin/support", authMiddleware as any, roleMiddleware(["admin"]) as any, adminSupportDeskRouter);
+router.use("/admin/withdrawals", authMiddleware as any, roleMiddleware(["admin"]) as any, adminWithdrawalsRouter);
+router.use("/admin", authMiddleware as any, roleMiddleware(["admin"]) as any, workflowsRoutes);
+router.use("/admin/resume-templates", authMiddleware as any, roleMiddleware(["admin"]) as any, resumeTemplateRouter);
 
 
 
@@ -229,30 +230,30 @@ import {
 } from "../controllers/admin/careers.controller.js";
 
 // Contact CMS & Enquiries Admin Routes
-router.get("/admin/contact-page", getAdminContactPage);
-router.put("/admin/contact-page/draft", saveContactDraft);
-router.post("/admin/contact-page/publish", publishContactPage);
+router.get("/admin/contact-page", authMiddleware as any, roleMiddleware(["admin"]) as any, getAdminContactPage);
+router.put("/admin/contact-page/draft", authMiddleware as any, roleMiddleware(["admin"]) as any, saveContactDraft);
+router.post("/admin/contact-page/publish", authMiddleware as any, roleMiddleware(["admin"]) as any, publishContactPage);
 
-router.get("/admin/contact-enquiries", listContactEnquiries);
-router.get("/admin/contact-enquiries/:id", getContactEnquiryById);
-router.patch("/admin/contact-enquiries/:id", updateContactEnquiry);
+router.get("/admin/contact-enquiries", authMiddleware as any, roleMiddleware(["admin"]) as any, listContactEnquiries);
+router.get("/admin/contact-enquiries/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, getContactEnquiryById);
+router.patch("/admin/contact-enquiries/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, updateContactEnquiry);
 
 // Careers CMS, Jobs & Applications Admin Routes
-router.get("/admin/careers-page", getAdminCareersPage);
-router.put("/admin/careers-page/draft", saveCareersDraft);
-router.post("/admin/careers-page/publish", publishCareersPage);
+router.get("/admin/careers-page", authMiddleware as any, roleMiddleware(["admin"]) as any, getAdminCareersPage);
+router.put("/admin/careers-page/draft", authMiddleware as any, roleMiddleware(["admin"]) as any, saveCareersDraft);
+router.post("/admin/careers-page/publish", authMiddleware as any, roleMiddleware(["admin"]) as any, publishCareersPage);
 
-router.get("/admin/careers/jobs", listAdminJobs);
-router.post("/admin/careers/jobs", createJob);
-router.put("/admin/careers/jobs/:id", updateJob);
-router.delete("/admin/careers/jobs/:id", deleteJob);
+router.get("/admin/careers/jobs", authMiddleware as any, roleMiddleware(["admin"]) as any, listAdminJobs);
+router.post("/admin/careers/jobs", authMiddleware as any, roleMiddleware(["admin"]) as any, createJob);
+router.put("/admin/careers/jobs/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, updateJob);
+router.delete("/admin/careers/jobs/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, deleteJob);
 
-router.get("/admin/careers/applications", listCareerApplications);
-router.get("/admin/careers/applications/:id", getCareerApplicationById);
-router.patch("/admin/careers/applications/:id", updateCareerApplication);
+router.get("/admin/careers/applications", authMiddleware as any, roleMiddleware(["admin"]) as any, listCareerApplications);
+router.get("/admin/careers/applications/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, getCareerApplicationById);
+router.patch("/admin/careers/applications/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, updateCareerApplication);
 
 // Dedicated Admin Legal Policies APIs
-router.get("/admin/legal-policies/:policyId", async (req, res, next) => {
+router.get("/admin/legal-policies/:policyId", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const policyId = req.params.policyId;
     const dbNameMap: Record<string, string> = { "legal": "Legal", "privacy": "Privacy", "refund-policy": "Refund Policy" };
@@ -266,7 +267,7 @@ router.get("/admin/legal-policies/:policyId", async (req, res, next) => {
   }
 });
 
-router.put("/admin/legal-policies/:policyId", async (req, res, next) => {
+router.put("/admin/legal-policies/:policyId", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const policyId = req.params.policyId;
     const dbNameMap: Record<string, string> = { "legal": "Legal", "privacy": "Privacy", "refund-policy": "Refund Policy" };
@@ -2409,6 +2410,7 @@ adminFoundersRouter.delete("/:id", async (req: Request, res: Response, next: Nex
 router.use(
   "/admin/freelancers",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   auditMiddleware("mutate", "freelancers") as any,
   adminFreelancersRouter
 );
@@ -2416,6 +2418,7 @@ router.use(
 router.use(
   "/admin/skills",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   auditMiddleware("mutate", "skills") as any,
   adminSkillsRouter
 );
@@ -2423,6 +2426,7 @@ router.use(
 router.use(
   "/admin/categories",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   auditMiddleware("mutate", "industries") as any,
   adminCategoriesRouter
 );
@@ -2430,6 +2434,7 @@ router.use(
 router.use(
   "/admin/clients",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   auditMiddleware("mutate", "clients") as any,
   adminClientsRouter
 );
@@ -2437,6 +2442,7 @@ router.use(
 router.use(
   "/admin/investors",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   auditMiddleware("mutate", "investors") as any,
   adminInvestorsRouter
 );
@@ -2444,16 +2450,17 @@ router.use(
 router.use(
   "/admin/founders",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   auditMiddleware("mutate", "founders") as any,
   adminFoundersRouter
 );
 
-router.use("/admin/about-page", authMiddleware as any, aboutRouter);
-router.use("/admin/faqs", authMiddleware as any, faqAdminRouter);
-router.use("/admin/content/footer", authMiddleware as any, footerAdminRouter);
+router.use("/admin/about-page", authMiddleware as any, roleMiddleware(["admin"]) as any, aboutRouter);
+router.use("/admin/faqs", authMiddleware as any, roleMiddleware(["admin"]) as any, faqAdminRouter);
+router.use("/admin/content/footer", authMiddleware as any, roleMiddleware(["admin"]) as any, footerAdminRouter);
 
 // Custom Override for Project By ID to hydrate Relational Data
-router.get("/admin/projects/:id", authMiddleware as any, async (req, res, next) => {
+router.get("/admin/projects/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const project = await prisma.project.findUnique({ where: { id: req.params.id } });
     if (!project) return res.status(404).json({ success: false, message: "Project not found" });
@@ -2571,6 +2578,7 @@ Object.entries(tableModelMapping).forEach(([tableName, modelName]) => {
 router.get(
   "/admin/invoices/:id/download",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   // audit read
   auditMiddleware("read", "invoices") as any,
   async (req, res, next) => {
@@ -2586,6 +2594,7 @@ router.get(
 router.post(
   "/admin/invoices/:id/resend",
   authMiddleware as any,
+  roleMiddleware(["admin"]) as any,
   // audit mutate
   auditMiddleware("mutate", "invoices") as any,
   async (req, res, next) => {
@@ -2598,7 +2607,7 @@ router.post(
   }
 );
 
-router.post("/admin/users/:id/remind-kyc", authMiddleware as any, async (req, res, next) => {
+router.post("/admin/users/:id/remind-kyc", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -2610,7 +2619,7 @@ router.post("/admin/users/:id/remind-kyc", authMiddleware as any, async (req, re
   }
 });
 
-router.post("/admin/users/:id/remind-profile", authMiddleware as any, async (req, res, next) => {
+router.post("/admin/users/:id/remind-profile", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -2622,7 +2631,7 @@ router.post("/admin/users/:id/remind-profile", authMiddleware as any, async (req
   }
 });
 
-router.post("/admin/users/:id/remind-onboarding", authMiddleware as any, async (req, res, next) => {
+router.post("/admin/users/:id/remind-onboarding", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -2634,7 +2643,7 @@ router.post("/admin/users/:id/remind-onboarding", authMiddleware as any, async (
   }
 });
 
-router.post("/admin/users/:id/remind-registration", authMiddleware as any, async (req, res, next) => {
+router.post("/admin/users/:id/remind-registration", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -2646,7 +2655,7 @@ router.post("/admin/users/:id/remind-registration", authMiddleware as any, async
   }
 });
 
-router.get("/admin/users/unread-counts", authMiddleware as any, (req, res) => {
+router.get("/admin/users/unread-counts", authMiddleware as any, roleMiddleware(["admin"]) as any, (req, res) => {
   res.json({
     success: true,
     data: { freelancers: 0, clients: 0, investors: 0, founders: 0 }
@@ -2675,7 +2684,7 @@ function addViewedId(id: string) {
   }
 }
 
-router.get("/admin/users/unread-list", authMiddleware as any, async (req, res, next) => {
+router.get("/admin/users/unread-list", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
   try {
     const viewedIds = getViewedIds();
     const unreadUsers = await prisma.user.findMany({
@@ -2703,7 +2712,7 @@ router.get("/admin/users/unread-list", authMiddleware as any, async (req, res, n
   }
 });
 
-router.post("/admin/users/:id/mark-viewed", authMiddleware as any, (req, res) => {
+router.post("/admin/users/:id/mark-viewed", authMiddleware as any, roleMiddleware(["admin"]) as any, (req, res) => {
   addViewedId(req.params.id);
   res.json({ success: true, message: "Marked viewed" });
 });

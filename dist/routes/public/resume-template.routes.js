@@ -1,6 +1,0 @@
-import { Router } from "express";
-import { getPublicResumeTemplates, getResumeRenderData } from "../../controllers/public/resume-template.controller.js";
-const publicResumeTemplateRouter = Router();
-publicResumeTemplateRouter.get("/", getPublicResumeTemplates);
-publicResumeTemplateRouter.get("/render/:token", getResumeRenderData);
-export default publicResumeTemplateRouter;

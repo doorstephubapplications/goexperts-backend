@@ -1802,6 +1802,7 @@ model Proposal {
   freelancer   User       @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
   project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, freelancerId], map: "proposal_uniqueness")
   @@index([freelancerId], map: "proposals_freelancer_id_fkey")
   @@index([projectId], map: "proposals_project_id_fkey")
   @@map("proposals")

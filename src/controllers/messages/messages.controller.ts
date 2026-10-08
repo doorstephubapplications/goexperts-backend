@@ -406,7 +406,8 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
          message: initialMessage.length > 50 ? initialMessage.substring(0, 50) + "..." : initialMessage,
          contextType: contextType,
          contextId: actualContextId,
-         actionUrl: "/business/messages?conv=" + conv.id
+         actionUrl: "/business/messages?conv=" + conv.id,
+         metadata: { sender_name: req.user?.fullName || "A user" }
       } as any);
     }
 
@@ -605,7 +606,8 @@ export const acceptConnection = async (req: AuthenticatedRequest, res: Response,
         title: "Connection Accepted",
         message: `Your connection request was accepted.`,
         contextType: "CONNECTION",
-        contextId: conv.id
+        contextId: conv.id,
+        metadata: { sender_name: req.user?.fullName || "A user" }
       });
     } catch (e) {}
 

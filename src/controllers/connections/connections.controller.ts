@@ -170,7 +170,8 @@ export const acceptInvitation = async (req: AuthenticatedRequest, res: Response,
         title,
         message: body,
         contextType: 'CONNECTION',
-        contextId: id
+        contextId: id,
+        metadata: { sender_name: invitation.receiver.fullName }
       });
     } catch(err) {}
 
@@ -226,6 +227,20 @@ export const rejectInvitation = async (req: AuthenticatedRequest, res: Response,
         invitationId: id
       });
     } catch (err) {}
+
+    // Emit backend notification for rejection so email template triggers
+    try {
+      const { emitNotification } = await import('../../services/notifications/notification-events.service.js');
+      await emitNotification({
+        userId: invitation.senderId,
+        type: 'CONNECTION_REJECTED',
+        title: 'Connection Request Declined',
+        message: 'Your connection request was declined.',
+        contextType: 'CONNECTION',
+        contextId: id,
+        metadata: { rejector_name: req.user?.fullName || "A user" }
+      });
+    } catch(err) {}
 
     const senderUser = await prisma.user.findUnique({ where: { id: invitation.senderId } });
     const receiverUser = await prisma.user.findUnique({ where: { id: invitation.receiverId } });

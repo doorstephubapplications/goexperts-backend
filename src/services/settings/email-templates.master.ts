@@ -922,6 +922,63 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     <a href="{{security_link}}" style="background-color: #991b1b; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Secure My Account Now &rarr;</a>
   </div>
 </div>`,
+  },
+  {
+    id: "tpl_message_received",
+    name: "New Message Received",
+    module: "General",
+    fromName: "Go Experts Messages",
+    subject: "New message from {{sender_name}} 💬",
+    variables: [
+      "{full_name}",
+      "{sender_name}",
+      "{message}",
+      "{action_link}"
+    ],
+    body: "Hi {{full_name}},\n\nYou have received a new message from {{sender_name}}.\n\n\"{{message}}\"\n\nReply: {{action_link}}\n\nThe Go Experts Team",
+    html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; padding: 32px 24px;">
+  <h1 style="color: #0f172a; font-size: 22px; font-weight: 800; margin-top: 0;">New Message Received 💬</h1>
+  <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
+  <p style="font-size: 15px; color: #4a5568;">You have received a new message from <strong>{{sender_name}}</strong>.</p>
+  
+  <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin: 20px 0;">
+    <p style="margin: 0; font-size: 14px; font-style: italic; color: #475569;">"{{message}}"</p>
+  </div>
+  
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="{{action_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Reply to {{sender_name}} &rarr;</a>
+  </div>
+  
+  <p style="font-size: 13px; color: #718096; margin-top: 30px;">The Go Experts Team</p>
+</div>`,
     isDefault: true,
   },
+  {
+    id: "tpl_connection_accepted",
+    name: "Connection Accepted",
+    module: "General",
+    fromName: "Go Experts Notifications",
+    subject: "{{sender_name}} accepted your connection request! 🎉",
+    variables: [
+      "{full_name}",
+      "{sender_name}",
+      "{action_link}"
+    ],
+    body: "Hi {{full_name}},\n\nGood news! {{sender_name}} just accepted your connection request.\n\nView Connection: {{action_link}}\n\nThe Go Experts Team",
+    html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; padding: 32px 24px;">
+  <h1 style="color: #0f172a; font-size: 22px; font-weight: 800; margin-top: 0;">Connection Accepted! 🎉</h1>
+  <p style="font-size: 15px; color: #4a5568;">Hi <strong>{{full_name}}</strong>,</p>
+  
+  <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+    <p style="margin: 0; color: #15803d; font-size: 14px;">Good news! <strong>{{sender_name}}</strong> just accepted your connection request. You can now chat directly and collaborate on projects.</p>
+  </div>
+  
+  <div style="text-align: center; margin: 28px 0;">
+    <a href="{{action_link}}" style="background-color: #38B2AC; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Message {{sender_name}} &rarr;</a>
+  </div>
+  
+  <p style="font-size: 13px; color: #718096; margin-top: 30px;">The Go Experts Team</p>
+</div>`,
+    isDefault: true,
+  }
 ];

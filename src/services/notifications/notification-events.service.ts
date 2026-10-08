@@ -220,8 +220,22 @@ export const emitNotification = async (payload: NotificationPayload) => {
           ((pref?.emailEnabled ?? true) && (EMAIL_ELIGIBLE_EVENTS.has(payload.type) || priority === "urgent" || priority === "high"));
 
         if (shouldSendEmail && user.email) {
-          const emailHtml = buildNotificationHtml(payload.title, payload.message, actionUrl);
-          const emailResult = await sendEmail(user.email, `[Go Experts] ${payload.title}`, emailHtml);
+          let emailHtml = "";
+          let emailSubject = `[Go Experts] ${payload.title}`;
+
+          // Import here to avoid circular dependency issues at file level
+          const { renderEmailTemplate } = await import("../settings/settings.service.js");
+          const templateId = `tpl_${payload.type.toLowerCase()}`;
+          const result = await renderEmailTemplate(templateId, {
+            full_name: user.fullName,
+            action_link: actionUrl,
+            message: payload.message,
+            ...payload.metadata,
+          });
+          emailHtml = result.html;
+          emailSubject = result.subject;
+
+          const emailResult = await sendEmail(user.email, emailSubject, emailHtml);
           const status = emailResult === true ? "delivered" : "failed";
           const errorMessage = emailResult === true ? null : String(emailResult);
 

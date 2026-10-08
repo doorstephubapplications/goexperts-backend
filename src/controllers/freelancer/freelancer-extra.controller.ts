@@ -3,6 +3,7 @@ import { prisma } from "../../config/database.js";
 import { sendEmail } from "../../services/mobile/email.service.js";
 import { renderEmailTemplate } from "../../services/settings/settings.service.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
+import { assertActionEntitlement, recordActionUsage, ActionGateError } from "../../services/subscription/entitlement.service.js";
 import {
   HttpError,
   debitWalletForSelf,
@@ -94,8 +95,11 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       return res.status(400).json({ success: false, message: "projectId and bidAmount are required" });
     }
 
+    // 1. Authoritative Backend Entitlement/Quota Gate
+    const entitlement = await assertActionEntitlement(userId, "freelancer", "submitProposal");
+
     const result = await prisma.$transaction(async (tx: any) => {
-      // 1. Validate Project Eligibility
+      // 2. Validate Project Eligibility
       const project = await tx.project.findFirst({ 
         where: { id: projectId, deletedAt: null } 
       });
@@ -107,7 +111,7 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       const freelancerProfile = await tx.freelancerProfile.findUnique({ where: { userId }});
       if (project.client === userId) throw new Error("Cannot bid on your own project");
 
-      // 2. Validate Proposal Duplication (Rule: One ACTIVE proposal per project)
+      // 3. Validate Proposal Duplication (Rule: One ACTIVE proposal per project)
       const existing = await tx.proposal.findFirst({
         where: { 
           projectId, 
@@ -119,7 +123,21 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       
       if (existing) throw new Error("You already have an active proposal for this project.");
 
-      // 3. Create Proposal
+      // 4. Consume Quota Atomically within Transaction (if applicable)
+      if (entitlement.subscriptionId) {
+        const used = await recordActionUsage(entitlement.subscriptionId, "submitProposal", tx);
+        if (entitlement.quotaLimit !== -1 && used > entitlement.quotaLimit) {
+          throw new ActionGateError("submitProposal", "QUOTA_EXHAUSTED", {
+            role: "freelancer",
+            limit: entitlement.quotaLimit,
+            used: used,
+            planName: entitlement.planName,
+            message: `Your proposal quota for this billing cycle has been reached (${used}/${entitlement.quotaLimit}). Upgrade to All Access or renew your plan to continue.`
+          });
+        }
+      }
+
+      // 5. Create Proposal
       const proposal = await tx.proposal.create({
         data: {
           projectId,
@@ -130,8 +148,7 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
         }
       });
 
-      // 4. Notification to Client
-      // Determine actual client user ID (project.client might be a profile ID or user ID)
+      // 6. Notification to Client
       let targetUserId = project.client;
       const cProfile = await tx.clientProfile.findUnique({ where: { id: project.client } });
       if (cProfile) targetUserId = cProfile.userId;
@@ -149,42 +166,71 @@ export const createFreelancerProposal = async (req: any, res: any, next: any) =>
       });
 
       const targetUser = await tx.user.findUnique({ where: { id: targetUserId } });
-      if (targetUser?.email) {
-        try {
-          const rendered = await renderEmailTemplate("tpl_proposal_received", {
-            full_name: targetUser.fullName || 'Client',
-            client_name: targetUser.fullName || 'Client',
-            project_title: project.title,
-            freelancer_name: 'A freelancer',
-            bid_amount: bidAmount,
-            proposals_url: `${process.env.FRONTEND_URL || 'http://localhost:5175'}/business/applications?projectId=${projectId}`,
-            app_url: process.env.FRONTEND_URL || 'http://localhost:5175',
-          }).catch(() => ({
-            subject: "New Proposal Received - Go Experts",
-            html: `<p>Hi ${targetUser.fullName || 'Client'},</p><p>A freelancer has submitted a proposal for <strong>"${project.title}"</strong>. Bid: ₹${bidAmount}</p>`,
-          }));
-
-          await sendEmail(targetUser.email, rendered.subject, rendered.html);
-        } catch (err) {
-          console.error("Failed to send proposal email:", err);
-        }
-      }
-
-      // 5. Create Activity (Optional: Add if ProjectActivity table exists)
-      // Since it doesn't explicitly exist as ProjectActivity, we can just use the Admin ActivityLog for now 
-      // or rely on Notification/Status. I'll omit custom ProjectActivity table unless strictly required.
-
-      return proposal;
+      
+      return {
+        proposal,
+        emailPayload: targetUser?.email ? {
+          email: targetUser.email,
+          fullName: targetUser.fullName,
+          projectTitle: project.title,
+          bidAmount: bidAmount,
+          projectId: projectId,
+        } : null
+      };
     });
 
-    res.json({ success: true, data: result });
+    if (result.emailPayload) {
+      const { email, fullName, projectTitle, bidAmount, projectId } = result.emailPayload;
+      try {
+        const rendered = await renderEmailTemplate("tpl_proposal_received", {
+          full_name: fullName || 'Client',
+          client_name: fullName || 'Client',
+          project_title: projectTitle,
+          freelancer_name: 'A freelancer',
+          bid_amount: bidAmount,
+          proposals_url: `${process.env.FRONTEND_URL || 'http://localhost:5175'}/business/applications?projectId=${projectId}`,
+          app_url: process.env.FRONTEND_URL || 'http://localhost:5175',
+        }).catch(() => ({
+          subject: "New Proposal Received - Go Experts",
+          html: `<p>Hi ${fullName || 'Client'},</p><p>A freelancer has submitted a proposal for <strong>"${projectTitle}"</strong>. Bid: ₹${bidAmount}</p>`,
+        }));
+
+        await sendEmail(email, rendered.subject, rendered.html);
+      } catch (err) {
+        console.error("Failed to send proposal email:", err);
+      }
+    }
+
+    res.json({ success: true, data: result.proposal });
   } catch (err: any) {
+    if (err instanceof ActionGateError) {
+      return res.status(403).json({
+        success: false,
+        code: err.code,
+        action: err.action,
+        message: err.message,
+        details: err.details,
+      });
+    }
+    
+    // Handle Prisma Unique Constraint Violation (P2002) for proposal duplicates
+    if (err.code === 'P2002' && err.meta?.target === 'proposal_uniqueness') {
+      return res.status(403).json({ success: false, message: "You already have an active proposal for this project." });
+    }
+    if (err.code === 'P2002' && typeof err.meta?.target === 'string' && err.meta.target.includes('freelancer_id') && err.meta.target.includes('project_id')) {
+       return res.status(403).json({ success: false, message: "You already have an active proposal for this project." });
+    }
+    // Prisma returns target as an array of column names in some DBs, or index name
+    if (err.code === 'P2002' && Array.isArray(err.meta?.target) && err.meta.target.includes('projectId') && err.meta.target.includes('freelancerId')) {
+       return res.status(403).json({ success: false, message: "You already have an active proposal for this project." });
+    }
+    
     // Determine 403 vs 400
     const msg = err.message;
-    if (msg.includes("Project is no longer") || msg.includes("Cannot bid")) {
+    if (msg?.includes("Project is no longer") || msg?.includes("Cannot bid") || msg?.includes("already have an active proposal")) {
       return res.status(403).json({ success: false, message: msg });
     }
-    return res.status(400).json({ success: false, message: msg });
+    return res.status(400).json({ success: false, message: msg || "Failed to submit proposal" });
   }
 };
 
