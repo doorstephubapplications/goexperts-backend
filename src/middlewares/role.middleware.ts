@@ -132,6 +132,7 @@ export const portalRoleMiddleware = (roles: string[]) => {
         message: `Forbidden: requires an activated [${targetRolesToVerify.join(", ")}] profile or workspace permission.`,
       });
     } catch (e) {
+      console.error("[portalRoleMiddleware] Crash:", e);
       return res.status(403).json({
         success: false,
         message: `Forbidden: requires one of the following roles: [${roles.join(", ")}]`,
