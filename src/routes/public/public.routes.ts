@@ -2836,7 +2836,7 @@ router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction)
     const setting = await prisma.setting.findUnique({
       where: { key: "ui_workspace_badges" }
     });
-    let data = { current: "Current", activated: "Activated", upgrade: "Upgrade" };
+    let data = { current: "Current", activated: "Activated", upgrade: "Upgrade", primary: "Primary" };
     if (setting && setting.value) {
       try {
         data = JSON.parse(setting.value);
