@@ -943,7 +943,6 @@ export async function purchaseSubscriptionForSelf(
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.subscription.updateMany({ where: { userId, status: "active" }, data: { status: "expired" } });
 
     const now = new Date();
     const endDate = addDuration(now, plan.duration);
@@ -1010,3 +1009,4 @@ export async function listSubscriptionsForUser(userId: string) {
     orderBy: { createdAt: "desc" },
   });
 }
+

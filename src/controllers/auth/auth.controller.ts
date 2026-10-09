@@ -2958,7 +2958,7 @@ export const checkActivationEligibility = async (req: AuthenticatedRequest, res:
 
     const existingAdditionalRoles = user.userRoles.filter(r => r.status === 'active' && r.role !== user.role);
     const planName = String(gate.subscription?.plan?.name || "").toLowerCase();
-    const allowedAdditionalRoles = planName.includes("all access") ? 3 : 1;
+    const allowedAdditionalRoles = 3;
 
     if (existingAdditionalRoles.length >= allowedAdditionalRoles) {
       return res.status(403).json(errorResponse(
@@ -3000,7 +3000,7 @@ export const activateRole = async (req: AuthenticatedRequest, res: Response, nex
 
     const existingAdditionalRoles = user.userRoles.filter(r => r.status === 'active' && r.role !== user.role);
     const planName = String(gate.subscription?.plan?.name || "").toLowerCase();
-    const allowedAdditionalRoles = planName.includes("all access") ? 3 : 1; 
+    const allowedAdditionalRoles = 3; 
 
     if (existingAdditionalRoles.length >= allowedAdditionalRoles) {
       return res.status(403).json(errorResponse(
@@ -3028,7 +3028,19 @@ export const getAvailableRoles = async (req: AuthenticatedRequest, res: Response
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { userRoles: true } });
     if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
     const subscriptions = await prisma.subscription.findMany({ where: { userId: user.id, status: 'active' }, include: { plan: true } });
-    return res.status(200).json(successResponse('Available roles retrieved', { primaryRole: user.role, activeWorkspace: req.user.activeWorkspace || user.role, activatedRoles: user.userRoles, subscriptions }));
+    const allRoles = ["freelancer", "client", "investor", "founder"];
+      const roles = allRoles.map(r => {
+        const ur = user.userRoles.find(x => x.role === r);
+        const isPrimary = user.role === r;
+        const isActivated = isPrimary || (ur && ur.status === "active") || false;
+        return {
+          role: r,
+          isPrimary,
+          isActivated,
+          status: isActivated ? "active" : "inactive"
+        };
+      });
+      return res.status(200).json(successResponse("Available roles retrieved", { primaryRole: user.role, activeWorkspace: req.user.activeWorkspace || user.role, activatedRoles: user.userRoles, subscriptions, roles }));
   } catch (err) {
     next(err);
   }
@@ -3051,5 +3063,7 @@ export const switchRole = async (req: AuthenticatedRequest, res: Response, next:
     next(err);
   }
 };
+
+
 
 
