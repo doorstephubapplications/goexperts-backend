@@ -93,6 +93,7 @@ function getFriendlyErrorMessage(err: Error | ApiError, statusCode: number) {
 
 function getErrorStatusCode(err: Error | ApiError) {
   if (err instanceof ApiError) return err.statusCode;
+  if ((err as any).statusCode) return (err as any).statusCode;
 
   const code = (err as any).code;
   const message = err.message || "";
@@ -120,3 +121,4 @@ export const errorMiddleware = (
 
   return sendResponse(res, statusCode, false, message, undefined, { errors });
 };
+

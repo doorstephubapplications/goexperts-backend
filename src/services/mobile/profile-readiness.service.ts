@@ -4,6 +4,7 @@ import { getVerificationStats } from '../../common/helpers/verification.js';
 
 export class ActionRequirementsError extends Error {
   public code = "ACTION_REQUIREMENTS_MISSING";
+  public statusCode = 400;
   public action: string;
   public missing: any[];
 
@@ -17,6 +18,7 @@ export class ActionRequirementsError extends Error {
 
 export class PaymentReadinessError extends Error {
   public code = 'PAYMENT_PROFILE_REQUIREMENTS_MISSING';
+  public statusCode = 400;
   public profileCompletion: number;
   public kycStatus: string;
   public missing: string[];
@@ -89,3 +91,4 @@ export const requirePaymentReadiness = async (userId: string) => {
 
   return { profileCompletion, kycStatus: 'APPROVED' };
 };
+
