@@ -189,7 +189,7 @@ const buildAuthPayload = async (user: AuthUser) => {
 
   try {
     const [c, s, isSocialRes, membership] = await Promise.all([
-      resolveProfileCompletion(user.id, (req.user as any).activeWorkspace).catch(() => null),
+      resolveProfileCompletion(user.id, user.role).catch(() => null),
       resolveUserSubscriptionGate(user.id).catch(() => null),
       resolveIsSocialLogin(user).catch(() => false),
       (prisma as any).teamMember.findFirst({
