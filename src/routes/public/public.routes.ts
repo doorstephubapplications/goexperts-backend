@@ -2831,21 +2831,66 @@ router.get("/founders/:id", async (req: Request, res: Response, next: NextFuncti
   }
 });
 
+import jwt from "jsonwebtoken";
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+
 router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const setting = await prisma.setting.findUnique({
-      where: { key: "ui_workspace_badges" }
-    });
-    let data = { current: "Current", activated: "Activated", upgrade: "Upgrade", primary: "Primary" };
-    if (setting && setting.value) {
-      try {
-        data = JSON.parse(setting.value);
-      } catch (e) {}
+    try {
+      const setting = await prisma.setting.findUnique({
+        where: { key: "ui_workspace_badges" }
+      });
+      let baseLabels = { current: "Current", activated: "Activated", upgrade: "Upgrade", primary: "Primary" };
+      if (setting && setting.value) {
+        try {
+          baseLabels = JSON.parse(setting.value);
+        } catch (e) {}
+      }
+      
+      const currentRole = req.query.currentRole as string;
+      const visitedStr = req.query.visitedRoles as string;
+      const visitedRoles = visitedStr ? visitedStr.split(",") : [];
+      
+      let user: any = null;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        try {
+          const token = authHeader.split(" ")[1];
+          const decoded = jwt.verify(token, JWT_SECRET);
+          user = await prisma.user.findUnique({ where: { id: (decoded as any).id } });
+        } catch (e) {}
+      }
+      
+      let primaryRole = "freelancer";
+      let dbActivated: string[] = ["freelancer"];
+      
+      if (user) {
+        primaryRole = user.role || "freelancer";
+        dbActivated = [primaryRole];
+        if (user.activatedRoles && Array.isArray(user.activatedRoles)) {
+           user.activatedRoles.forEach((r: string) => dbActivated.push(r));
+        }
+      }
+      
+      const roles = ["freelancer", "client", "founder", "investor"];
+      const tags: Record<string, string> = {};
+      
+      for (const r of roles) {
+        if (r === currentRole) {
+          tags[r] = baseLabels.current;
+        } else if (r === primaryRole) {
+          tags[r] = baseLabels.primary;
+        } else if (dbActivated.includes(r) || visitedRoles.includes(r)) {
+          tags[r] = baseLabels.activated;
+        } else {
+          tags[r] = baseLabels.upgrade;
+        }
+      }
+
+      return res.json({ success: true, labels: baseLabels, data: tags });
+    } catch (error) {
+      next(error);
     }
-    return res.json({ success: true, data });
-  } catch (error) {
-    next(error);
-  }
-});
+  });
 
 export default router;
+
