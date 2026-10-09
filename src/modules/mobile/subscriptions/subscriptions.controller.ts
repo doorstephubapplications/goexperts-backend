@@ -112,3 +112,4 @@ export const getHistory = async (req: AuthRequest, res: Response, next: NextFunc
     next(error);
   }
 };
+

@@ -231,7 +231,7 @@ export const activateFreePlanAfterKyc = async (userId: string) => {
 };
 
 
-export const getKycApprovedCurrentSubscription = async (userId: string) => {
+export const getKycApprovedCurrentSubscription = async (userId: string, role?: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -248,7 +248,11 @@ export const getKycApprovedCurrentSubscription = async (userId: string) => {
   if (!verificationStats.kycApproved) return null;
 
   return prisma.subscription.findFirst({
-    where: { userId, status: 'active' },
+    where: { 
+      userId, 
+      status: 'active',
+      ...(role ? { plan: { role } } : {}) 
+    },
     include: { plan: true },
     orderBy: { createdAt: 'desc' },
   });

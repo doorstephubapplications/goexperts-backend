@@ -2845,10 +2845,7 @@ router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction)
           baseLabels = JSON.parse(setting.value);
         } catch (e) {}
       }
-      
       const currentRole = req.query.currentRole as string;
-      const visitedStr = req.query.visitedRoles as string;
-      const visitedRoles = visitedStr ? visitedStr.split(",") : [];
       
       let user: any = null;
       const authHeader = req.headers.authorization;
@@ -2856,18 +2853,20 @@ router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction)
         try {
           const token = authHeader.split(" ")[1];
           const decoded = jwt.verify(token, JWT_SECRET);
-          user = await prisma.user.findUnique({ where: { id: (decoded as any).id } });
+          user = await prisma.user.findUnique({ where: { id: (decoded as any).id }, include: { userRoles: true } });
         } catch (e) {}
       }
       
-      let primaryRole = "freelancer";
-      let dbActivated: string[] = ["freelancer"];
+      let primaryRole = "";
+      let dbActivated: string[] = [];
       
       if (user) {
         primaryRole = user.role || "freelancer";
         dbActivated = [primaryRole];
-        if (user.activatedRoles && Array.isArray(user.activatedRoles)) {
-           user.activatedRoles.forEach((r: string) => dbActivated.push(r));
+        if (user.userRoles && Array.isArray(user.userRoles)) {
+           user.userRoles.forEach((ur: any) => {
+             if (ur.status === 'active') dbActivated.push(ur.role);
+           });
         }
       }
       
@@ -2875,14 +2874,18 @@ router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction)
       const tags: Record<string, string> = {};
       
       for (const r of roles) {
-        if (r === currentRole) {
-          tags[r] = baseLabels.current;
-        } else if (r === primaryRole) {
-          tags[r] = baseLabels.primary;
-        } else if (dbActivated.includes(r) || visitedRoles.includes(r)) {
-          tags[r] = baseLabels.activated;
+        if (!user) {
+          tags[r] = baseLabels.upgrade; // If not logged in, they haven't activated anything
         } else {
-          tags[r] = baseLabels.upgrade;
+          if (r === currentRole) {
+            tags[r] = baseLabels.current;
+          } else if (r === primaryRole) {
+            tags[r] = baseLabels.primary;
+          } else if (dbActivated.includes(r)) {
+            tags[r] = baseLabels.activated;
+          } else {
+            tags[r] = baseLabels.upgrade;
+          }
         }
       }
 
@@ -2893,4 +2896,6 @@ router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction)
   });
 
 export default router;
+
+
 

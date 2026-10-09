@@ -45,3 +45,4 @@ export const cancelPlan = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const getUsage = async (req: AuthRequest, res: Response, next: NextFunction) => res.json(successResponse('Usage retrieved', { proposalsLeft: 10 }));
 export const getBenefits = async (req: AuthRequest, res: Response, next: NextFunction) => res.json(successResponse('Benefits retrieved', []));
+
