@@ -2831,6 +2831,21 @@ router.get("/founders/:id", async (req: Request, res: Response, next: NextFuncti
   }
 });
 
+router.get("/ui-labels", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { key: "ui_workspace_badges" }
+    });
+    let data = { current: "Current", activated: "Activated", upgrade: "Upgrade" };
+    if (setting && setting.value) {
+      try {
+        data = JSON.parse(setting.value);
+      } catch (e) {}
+    }
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
-
-

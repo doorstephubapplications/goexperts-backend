@@ -348,7 +348,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           freelancerProfile: true,
           clientProfile: true,
           investorProfile: true,
-          founderProfile: true,
+          founderProfile: true, userRoles: true,
         },
       }).catch(() => null);
     } catch {
@@ -483,7 +483,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const effectiveStatus = isPlanExpired ? 'inactive' : user.status;
     const kycReadiness = buildKycReadiness(user);
 
-    const ownerActivatedRoles: string[] = [];
+      const ownerActivatedRoles: string[] = [];
+      if (user.userRoles && Array.isArray(user.userRoles)) { user.userRoles.forEach((ur: any) => { if (ur.status === "active") ownerActivatedRoles.push(ur.role); }); }
     if (user.freelancerProfile || user.role === "freelancer") ownerActivatedRoles.push("freelancer");
     if (user.clientProfile || user.role === "client" || user.role === "business") ownerActivatedRoles.push("client");
     if (user.founderProfile || user.role === "founder" || user.role === "startup") ownerActivatedRoles.push("founder");
@@ -989,7 +990,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         freelancerProfile: true,
         clientProfile: true,
         investorProfile: true,
-        founderProfile: true,
+        founderProfile: true, userRoles: true,
       },
     });
 
@@ -1245,7 +1246,7 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           freelancerProfile: true,
           clientProfile: true,
           investorProfile: true,
-          founderProfile: true,
+          founderProfile: true, userRoles: true,
         },
       });
       if (!user) {
@@ -1397,7 +1398,7 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           freelancerProfile: true,
           clientProfile: true,
           investorProfile: true,
-          founderProfile: true,
+          founderProfile: true, userRoles: true,
         },
       });
       if (user) {
@@ -2840,7 +2841,7 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
         freelancerProfile: true,
         clientProfile: true,
         investorProfile: true,
-        founderProfile: true,
+        founderProfile: true, userRoles: true,
       },
     });
 
@@ -2941,7 +2942,7 @@ export const checkActivationEligibility = async (req: AuthenticatedRequest, res:
     if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
 
     const isActivated = user.userRoles.find(r => r.role === role && r.status === 'active');
-    if (isActivated) return res.status(400).json(errorResponse('Role is already activated', 'ROLE_ALREADY_ACTIVATED'));
+    if (isActivated) return res.status(200).json(successResponse('Role is already activated', { eligible: true, requestedRole: role, role, status: 'active' }));
 
     const { resolveUserSubscriptionGate } = await import("../../services/mobile/subscription.service.js");
     const gate = await resolveUserSubscriptionGate(user.id);
@@ -2952,6 +2953,17 @@ export const checkActivationEligibility = async (req: AuthenticatedRequest, res:
         'To activate an additional role, please subscribe to an eligible paid monthly or yearly plan.',
         'PAID_PLAN_REQUIRED_FOR_MULTI_ROLE',
         [{ requestedRole: role, upgradeRequired: true }]
+      ));
+    }
+
+    const existingAdditionalRoles = user.userRoles.filter(r => r.status === 'active' && r.role !== user.role);
+    const planName = String(gate.subscription?.plan?.name || "").toLowerCase();
+    const allowedAdditionalRoles = planName.includes("all access") ? 3 : 1;
+
+    if (existingAdditionalRoles.length >= allowedAdditionalRoles) {
+      return res.status(403).json(errorResponse(
+        `You have already activated your allowed additional workspace (${existingAdditionalRoles.map(r => r.role).join(', ')}).`,
+        'MAX_ROLES_ACTIVATED'
       ));
     }
 
@@ -2983,6 +2995,17 @@ export const activateRole = async (req: AuthenticatedRequest, res: Response, nex
         'To activate an additional role, please subscribe to an eligible paid monthly or yearly plan.',
         'PAID_PLAN_REQUIRED_FOR_MULTI_ROLE',
         [{ requestedRole: role, upgradeRequired: true }]
+      ));
+    }
+
+    const existingAdditionalRoles = user.userRoles.filter(r => r.status === 'active' && r.role !== user.role);
+    const planName = String(gate.subscription?.plan?.name || "").toLowerCase();
+    const allowedAdditionalRoles = planName.includes("all access") ? 3 : 1; 
+
+    if (existingAdditionalRoles.length >= allowedAdditionalRoles) {
+      return res.status(403).json(errorResponse(
+        `You have already activated your allowed additional workspace (${existingAdditionalRoles.map(r => r.role).join(', ')}).`,
+        'MAX_ROLES_ACTIVATED'
       ));
     }
 
@@ -3028,3 +3051,5 @@ export const switchRole = async (req: AuthenticatedRequest, res: Response, next:
     next(err);
   }
 };
+
+

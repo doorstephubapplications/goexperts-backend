@@ -6,9 +6,9 @@ import {
 
 const router = Router();
 
-router.use(authenticate);
-
 router.get('/plans', getPlans);
+
+router.use(authenticate);
 router.get('/current', getCurrent);
 router.post('/purchase', purchase);
 router.post('/renew', renew);

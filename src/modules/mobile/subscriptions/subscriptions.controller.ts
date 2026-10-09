@@ -8,7 +8,7 @@ import { PaymentReadinessError } from '../../../services/mobile/profile-readines
 
 export const getPlans = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const requestedRole = (req.query.role as string) || req.user.role;
+    const requestedRole = (req.query.role as string) || req.user?.role;
     const plans = await prisma.subscriptionPlan.findMany({
       where: {
         status: 'active',
