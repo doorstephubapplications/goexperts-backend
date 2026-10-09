@@ -34,7 +34,9 @@ import {
   getClientAnalytics,
   getClientWallet,
   fundClientWallet,
-  withdrawClientWallet
+  withdrawClientWallet,
+  listClientSubscriptions,
+  purchaseClientSubscription
 } from "../../controllers/client/client.controller.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
@@ -129,8 +131,8 @@ router.patch("/notifications/:id/read", markClientNotificationRead as any);
 // router.get("/settings", getClientSettings as any);
 // router.patch("/settings", updateClientSettings as any);
 
-// router.get("/subscriptions", listClientSubscriptions as any);
-// router.post("/subscriptions/purchase", purchaseClientSubscription as any);
+router.get("/subscriptions", listClientSubscriptions as any);
+router.post("/subscriptions/purchase", purchaseClientSubscription as any);
 
 // router.get("/documents", listClientDocuments as any);
 // router.post("/documents", addClientDocument as any);
