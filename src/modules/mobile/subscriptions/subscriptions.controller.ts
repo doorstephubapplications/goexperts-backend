@@ -23,7 +23,7 @@ export const getPlans = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const getCurrent = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const subscription = await getKycApprovedCurrentSubscription(req.user.id);
+    const subscription = await getKycApprovedCurrentSubscription(req.user.id, (req.user as any).activeWorkspace);
     return res.json(successResponse('Current subscription retrieved', subscription));
   } catch (error) {
     next(error);
@@ -106,7 +106,7 @@ export const cancel = async (req: AuthRequest, res: Response, next: NextFunction
 
 export const getHistory = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const history = await prisma.subscriptionHistory.findMany({ where: { userId: req.user.id } });
+    const history = await prisma.subscriptionHistory.findMany({ where: { userId: req.user.id, plan: { role: (req.user as any).activeWorkspace } }, include: { plan: true } });
     return res.json(successResponse('Subscription history retrieved', history));
   } catch (error) {
     next(error);

@@ -822,7 +822,7 @@ export const listInvestorSubscriptions = async (req: AuthenticatedRequest, res: 
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
-    const rows = await listSubscriptionsForUser(userId);
+    const rows = await listSubscriptionsForUser(userId, "investor");
     res.json({ success: true, rows, total: rows.length });
   } catch (err) {
     handleError(err, res, next);

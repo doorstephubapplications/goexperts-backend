@@ -52,7 +52,7 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         }
       }),
       prisma.wallet.findUnique({ where: { userId } }),
-      resolveProfileCompletion(userId),
+      resolveProfileCompletion(userId, 'client'),
       prisma.meeting.findMany({
         where: {
           OR: [

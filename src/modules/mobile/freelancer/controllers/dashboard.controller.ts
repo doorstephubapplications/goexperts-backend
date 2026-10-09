@@ -48,7 +48,7 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         take: 5,
       }),
       // Profile completion from service
-      resolveProfileCompletion(userId),
+      resolveProfileCompletion(userId, 'freelancer'),
       // Unread messages
       prisma.message.count({
         where: {

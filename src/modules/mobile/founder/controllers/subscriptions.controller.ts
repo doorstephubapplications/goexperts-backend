@@ -8,7 +8,7 @@ import { PaymentReadinessError } from '../../../../services/mobile/profile-readi
 
 export const getCurrentPlan = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const subscription = await getKycApprovedCurrentSubscription(req.user.id);
+    const subscription = await getKycApprovedCurrentSubscription(req.user.id, (req.user as any).activeWorkspace);
     return res.json(successResponse('Current plan', subscription));
   } catch (error) { next(error); }
 };

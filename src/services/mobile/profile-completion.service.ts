@@ -393,7 +393,8 @@ function evaluateFounder(user: any, fp: any) {
  * Supports legacy mobile fields alongside the new capabilities engine.
  */
 export const resolveProfileCompletion = async (
-  userId: string
+  userId: string,
+  requestedRole?: string
 ): Promise<ProfileCompletionResult> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -422,7 +423,8 @@ export const resolveProfileCompletion = async (
   if (!user) return fallback;
 
   let evaluation;
-  switch (user.role) {
+  const activeRole = requestedRole || user.role;
+  switch (activeRole) {
     case 'freelancer': evaluation = evaluateFreelancer(user, user.freelancerProfile); break;
     case 'client':     evaluation = evaluateClient(user, user.clientProfile); break;
     case 'investor':   evaluation = evaluateInvestor(user, user.investorProfile); break;
@@ -478,3 +480,4 @@ export const resolveProfileCompletion = async (
     completedCount,
   };
 };
+

@@ -51,7 +51,7 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
         include: { investorProfile: true },
         take: 5,
       }),
-      resolveProfileCompletion(userId),
+      resolveProfileCompletion(userId, 'founder'),
       prisma.meeting.findMany({
         where: { founder: userId, status: 'Scheduled' },
         orderBy: [{ date: 'asc' }, { time: 'asc' }],

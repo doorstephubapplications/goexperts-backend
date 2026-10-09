@@ -189,7 +189,7 @@ const buildAuthPayload = async (user: AuthUser) => {
 
   try {
     const [c, s, isSocialRes, membership] = await Promise.all([
-      resolveProfileCompletion(user.id).catch(() => null),
+      resolveProfileCompletion(user.id, (req.user as any).activeWorkspace).catch(() => null),
       resolveUserSubscriptionGate(user.id).catch(() => null),
       resolveIsSocialLogin(user).catch(() => false),
       (prisma as any).teamMember.findFirst({
@@ -1134,7 +1134,7 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
           founderProfile: true,
         },
       }),
-      resolveProfileCompletion(user.id),
+      resolveProfileCompletion(user.id, (req.user as any).activeWorkspace),
       resolveUserSubscriptionGate(user.id),
     ]);
 
@@ -1843,7 +1843,7 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
           founderProfile: true,
         },
       }),
-      resolveProfileCompletion(req.user.id),
+      resolveProfileCompletion(req.user.id, (req.user as any).activeWorkspace),
       resolveUserSubscriptionGate(req.user.id),
     ]);
 
@@ -2108,7 +2108,7 @@ export const selectSocialRole = async (req: AuthRequest, res: Response, next: Ne
     });
 
     const [completion, subscriptionGate] = await Promise.all([
-      resolveProfileCompletion(updatedUser.id),
+      resolveProfileCompletion(updatedUser.id, (req.user as any).activeWorkspace),
       resolveUserSubscriptionGate(updatedUser.id),
     ]);
 
@@ -2148,7 +2148,7 @@ export const updateAvatar = async (req: AuthRequest, res: Response, next: NextFu
       data: { avatarUrl },
     });
 
-    const completion = await resolveProfileCompletion(req.user.id);
+    const completion = await resolveProfileCompletion(req.user.id, (req.user as any).activeWorkspace);
 
     return res.json(
       successResponse('Avatar updated successfully', {
@@ -2177,7 +2177,7 @@ export const updateCoverImage = async (req: AuthRequest, res: Response, next: Ne
       data: { coverImageUrl } as any,
     });
 
-    const completion = await resolveProfileCompletion(req.user.id);
+    const completion = await resolveProfileCompletion(req.user.id, (req.user as any).activeWorkspace);
 
     return res.json(
       successResponse('Cover image updated successfully', {

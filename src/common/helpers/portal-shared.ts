@@ -431,7 +431,7 @@ export async function markAllNotificationsRead(userId: string, role: string) {
 
 export async function listInvoicesForUser(userId: string) {
   const rows = await prisma.invoice.findMany({
-    where: { userId },
+    where: role ? { userId, plan: { role: { in: [role, "all"] } } } : { userId },
     include: { items: true, subscription: { include: { plan: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -874,15 +874,15 @@ export async function createMessageForUser(
 // ==========================================
 
 export async function ensureClientProfile(userId: string) {
-  return prisma.clientProfile.upsert({ where: { userId }, update: {}, create: { userId } });
+  return prisma.clientProfile.upsert({ where: role ? { userId, plan: { role: { in: [role, "all"] } } } : { userId }, update: {}, create: { userId } });
 }
 
 export async function ensureInvestorProfile(userId: string) {
-  return prisma.investorProfile.upsert({ where: { userId }, update: {}, create: { userId } });
+  return prisma.investorProfile.upsert({ where: role ? { userId, plan: { role: { in: [role, "all"] } } } : { userId }, update: {}, create: { userId } });
 }
 
 export async function ensureFounderProfile(userId: string) {
-  return prisma.founderProfile.upsert({ where: { userId }, update: {}, create: { userId } });
+  return prisma.founderProfile.upsert({ where: role ? { userId, plan: { role: { in: [role, "all"] } } } : { userId }, update: {}, create: { userId } });
 }
 
 // ==========================================
@@ -1002,11 +1002,12 @@ export async function purchaseSubscriptionForSelf(
   return result;
 }
 
-export async function listSubscriptionsForUser(userId: string) {
+export async function listSubscriptionsForUser(userId: string, role?: string) {
   return prisma.subscription.findMany({
-    where: { userId },
+    where: role ? { userId, plan: { role: { in: [role, "all"] } } } : { userId },
     include: { plan: true },
     orderBy: { createdAt: "desc" },
   });
 }
+
 

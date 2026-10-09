@@ -6,7 +6,7 @@ import { getKycApprovedCurrentSubscription } from '../../../../services/mobile/s
 
 export const getCurrentPlan = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const sub = await getKycApprovedCurrentSubscription(req.user.id);
+    const sub = await getKycApprovedCurrentSubscription(req.user.id, (req.user as any).activeWorkspace);
     return res.json(successResponse('Current plan retrieved', sub));
   } catch (error) { next(error); }
 };
