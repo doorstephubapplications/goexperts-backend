@@ -1,3 +1,6 @@
+import bcrypt from 'bcryptjs';
+import { sendEmail } from '../../services/mobile/email.service.js';
+import { renderEmailTemplate } from '../../services/settings/settings.service.js';
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendAdminWalletCreditEmail } from "../../services/mobile/email.service.js";
@@ -443,6 +446,8 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
 // ==========================================
 adminUsersRouter.get("/:id/wallet", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const { ensureWelcomeBonusForVerifiedUser } = await import("../../common/helpers/portal-shared.js");
+    await ensureWelcomeBonusForVerifiedUser(req.params.id);
     let wallet = await prisma.wallet.findUnique({
       where: { userId: req.params.id },
       include: {
@@ -729,6 +734,53 @@ adminUsersRouter.patch("/:id", updateUserHandler);
 adminUsersRouter.put("/:id", updateUserHandler);
 // ==========================================
 // ==========================================
+
+// ==========================================
+// POST /api/admin/users/:id/change-password
+// ==========================================
+adminUsersRouter.post("/:id/change-password", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    }
+
+    const userId = req.params.id;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    // Send the dynamic admin password reset email
+    if (user.email) {
+      try {
+        const rendered = await renderEmailTemplate("admin_password_reset", {
+          full_name: user.fullName || 'User',
+          fullName: user.fullName || 'User',
+          email: user.email,
+          newPassword: password,
+          new_password: password
+        });
+        await sendEmail(user.email, rendered.subject, rendered.html);
+      } catch (emailErr) {
+        console.error("Failed to send admin password reset email:", emailErr);
+      }
+    }
+
+    res.json({ success: true, message: `Password for ${user.fullName || user.email} changed successfully!` });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 5. POST /api/v1/admin/users/:id/send-reset-email
 adminUsersRouter.post("/:id/send-reset-email", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -947,4 +999,5 @@ adminUsersRouter.patch("/:id/kyc-document", async (req: Request, res: Response, 
 });
 
 export default adminUsersRouter;
+
 

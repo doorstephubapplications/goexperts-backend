@@ -3,6 +3,7 @@ import { prisma } from '../../../../config/database.js';
 import { successResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { getJsonSetting, setJsonSetting } from '../../../../common/helpers/portal-shared.js';
+import { assertAndConsumeActionQuota, rollbackActionUsage, resolveRoleEntitlement } from '../../../../services/subscription/entitlement.service.js';
 
 async function shapeFreelancersList(freelancers: any[], userId?: string | null) {
   if (!freelancers.length) return [];
@@ -496,10 +497,12 @@ export const saveFreelancer = async (req: AuthRequest, res: Response, next: Next
     const existing = rows.findIndex((r: any) => r.freelancerId === freelancerId || r.id === freelancerId || r === freelancerId);
 
     if (existing >= 0) {
-      const nextRows = rows.filter((r: any) => r.freelancerId !== freelancerId && r.id !== freelancerId && r !== freelancerId);
-      await setJsonSetting(userId, 'savedFreelancers', nextRows);
-      return res.json(successResponse('Freelancer removed from saved', { isSaved: false, rows: nextRows }));
+      // Idempotent: already saved
+      return res.json(successResponse('Freelancer already saved', { isSaved: true, rows }));
     }
+
+    // Verify and consume quota before saving
+    await assertAndConsumeActionQuota(userId, 'client', 'saveFreelancer');
 
     const fUser = await prisma.user.findUnique({
       where: { id: freelancerId },
@@ -533,6 +536,15 @@ export const unsaveFreelancer = async (req: AuthRequest, res: Response, next: Ne
     const nextRows = rows.filter((r: any) => r.id !== freelancerId && r.freelancerId !== freelancerId && r !== freelancerId);
     
     await setJsonSetting(userId, 'savedFreelancers', nextRows);
+    
+    // Only refund if actually removed
+    if (nextRows.length < rows.length) {
+      const entitlement = await resolveRoleEntitlement(userId, 'client', 'saveFreelancer');
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+      }
+    }
+    
     return res.json(successResponse('Freelancer removed from saved', { isSaved: false, rows: nextRows }));
   } catch (error) { next(error); }
 };

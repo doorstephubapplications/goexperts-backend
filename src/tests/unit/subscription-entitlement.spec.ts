@@ -3,6 +3,7 @@ import {
   computePlanEndDate,
   normalizeRoleKey,
   ActionGateError,
+  extractPlanSnapshot,
 } from "../../services/subscription/entitlement.service.js";
 
 describe("Subscription & Monetization Engine Unit Tests", () => {
@@ -390,15 +391,40 @@ describe("Subscription & Monetization Engine Unit Tests", () => {
 
       expect(updatedSubs.every(s => s.status === "cancelled")).toBe(true);
     });
+  });
 
-    it("should enforce authoritative server price regardless of client-supplied amount", () => {
-      const authoritativeDbPlan = { id: "plan-fl-mo", amount: 399 };
-      const clientPayload = { planId: "plan-fl-mo", amount: 10 }; // Attacker tampering attempt
+  describe("Purchased Entitlement Immunity & Snapshot Protection", () => {
+    it("should prioritize immutable planSnapshot from subscription history over mutated database plan columns", () => {
+      const dbPlanId = "plan-fl-pro";
+      // Suppose Admin edited the published plan to reduce proposals from 12 to 5 and increase price to 1299
+      const mutatedDbPlan = {
+        id: dbPlanId,
+        name: "Freelancer Pro",
+        amount: 1299,
+        proposalsLimit: 5,
+      };
 
-      // Server overrides with DB value
-      const checkoutAmount = authoritativeDbPlan.amount;
-      expect(checkoutAmount).toBe(399);
-      expect(checkoutAmount).not.toBe(clientPayload.amount);
+      // Active subscriber purchased earlier when proposalsLimit was 12 and price was 799
+      const historyWithSnapshot = [
+        {
+          planId: dbPlanId,
+          metadata: JSON.stringify({
+            planSnapshot: {
+              id: dbPlanId,
+              name: "Freelancer Pro",
+              amount: 799,
+              proposalsLimit: 12,
+              quotas: { proposals: 12 },
+            },
+          }),
+        },
+      ];
+
+      const snapshot = extractPlanSnapshot(dbPlanId, historyWithSnapshot);
+      expect(snapshot).toBeDefined();
+      expect(snapshot.quotas.proposals).toBe(12);
+      expect(snapshot.amount).toBe(799);
+      expect(snapshot.quotas.proposals).not.toBe(mutatedDbPlan.proposalsLimit);
     });
   });
 });

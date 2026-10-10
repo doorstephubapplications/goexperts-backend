@@ -64,14 +64,12 @@ export const initSubscriptionReminderJob = () => {
           });
 
           // 1. Send Email
-          await sendSubscriptionReminderEmail(
-            sub.user.email,
-            sub.user.fullName || sub.user.email,
-            planName,
-            daysLeft,
-            formattedExpiration,
-            renewLink
-          );
+          const { dispatchSubscriptionLifecycleEmail } = await import("../services/subscription/email.dispatcher.js");
+          await dispatchSubscriptionLifecycleEmail({
+            eventType: 'EXPIRY_WARNING',
+            userId: sub.user.id,
+            subscriptionId: sub.id,
+          });
 
           // 2. Insert In-App Notification (triggers socket.io automatically)
           await prisma.notification.create({

@@ -273,9 +273,23 @@ export const activateUserSubscription = async (
 
   const targetRole = role ? normalizeRoleForPlan(role) : (plan.role === 'all' ? 'all' : normalizeRoleForPlan(plan.role));
   const planType = (plan as any).planType || (plan.role === 'all' ? 'all_access' : 'single_role');
+  
+  let eventType: 'ACTIVATED' | 'RENEWED' | 'UPGRADED' | 'ADDON_ACTIVATED' = 'ACTIVATED';
+  if (planType === 'additional_role') {
+    eventType = 'ADDON_ACTIVATED';
+  }
 
   if (planType === 'all_access' || targetRole === 'all') {
     // All Access replaces all single-role subscriptions
+    const existing = await prisma.subscription.findMany({
+      where: { userId, status: 'active' },
+      include: { plan: true }
+    });
+    if (existing.length > 0) {
+      const hadSamePlan = existing.some(e => e.planId === plan.id);
+      eventType = hadSamePlan ? 'RENEWED' : 'UPGRADED';
+    }
+
     await prisma.subscription.updateMany({
       where: { userId, status: 'active' },
       data: {
@@ -286,6 +300,22 @@ export const activateUserSubscription = async (
     });
   } else {
     // Single-role or Add-on replaces only subscriptions for the target role
+    const existing = await prisma.subscription.findMany({
+      where: {
+        userId,
+        status: 'active',
+        OR: [
+          { role: targetRole },
+          { plan: { role: targetRole } },
+        ],
+      },
+      include: { plan: true }
+    });
+    if (existing.length > 0) {
+      const hadSamePlan = existing.some(e => e.planId === plan.id);
+      eventType = hadSamePlan ? 'RENEWED' : 'UPGRADED';
+    }
+
     await prisma.subscription.updateMany({
       where: {
         userId,
@@ -344,12 +374,23 @@ export const activateUserSubscription = async (
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (user && user.email) {
+          const { dispatchSubscriptionLifecycleEmail } = await import('../subscription/email.dispatcher.js');
           try {
             const { filePath, publicPath } = await generateInvoicePdf(invoiceObj.id);
-            await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount, filePath, publicPath);
+            await dispatchSubscriptionLifecycleEmail({
+              eventType,
+              userId: user.id,
+              subscriptionId: subscription.id,
+              invoicePdfPath: filePath,
+              invoicePublicUrl: publicPath
+            });
           } catch (pdfErr) {
             console.error('Failed to generate PDF or send email:', pdfErr);
-            await sendSubscriptionPurchasedEmail(user.email, user.fullName || 'User', plan.name, plan.amount);
+            await dispatchSubscriptionLifecycleEmail({
+              eventType,
+              userId: user.id,
+              subscriptionId: subscription.id
+            });
           }
         }
       } catch (err) {
@@ -519,7 +560,12 @@ const markSubscriptionExpired = async (sub: any, planName: string | null) => {
   }
 
   if (user?.email && !alreadyEmailedForSubscription) {
-    const emailResult = await sendPlanExpiredEmail(user.email, user.fullName || 'User', user.role || 'user', planName, sub.endDate).catch(() => false);
+    const { dispatchSubscriptionLifecycleEmail } = await import('../subscription/email.dispatcher.js');
+    const emailResult = await dispatchSubscriptionLifecycleEmail({
+      eventType: 'EXPIRED',
+      userId: user.id,
+      subscriptionId: sub.id,
+    }).catch(() => false);
     if (emailResult === true) {
       const latest = parseRegistrationData((await prisma.user.findUnique({ where: { id: user.id }, select: { registrationData: true } }).catch(() => null))?.registrationData ?? user.registrationData);
       await prisma.user.update({

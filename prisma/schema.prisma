@@ -1100,8 +1100,8 @@ model SubscriptionPlan {
   amount         Float
   currency       String                @default("INR")
   duration       String
-  features       String?
-  limits         String?
+  features       String?   @db.Text
+  limits         String?   @db.Text
   proposalsLimit Int                   @default(36) @map("proposals_limit")
   projectsLimit  Int                   @default(36) @map("projects_limit")
   sortOrder      Int                   @default(0) @map("sort_order")

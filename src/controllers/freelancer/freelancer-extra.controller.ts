@@ -3,7 +3,7 @@ import { prisma } from "../../config/database.js";
 import { sendEmail } from "../../services/mobile/email.service.js";
 import { renderEmailTemplate } from "../../services/settings/settings.service.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
-import { assertActionEntitlement, recordActionUsage, ActionGateError } from "../../services/subscription/entitlement.service.js";
+import { assertActionEntitlement, recordActionUsage, ActionGateError, assertAndConsumeActionQuota, rollbackActionUsage, resolveRoleEntitlement } from "../../services/subscription/entitlement.service.js";
 import {
   HttpError,
   debitWalletForSelf,
@@ -1187,7 +1187,14 @@ export const saveProject = async (req: AuthenticatedRequest, res: Response, next
     if (!project) return res.status(404).json({ success: false, message: "Project not found" });
 
     const saved = await getJsonSetting(userId, "saved-projects", [] as string[]);
-    if (!saved.includes(projectId)) saved.push(projectId);
+    if (saved.includes(projectId)) {
+      // Idempotent return
+      return res.status(200).json({ success: true, message: "Project already saved", data: project });
+    }
+
+    await assertAndConsumeActionQuota(userId, 'freelancer', 'saveProject');
+    
+    saved.push(projectId);
     await setJsonSetting(userId, "saved-projects", saved);
 
     res.status(201).json({ success: true, message: "Project saved", data: project });
@@ -1203,6 +1210,14 @@ export const unsaveProject = async (req: AuthenticatedRequest, res: Response, ne
     const saved = await getJsonSetting(userId, "saved-projects", [] as string[]);
     const next = saved.filter((id) => id !== req.params.id);
     await setJsonSetting(userId, "saved-projects", next);
+    
+    if (next.length < saved.length) {
+      const entitlement = await resolveRoleEntitlement(userId, 'freelancer', 'saveProject');
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'saveProject');
+      }
+    }
+    
     res.json({ success: true, message: "Project removed from saved list", rows: next });
   } catch (err) {
     handleError(err, res, next);

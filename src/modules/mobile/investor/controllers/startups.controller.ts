@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../../../config/database.js';
 import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
+import { assertAndConsumeActionQuota, rollbackActionUsage, resolveRoleEntitlement } from '../../../../services/subscription/entitlement.service.js';
 
 type WatchlistEntry = { id: string; startupId: string; notes: string; priority: string; savedAt: string; updatedAt: string; };
 const watchlistKey = (userId: string) => `investor_watchlist:${userId}`;
@@ -508,11 +509,11 @@ export const saveStartup = async (req: AuthRequest, res: Response, next: NextFun
     });
 
     if (existingIndex >= 0) {
-      // Toggle off: remove from watchlist
-      items.splice(existingIndex, 1);
-      await writeList(req.user.id, items);
-      return res.json(successResponse('Startup removed from watchlist', { isSaved: false, hasInvested: !!checkInvestment }));
+      // Idempotent: already saved
+      return res.json(successResponse('Startup already saved', { isSaved: true, hasInvested: !!checkInvestment }));
     }
+
+    await assertAndConsumeActionQuota(req.user.id, 'investor', 'saveStartup');
 
     // Toggle on: add to watchlist
     const now = new Date().toISOString();
@@ -542,6 +543,14 @@ export const unsaveStartup = async (req: AuthRequest, res: Response, next: NextF
     const items = await readList(req.user.id);
     const filtered = items.filter(i => i.startupId !== startupId);
     await writeList(req.user.id, filtered);
+
+    if (filtered.length < items.length) {
+      const entitlement = await resolveRoleEntitlement(req.user.id, 'investor', 'saveStartup');
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'saveStartup');
+      }
+    }
+
     return res.json(successResponse('Startup removed from watchlist', { isSaved: false }));
   } catch (error) { next(error); }
 };

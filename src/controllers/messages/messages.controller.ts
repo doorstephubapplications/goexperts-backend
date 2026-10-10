@@ -147,7 +147,7 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    const { page = "1", pageSize = "200" } = req.query;
+    const { page = "1", pageSize = "200" } = req.query || {};
     const pageNum = parseInt(page as string, 10) || 1;
     const limit = parseInt(pageSize as string, 10) || 200;
     const skip = (pageNum - 1) * limit;

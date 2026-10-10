@@ -235,6 +235,25 @@ export const completePaymentFromWebhook = async (
   const planId = String(meta.planId || parsed.planId || '');
   
   if (purpose === 'subscription' && planId) {
+    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+    if (plan && (plan as any).planType === 'additional_role') {
+      try {
+        const { assertAdditionalRoleAddonEligibility } = await import("../../../services/subscription/addon-eligibility.service.js");
+        // checkPending = false because we are fulfilling it now
+        await assertAdditionalRoleAddonEligibility(payment.userId, plan.role as string, planId, false);
+      } catch (e: any) {
+        // Flag for reconciliation
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { 
+            status: 'completed_needs_reconciliation',
+          }
+        });
+        console.warn('Duplicate or ineligible Add-on purchase flagged for review:', e.message);
+        return payment; // Exit without activating subscription
+      }
+    }
+
     await activateUserSubscription(
       payment.userId,
       planId,

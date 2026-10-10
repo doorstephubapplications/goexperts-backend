@@ -73,7 +73,7 @@ async function getWelcomeBonusConfig() {
   };
 }
 
-async function ensureWelcomeBonusForVerifiedUser(userId: string) {
+export async function ensureWelcomeBonusForVerifiedUser(userId: string) {
   const user = await prisma.user.findFirst({
     where: { id: userId, deletedAt: null },
     include: {
@@ -161,6 +161,7 @@ function mapWalletTx(t: {
   direction: string;
   description: string | null;
   balanceAfter: number;
+  status?: string | null;
   createdAt: Date;
 }) {
   return {
@@ -172,6 +173,7 @@ function mapWalletTx(t: {
     debit: t.direction === "debit" ? Number(t.amount) : 0,
     description: t.description || "",
     balanceAfter: Number(t.balanceAfter),
+    status: t.status || "completed",
     createdAt: t.createdAt,
     date: t.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
   };
@@ -899,25 +901,23 @@ function calcGST(amount: number) {
   return parseFloat((amount * 0.18).toFixed(2));
 }
 
-function addDuration(startDate: Date, duration: string) {
-  const d = new Date(startDate);
-  switch (duration) {
-    case "quarterly":
-      d.setMonth(d.getMonth() + 3);
-      break;
-    case "yearly":
-      d.setFullYear(d.getFullYear() + 1);
-      break;
-    case "weekly":
-      d.setDate(d.getDate() + 7);
-      break;
-    case "daily":
-      d.setDate(d.getDate() + 1);
-      break;
-    default:
-      d.setMonth(d.getMonth() + 1);
+import { computeSubscriptionExpiry, parseDurationString } from "../../utils/date-arithmetic.util.js";
+import { hydratePlanFromDb } from "../../constants/plan-catalog.constants.js";
+
+function addDuration(startDate: Date, duration: string, limits?: any) {
+  let limitsObj: any = {};
+  if (typeof limits === "string") {
+    try { limitsObj = JSON.parse(limits); } catch {}
+  } else if (limits && typeof limits === "object") {
+    limitsObj = limits;
   }
-  return d;
+  const valValue = Number(limitsObj.validityValue);
+  const valUnit = limitsObj.validityUnit;
+  if (Number.isFinite(valValue) && valValue > 0 && valUnit) {
+    return computeSubscriptionExpiry(startDate, valValue, valUnit);
+  }
+  const parsed = parseDurationString(duration);
+  return computeSubscriptionExpiry(startDate, parsed.validityValue, parsed.validityUnit);
 }
 
 export async function purchaseSubscriptionForSelf(
@@ -927,10 +927,18 @@ export async function purchaseSubscriptionForSelf(
   transactionId?: string,
 ) {
   const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
-  if (!plan || plan.status !== "active") throw new HttpError("Plan not available", 404);
+  if (!plan || (plan.status as string) !== "active" || (plan.visibility as string) === "hidden") {
+    throw new HttpError("Plan not available for purchase", 400);
+  }
 
   const gst = calcGST(plan.amount);
   const total = parseFloat((plan.amount + gst).toFixed(2));
+
+  // ENFORCEMENT: Additional Role Add-on pre-checkout verification
+  if ((plan as any).planType === "additional_role") {
+    const { assertAdditionalRoleAddonEligibility } = await import("../../services/subscription/addon-eligibility.service.js");
+    await assertAdditionalRoleAddonEligibility(userId, plan.role as string, planId, true);
+  }
 
   if (gateway !== "wallet") {
     const { initiatePaymentService } = await import("../../modules/mobile/payments/payments.service.js");
@@ -945,10 +953,10 @@ export async function purchaseSubscriptionForSelf(
   const result = await prisma.$transaction(async (tx) => {
 
     const now = new Date();
-    const endDate = addDuration(now, plan.duration);
+    const endDate = addDuration(now, plan.duration, plan.limits);
 
     const subscription = await tx.subscription.create({
-      data: { userId, planId, status: "active", autoRenew: true, startDate: now, endDate },
+      data: { userId, planId, status: "active", autoRenew: false, startDate: now, endDate },
     });
 
     const payment = await tx.payment.create({
@@ -985,12 +993,37 @@ export async function purchaseSubscriptionForSelf(
       },
     });
 
+    const hydrated = hydratePlanFromDb(plan);
+    const planSnapshot = {
+      id: plan.id,
+      name: plan.name,
+      role: plan.role,
+      planType: plan.planType,
+      amount: plan.amount,
+      currency: plan.currency,
+      duration: plan.duration,
+      validityValue: hydrated.validityValue,
+      validityUnit: hydrated.validityUnit,
+      quotaResetPolicy: hydrated.quotaResetPolicy,
+      quotaResetValue: hydrated.quotaResetValue,
+      quotaResetUnit: hydrated.quotaResetUnit,
+      quotas: hydrated.quotas,
+      capabilities: (hydrated as any).capabilities ?? hydrated.benefits,
+      proposalsLimit: plan.proposalsLimit,
+      projectsLimit: plan.projectsLimit,
+    };
+
     await tx.subscriptionHistory.create({
       data: {
         userId,
         planId,
         action: "purchase",
-        metadata: JSON.stringify({ paymentId: payment.id, invoiceId: invoice.id }),
+        metadata: JSON.stringify({
+          paymentId: payment.id,
+          invoiceId: invoice.id,
+          subscriptionId: subscription.id,
+          planSnapshot,
+        }),
       },
     });
 

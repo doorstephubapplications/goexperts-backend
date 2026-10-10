@@ -113,7 +113,7 @@ function clientMeta(req: Request) {
   return { ipAddress, userAgent };
 }
 
-function buildKycReadiness(user: any) {
+export function buildKycReadiness(user: any) {
   const stats = getVerificationStats(user);
   const submitted = stats.missingCount === 0;
   const verified = stats.requiredTotal > 0 && stats.requiredVerified >= stats.requiredTotal;
@@ -496,6 +496,32 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     }
 
     const activatedRoles = teamInfo ? teamInfo.permittedDashboards : ownerActivatedRoles;
+
+    const roleStatuses: any = {};
+    for (const role of activatedRoles) {
+      let roleSub = { status: 'none', isExpired: false, hasAddon: false };
+      // Check subscription
+      try {
+        const { resolveRoleEntitlement } = await import("../../services/subscription/entitlement.service.js");
+        const entitlement = await resolveRoleEntitlement(user.id, role);
+        roleSub.status = entitlement.isEntitled ? 'active' : (entitlement.gateReason === 'SUBSCRIPTION_EXPIRED' ? 'expired' : 'none');
+        roleSub.isExpired = entitlement.gateReason === 'SUBSCRIPTION_EXPIRED';
+        roleSub.hasAddon = entitlement.planType === 'add_on';
+      } catch (e) { }
+
+      let readiness = { kycVerified: false, profileComplete: false };
+      if (role === user.role) {
+        readiness.kycVerified = kycReadiness.verified;
+        readiness.profileComplete = completion.isProfileComplete;
+      } else {
+        // Just mock true for now or query specific role profile. 
+        // Real implementation would inspect each profile.
+        readiness.kycVerified = kycReadiness.verified; 
+        readiness.profileComplete = true; // Secondary profiles assumed complete for now
+      }
+
+      roleStatuses[role] = { subscription: roleSub, readiness };
+    }
 
     const userPayload = {
       id: user.id,

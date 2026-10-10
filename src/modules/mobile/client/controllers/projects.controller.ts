@@ -5,6 +5,7 @@ import { AuthRequest } from '../../../../middlewares/auth.js';
 import { shapeProject, shapeProjects, serializeAttachments } from '../../../../services/mobile/project-shape.service.js';
 import { parseProjectListQuery } from '../../../../services/mobile/project-list-query.service.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
+import { assertAndConsumeActionQuota, rollbackActionUsage } from '../../../../services/subscription/entitlement.service.js';
 
 const EXPERIENCE_LEVELS = ['beginner', 'intermediate', 'expert'] as const;
 type ExperienceLevelKey = (typeof EXPERIENCE_LEVELS)[number];
@@ -604,15 +605,26 @@ export const inviteFreelancer = async (req: AuthRequest, res: Response, next: Ne
       return res.status(400).json(errorResponse('Freelancer has already been invited or applied to this project.', 'ALREADY_EXISTS'));
     }
 
-    // Create a new Proposal with status "invited"
-    const proposal = await prisma.proposal.create({
-      data: {
-        projectId: project.id,
-        freelancerId,
-        bidAmount: project.budget || 0,
-        status: 'invited',
-      },
-    });
+    // Verify and consume quota before sending invitation
+    const { entitlement } = await assertAndConsumeActionQuota(userId, 'client', 'sendInvitation');
+
+    let proposal;
+    try {
+      // Create a new Proposal with status "invited"
+      proposal = await prisma.proposal.create({
+        data: {
+          projectId: project.id,
+          freelancerId,
+          bidAmount: project.budget || 0,
+          status: 'invited',
+        },
+      });
+    } catch (createErr) {
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'sendInvitation');
+      }
+      throw createErr;
+    }
 
     // Invitations use the same direct conversation as normal messages.
     const baseMessageText = body.message || `I would like to invite you to submit a proposal for my project: ${project.title}.`;

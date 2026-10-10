@@ -2,7 +2,7 @@ import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
-import { assertAndConsumeActionQuota, ActionGateError } from "../../services/subscription/entitlement.service.js";
+import { assertAndConsumeActionQuota, ActionGateError, rollbackActionUsage, resolveRoleEntitlement } from "../../services/subscription/entitlement.service.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import {
   HttpError,
@@ -936,15 +936,26 @@ export const inviteFreelancer = async (req: AuthenticatedRequest, res: Response,
       return res.status(400).json({ success: false, message: "Freelancer has already been invited or applied to this project." });
     }
 
-    // Create a new Proposal with status "invited"
-    const proposal = await prisma.proposal.create({
-      data: {
-        projectId: project.id,
-        freelancerId,
-        bidAmount: project.budget || 0,
-        status: "invited",
+    // Verify and consume quota before sending invitation
+    const { entitlement } = await assertAndConsumeActionQuota(userId, "client", "sendInvitation");
+
+    let proposal;
+    try {
+      // Create a new Proposal with status "invited"
+      proposal = await prisma.proposal.create({
+        data: {
+          projectId: project.id,
+          freelancerId,
+          bidAmount: project.budget || 0,
+          status: "invited",
+        }
+      });
+    } catch (createErr) {
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, "sendInvitation");
       }
-    });
+      throw createErr;
+    }
 
     // Create a conversation for the invitation
     const baseMessageText = body.message || `I would like to invite you to submit a proposal for my project: ${project.title}.`;
@@ -2314,7 +2325,7 @@ export const toggleSavedFreelancer = async (req: AuthenticatedRequest, res: Resp
     const userId = requireUser(req, res);
     if (!userId) return;
 
-    const { freelancerId, slug, name, headline, avatar, rate, rating, location } = req.body ?? {};
+    const { freelancerId, slug, name, headline, avatar, rate, rating, location, action } = req.body ?? {};
     if (!freelancerId) return res.status(400).json({ success: false, message: "freelancerId is required" });
 
     const rows: any[] = await getJsonSetting(userId, "savedFreelancers", []);
@@ -2322,12 +2333,25 @@ export const toggleSavedFreelancer = async (req: AuthenticatedRequest, res: Resp
 
     let saved: boolean;
     let next: any[];
-    if (existing >= 0) {
-      // already saved → remove (toggle off)
+
+    if (action === 'save' && existing >= 0) {
+      return res.json({ success: true, saved: true, rows, total: rows.length, message: "Freelancer already saved" });
+    }
+    if (action === 'unsave' && existing < 0) {
+      return res.json({ success: true, saved: false, rows, total: rows.length, message: "Freelancer not saved" });
+    }
+
+    if (existing >= 0 && action !== 'save') {
+      // remove (toggle off or explicit unsave)
       next = rows.filter((_: any, i: number) => i !== existing);
       saved = false;
+      const entitlement = await resolveRoleEntitlement(userId, 'client', 'saveFreelancer');
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+      }
     } else {
       // not yet saved → add
+      await assertAndConsumeActionQuota(userId, 'client', 'saveFreelancer');
       const entry = {
         id: `sf-${Date.now()}`,
         freelancerId,
@@ -2361,6 +2385,14 @@ export const removeSavedFreelancer = async (req: AuthenticatedRequest, res: Resp
     const rows: any[] = await getJsonSetting(userId, "savedFreelancers", []);
     const next = rows.filter((r: any) => r.id !== id && r.freelancerId !== id);
     await setJsonSetting(userId, "savedFreelancers", next);
+
+    if (next.length < rows.length) {
+      const entitlement = await resolveRoleEntitlement(userId, 'client', 'saveFreelancer');
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+      }
+    }
+
     res.json({ success: true, rows: next, total: next.length });
   } catch (err) {
     handleError(err, res, next);

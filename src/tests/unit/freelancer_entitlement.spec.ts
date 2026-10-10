@@ -61,7 +61,15 @@ vi.mock("../../services/subscription/entitlement.service.js", () => {
 describe("Backend Proposal Entitlement Matrix (R4)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "freelancer-1", email: "f@test.com", role: "freelancer", onboardingStatus: "COMPLETED" } as any);
+    const mockUser = {
+      id: "freelancer-1",
+      email: "f@test.com",
+      role: "freelancer",
+      onboardingStatus: "COMPLETED",
+      userRoles: [{ role: "freelancer", status: "active" }],
+    };
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser as any);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any);
   });
 
   const generateToken = (payload: any) => jwt.sign(payload, env.JWT_SECRET || "test-secret");

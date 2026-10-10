@@ -25,28 +25,22 @@ function generateContractNumber(): string {
   return `CTR-${ts}`;
 }
 
-function addDuration(startDate: Date, duration: string): Date {
-  const d = new Date(startDate);
-  switch (duration) {
-    case "monthly":
-      d.setMonth(d.getMonth() + 1);
-      break;
-    case "quarterly":
-      d.setMonth(d.getMonth() + 3);
-      break;
-    case "yearly":
-      d.setFullYear(d.getFullYear() + 1);
-      break;
-    case "weekly":
-      d.setDate(d.getDate() + 7);
-      break;
-    case "daily":
-      d.setDate(d.getDate() + 1);
-      break;
-    default:
-      d.setMonth(d.getMonth() + 1);
+import { computeSubscriptionExpiry, parseDurationString } from "../../utils/date-arithmetic.util.js";
+
+function addDuration(startDate: Date, duration: string, limits?: any): Date {
+  let limitsObj: any = {};
+  if (typeof limits === "string") {
+    try { limitsObj = JSON.parse(limits); } catch {}
+  } else if (limits && typeof limits === "object") {
+    limitsObj = limits;
   }
-  return d;
+  const valValue = Number(limitsObj.validityValue);
+  const valUnit = limitsObj.validityUnit;
+  if (Number.isFinite(valValue) && valValue > 0 && valUnit) {
+    return computeSubscriptionExpiry(startDate, valValue, valUnit);
+  }
+  const parsed = parseDurationString(duration);
+  return computeSubscriptionExpiry(startDate, parsed.validityValue, parsed.validityUnit);
 }
 
 function calcGST(amount: number): number {
@@ -169,12 +163,12 @@ export async function purchaseSubscription(req: Request, res: Response) {
       const gst = calcGST(finalAmount);
       const total = parseFloat((finalAmount + gst).toFixed(2));
       const now = new Date();
-      const endDate = addDuration(now, plan.duration);
+      const endDate = addDuration(now, plan.duration, plan.limits);
 
       // Create subscription
       const subscription = await tx.subscription.create({
         data: {
-          userId, planId, status: "active", autoRenew: true,
+          userId, planId, status: "active", autoRenew: false,
           startDate: now, endDate,
         },
       });

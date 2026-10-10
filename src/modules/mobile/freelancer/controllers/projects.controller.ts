@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { getJsonSetting, setJsonSetting } from '../../../../common/helpers/portal-shared.js';
 import { shapeProject, shapeProjects } from '../../../../services/mobile/project-shape.service.js';
+import { assertAndConsumeActionQuota, rollbackActionUsage, resolveRoleEntitlement } from '../../../../services/subscription/entitlement.service.js';
 
 const parseQueryList = (value: unknown): string[] =>
   String(value || '')
@@ -161,10 +162,12 @@ export const saveProject = async (req: AuthRequest, res: Response, next: NextFun
 
     const saved = await getJsonSetting(userId, 'saved-projects', [] as string[]);
     if (saved.includes(projectId)) {
-      const nextSaved = saved.filter((id) => id !== projectId);
-      await setJsonSetting(userId, 'saved-projects', nextSaved);
-      return res.json(successResponse('Project removed from saved list', { isSaved: false }));
+      // Idempotent: already saved, do not consume quota or unsave.
+      return res.status(200).json(successResponse('Project already saved', { isSaved: true }));
     }
+
+    // Verify and consume quota before saving
+    await assertAndConsumeActionQuota(userId, 'freelancer', 'saveProject');
 
     saved.push(projectId);
     await setJsonSetting(userId, 'saved-projects', saved);
@@ -182,6 +185,14 @@ export const unsaveProject = async (req: AuthRequest, res: Response, next: NextF
     const saved = await getJsonSetting(userId, 'saved-projects', [] as string[]);
     const nextSaved = saved.filter((id) => id !== projectId);
     await setJsonSetting(userId, 'saved-projects', nextSaved);
+
+    // Only refund if actually removed
+    if (nextSaved.length < saved.length) {
+      const entitlement = await resolveRoleEntitlement(userId, 'freelancer', 'saveProject');
+      if (entitlement.subscriptionId) {
+        await rollbackActionUsage(entitlement.subscriptionId, 'saveProject');
+      }
+    }
 
     res.json(successResponse('Project removed from saved list', { isSaved: false }));
   } catch (err) { next(err); }

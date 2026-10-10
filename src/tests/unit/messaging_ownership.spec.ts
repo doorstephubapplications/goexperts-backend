@@ -21,10 +21,12 @@ vi.mock('../../config/database.js', () => ({
     conversation: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
     },
     message: {
       create: vi.fn(),
       findMany: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
     }
   },
 }));
@@ -38,7 +40,8 @@ describe('Messaging Resource Ownership', () => {
     req = {
       user: { id: 'user_1', role: 'freelancer' },
       params: { id: 'conv_1' },
-      body: { content: 'hello' }
+      body: { content: 'hello' },
+      query: {}
     };
     res = {
       status: vi.fn().mockReturnThis(),
