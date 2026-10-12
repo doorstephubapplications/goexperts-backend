@@ -24,6 +24,7 @@ import { createIdea, updateIdea, deleteIdea, listIdeas } from '../founder/contro
 import { getFunding, createFundingRound, getFundingHistory, updateFundingRound, updateFundingStatus } from '../founder/controllers/funding.controller.js';
 import { getPitchDeck, createPitchDeck, deletePitchDeck } from '../founder/controllers/pitch-deck.controller.js';
 import { getPublicFreelancerModulesData, getPublicFreelancerAvailability } from '../../../controllers/freelancer/freelancer-modules.controller.js';
+import { getPublicUserFaqs } from '../../../controllers/user-faqs.controller.js';
 import { getBusinessPlan, createBusinessPlan, updateBusinessPlan } from '../founder/controllers/business-plan.controller.js';
 import { listInvestorRequests, getInvestorRequest, acceptRequest, rejectRequest, scheduleRequestMeeting, messageInvestor } from '../founder/controllers/investor-requests.controller.js';
 import { listInvestments, getInvestment, makeOffer, expressInterest, cancelInvestment } from '../investor/controllers/investments.controller.js';
@@ -101,6 +102,7 @@ router.get('/freelancers/saved', authenticate, getSavedFreelancers);
 router.get('/freelancers/:id', authenticateOptional, directoryCache, getById('freelancer'));
 router.get('/freelancers/:id/modules', getPublicFreelancerModulesData as any);
 router.get('/freelancers/:id/availability', getPublicFreelancerAvailability as any);
+router.get('/freelancers/:id/faqs', getPublicUserFaqs as any);
 router.get('/freelancers/:id/portfolio', authenticateOptional, getPublicFreelancerPortfolio);
 router.get('/freelancers/:id/portfolio/:itemId', authenticateOptional, getPublicFreelancerPortfolioItem);
 router.post('/freelancers/:id/save', authenticate, saveFreelancer);

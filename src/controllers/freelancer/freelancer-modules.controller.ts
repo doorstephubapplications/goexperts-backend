@@ -318,13 +318,49 @@ export const reactivateFreelancerAvailability = async (req: AuthenticatedRequest
   }
 };
 
+async function resolveFreelancerUserId(idOrSlug: string): Promise<string> {
+  if (!idOrSlug) return idOrSlug;
+  try {
+    const userRow = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: idOrSlug },
+          { username: idOrSlug },
+          { email: idOrSlug },
+          { slug: idOrSlug } as any,
+          { freelancerProfile: { id: idOrSlug } as any },
+          { freelancerProfile: { slug: idOrSlug } as any },
+        ],
+      },
+      select: { id: true },
+    }).catch(() => null);
+    if (userRow?.id) return userRow.id;
+
+    const fp = await prisma.freelancerProfile.findFirst({
+      where: {
+        OR: [
+          { id: idOrSlug },
+          { userId: idOrSlug },
+          { slug: idOrSlug } as any,
+        ],
+      },
+      select: { userId: true },
+    }).catch(() => null);
+    if (fp?.userId) return fp.userId;
+  } catch {
+    // fallback
+  }
+  return idOrSlug;
+}
+
 export const getPublicFreelancerAvailability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     await ensureFreelancerTables();
+    const targetUserId = await resolveFreelancerUserId(id);
 
     const record = await prisma.freelancerAvailability.findFirst({
-      where: { userId: id },
+      where: { userId: targetUserId },
       orderBy: { createdAt: "desc" },
     });
 
@@ -888,13 +924,14 @@ export const getPublicFreelancerModulesData = async (req: Request, res: Response
   try {
     const { id } = req.params;
     await ensureFreelancerTables();
+    const targetUserId = await resolveFreelancerUserId(id);
 
     const [availRecord, certificates, achievements, services, languages] = await Promise.all([
-      prisma.freelancerAvailability.findFirst({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => null),
-      prisma.freelancerCertificate.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
-      prisma.freelancerAchievement.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
-      prisma.freelancerService.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
-      prisma.freelancerLanguage.findMany({ where: { userId: id }, orderBy: { createdAt: "asc" } }).catch(() => []),
+      prisma.freelancerAvailability.findFirst({ where: { userId: targetUserId }, orderBy: { createdAt: "desc" } }).catch(() => null),
+      prisma.freelancerCertificate.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.freelancerAchievement.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.freelancerService.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.freelancerLanguage.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: "asc" } }).catch(() => []),
     ]);
 
     const availability = computeEffectiveAvailability(availRecord);

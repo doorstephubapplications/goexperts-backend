@@ -128,4 +128,27 @@ router.put("/profile/services/:id", updateFreelancerService as any);
 router.delete("/services/:id", deleteFreelancerService as any);
 router.delete("/profile/services/:id", deleteFreelancerService as any);
 
+// Languages
+import {
+  listFreelancerLanguages,
+  createFreelancerLanguage,
+  updateFreelancerLanguage,
+  deleteFreelancerLanguage,
+} from "../../controllers/freelancer/freelancer-modules.controller.js";
+
+router.get("/languages", listFreelancerLanguages as any);
+router.get("/profile/languages", listFreelancerLanguages as any);
+router.post("/languages", createFreelancerLanguage as any);
+router.post("/profile/languages", createFreelancerLanguage as any);
+router.put("/languages/:id", updateFreelancerLanguage as any);
+router.put("/profile/languages/:id", updateFreelancerLanguage as any);
+router.delete("/languages/:id", deleteFreelancerLanguage as any);
+router.delete("/profile/languages/:id", deleteFreelancerLanguage as any);
+
+// Profile Custom FAQs
+import { getMyProfileFaqs, saveMyProfileFaqs } from "../../controllers/user-faqs.controller.js";
+router.get("/profile/faqs", getMyProfileFaqs as any);
+router.put("/profile/faqs", saveMyProfileFaqs as any);
+router.post("/profile/faqs", saveMyProfileFaqs as any);
+
 export default router;

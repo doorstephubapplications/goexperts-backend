@@ -117,7 +117,16 @@ router.use("/client", clientRoutes);
 router.use("/investor", investorRoutes);
 router.use("/founder", founderRoutes);
 router.use("/referrals", referralRoutes);
-router.use("/tasks", tasksRoutes);
+// User Profile Custom FAQs (all roles)
+import { getMyProfileFaqs, saveMyProfileFaqs, getPublicUserFaqs } from "../controllers/user-faqs.controller.js";
+router.get("/profile/faqs", authMiddleware as any, getMyProfileFaqs as any);
+router.put("/profile/faqs", authMiddleware as any, saveMyProfileFaqs as any);
+router.post("/profile/faqs", authMiddleware as any, saveMyProfileFaqs as any);
+router.get("/v1/profile/faqs", authMiddleware as any, getMyProfileFaqs as any);
+router.put("/v1/profile/faqs", authMiddleware as any, saveMyProfileFaqs as any);
+router.post("/v1/profile/faqs", authMiddleware as any, saveMyProfileFaqs as any);
+router.get("/public/faqs/user/:userId", getPublicUserFaqs as any);
+router.get("/v1/public/faqs/user/:userId", getPublicUserFaqs as any);
 
 // Expose OpenAPI specs publicly
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
