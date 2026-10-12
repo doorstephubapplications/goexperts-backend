@@ -2437,13 +2437,14 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         } catch { }
       }
 
-      // Fetch dynamic modules: Availability, Certifications, Achievements, Services, Languages
-      const [availRecord, certificates, achievements, services, languages] = await Promise.all([
+      // Fetch dynamic modules: Availability, Certifications, Achievements, Services, Languages, Experiences
+      const [availRecord, certificates, achievements, services, languages, experiences] = await Promise.all([
         prisma.freelancerAvailability.findFirst({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => null),
         prisma.freelancerCertificate.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
         prisma.freelancerAchievement.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
         prisma.freelancerService.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
         prisma.freelancerLanguage.findMany({ where: { userId: id }, orderBy: { createdAt: "asc" } }).catch(() => []),
+        prisma.freelancerExperience.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
       ]);
 
       const now = new Date();
@@ -2559,6 +2560,19 @@ export const getById = (modelName: string) => async (req: Request, res: Response
           languageName: l.languageName,
           proficiency: l.proficiency,
           isNative: l.isNative,
+        })),
+        experiences: experiences.map((e) => ({
+          id: e.id,
+          role: e.title || "Experience",
+          title: e.title || "Experience",
+          company: e.company || "",
+          location: e.location || "",
+          startDate: e.startDate || "",
+          endDate: e.endDate || "",
+          isCurrent: Boolean(e.isCurrent),
+          description: e.description || "",
+          skillsUsed: e.skillsUsed ? (Array.isArray(e.skillsUsed) ? e.skillsUsed : String(e.skillsUsed).split(",").map((s) => s.trim()).filter(Boolean)) : [],
+          skills: e.skillsUsed ? (Array.isArray(e.skillsUsed) ? e.skillsUsed : String(e.skillsUsed).split(",").map((s) => s.trim()).filter(Boolean)) : [e.title || "Experience"],
         })),
       }));
     }
