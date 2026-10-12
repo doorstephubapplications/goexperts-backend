@@ -12,31 +12,34 @@ export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<v
     // 1. Fetch public platform channels (configured by admin)
     const footerData = await footerService.getPublishedFooter().catch(() => null);
     const platformSocialLinks = (footerData?.socialLinks || [])
-      .filter((s: any) => s.isEnabled !== false)
+      .filter((s: any) => s.isEnabled !== false && typeof s.url === 'string' && s.url.trim().length > 0)
       .map((s: any) => ({
         id: s.id,
         platform: s.platform,
-        url: s.url,
-        label: s.label,
+        url: s.url.trim(),
+        label: s.label || s.platform,
         isPlatform: true,
       }));
 
-    // 2. Fetch user's profile links if authenticated or query has userId
-    let userLinks: any[] = [];
+    // 2. Fetch user's profile links if targetUserId is available
     const targetUserId = userId || (req.query?.userId as string);
     if (targetUserId) {
-      userLinks = await (prisma as any).socialLink.findMany({
+      const userLinks = await (prisma as any).socialLink.findMany({
         where: { userId: targetUserId },
         orderBy: { createdAt: 'desc' },
       }).catch(() => []);
+
+      res.json({
+        success: true,
+        data: platformSocialLinks,
+        ...(userLinks && userLinks.length > 0 ? { userLinks } : {}),
+      });
+      return;
     }
 
     res.json({
       success: true,
       data: platformSocialLinks,
-      channels: platformSocialLinks,
-      userLinks,
-      links: platformSocialLinks.length > 0 ? platformSocialLinks : userLinks,
     });
   } catch (error) {
     console.error('Error fetching social links:', error);
