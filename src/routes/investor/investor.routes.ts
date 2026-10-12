@@ -108,4 +108,24 @@ router.get("/team", listInvestorTeam as any);
 router.post("/team", addInvestorTeamMember as any);
 router.delete("/team/:id", deleteInvestorTeamMember as any);
 
+// Professional Services
+import {
+  listFreelancerServices,
+  getFreelancerServiceById,
+  createFreelancerService,
+  updateFreelancerService,
+  deleteFreelancerService,
+} from "../../controllers/freelancer/freelancer-modules.controller.js";
+
+router.get("/services", listFreelancerServices as any);
+router.get("/profile/services", listFreelancerServices as any);
+router.post("/services", createFreelancerService as any);
+router.post("/profile/services", createFreelancerService as any);
+router.get("/services/:id", getFreelancerServiceById as any);
+router.get("/profile/services/:id", getFreelancerServiceById as any);
+router.put("/services/:id", updateFreelancerService as any);
+router.put("/profile/services/:id", updateFreelancerService as any);
+router.delete("/services/:id", deleteFreelancerService as any);
+router.delete("/profile/services/:id", deleteFreelancerService as any);
+
 export default router;

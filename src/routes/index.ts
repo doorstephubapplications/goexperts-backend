@@ -91,6 +91,11 @@ router.delete("/v1/mobile/public/investors/:id/save", authMiddleware as any, uns
 // Subscription / Plan Activation Routes
 router.use("/subscription", subscriptionRoutes);
 
+import socialLinksRoutes from "./mobile/social-links.routes.js";
+// User & Platform Social Links (Website & Mobile unified endpoints)
+router.use("/social-links", socialLinksRoutes);
+router.use("/v1/social-links", socialLinksRoutes);
+
 import activityRoutes from "./activity/activity.routes.js";
 import supportRoutes from "./support/support.routes.js";
 import connectionsRoutes from "./connections/connections.routes.js";

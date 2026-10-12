@@ -207,4 +207,62 @@ router.get("/team", listFreelancerTeam as any);
 router.post("/team", addFreelancerTeamMember as any);
 router.delete("/team/:id", deleteFreelancerTeamMember as any);
 
+import {
+  getFreelancerAvailability,
+  setFreelancerAvailability,
+  reactivateFreelancerAvailability,
+  listFreelancerCertifications,
+  createFreelancerCertification,
+  updateFreelancerCertification,
+  deleteFreelancerCertification,
+  listFreelancerAchievements,
+  createFreelancerAchievement,
+  updateFreelancerAchievement,
+  deleteFreelancerAchievement,
+  listFreelancerServices,
+  getFreelancerServiceById,
+  createFreelancerService,
+  updateFreelancerService,
+  deleteFreelancerService,
+  listFreelancerLanguages,
+  createFreelancerLanguage,
+  updateFreelancerLanguage,
+  deleteFreelancerLanguage,
+} from "../../controllers/freelancer/freelancer-modules.controller.js";
+
+// MODULE 1: Profile Availability (Active / Inactive / Scheduled / Reactivate)
+router.get("/availability", getFreelancerAvailability as any);
+router.put("/availability", setFreelancerAvailability as any);
+router.post("/availability/reactivate", reactivateFreelancerAvailability as any);
+router.delete("/availability", reactivateFreelancerAvailability as any);
+
+// MODULE 2: Certifications & Achievements
+router.get("/certifications", listFreelancerCertifications as any);
+router.post("/certifications", createFreelancerCertification as any);
+router.put("/certifications/:id", updateFreelancerCertification as any);
+router.delete("/certifications/:id", deleteFreelancerCertification as any);
+
+router.get("/achievements", listFreelancerAchievements as any);
+router.post("/achievements", createFreelancerAchievement as any);
+router.put("/achievements/:id", updateFreelancerAchievement as any);
+router.delete("/achievements/:id", deleteFreelancerAchievement as any);
+
+// MODULE 3: Professional Services
+router.get("/services", listFreelancerServices as any);
+router.get("/profile/services", listFreelancerServices as any);
+router.post("/services", createFreelancerService as any);
+router.post("/profile/services", createFreelancerService as any);
+router.get("/services/:id", getFreelancerServiceById as any);
+router.get("/profile/services/:id", getFreelancerServiceById as any);
+router.put("/services/:id", updateFreelancerService as any);
+router.put("/profile/services/:id", updateFreelancerService as any);
+router.delete("/services/:id", deleteFreelancerService as any);
+router.delete("/profile/services/:id", deleteFreelancerService as any);
+
+// MODULE 4: Languages
+router.get("/languages", listFreelancerLanguages as any);
+router.post("/languages", createFreelancerLanguage as any);
+router.put("/languages/:id", updateFreelancerLanguage as any);
+router.delete("/languages/:id", deleteFreelancerLanguage as any);
+
 export default router;

@@ -2437,6 +2437,41 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         } catch { }
       }
 
+      // Fetch dynamic modules: Availability, Certifications, Achievements, Services, Languages
+      const [availRecord, certificates, achievements, services, languages] = await Promise.all([
+        prisma.freelancerAvailability.findFirst({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => null),
+        prisma.freelancerCertificate.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
+        prisma.freelancerAchievement.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
+        prisma.freelancerService.findMany({ where: { userId: id }, orderBy: { createdAt: "desc" } }).catch(() => []),
+        prisma.freelancerLanguage.findMany({ where: { userId: id }, orderBy: { createdAt: "asc" } }).catch(() => []),
+      ]);
+
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      let isAvailable = true;
+      let effectiveStatus = "available";
+      let statusLabel = "Available for Work";
+      let periodText = null;
+      let publicReason = null;
+
+      if (availRecord && availRecord.status === "unavailable" && availRecord.startDate && availRecord.endDate) {
+        const startStr = String(availRecord.startDate).slice(0, 10);
+        const endStr = String(availRecord.endDate).slice(0, 10);
+        if (todayStr >= startStr && todayStr <= endStr) {
+          isAvailable = false;
+          effectiveStatus = "unavailable";
+          statusLabel = "Currently Unavailable";
+          periodText = `Not accepting new work from ${startStr} to ${endStr}`;
+          if (availRecord.reasonPublicVisibility) {
+            publicReason = availRecord.reasonCode === "Other" ? availRecord.customReason : availRecord.reasonCode;
+          }
+        } else if (todayStr < startStr) {
+          effectiveStatus = "scheduled";
+          statusLabel = "Available (Inactivity Scheduled)";
+          periodText = `Scheduled offline from ${startStr} to ${endStr}`;
+        }
+      }
+
       await notifyProfileViewed({
         profileOwnerId: id,
         viewerId: (req as AuthRequest).user?.id,
@@ -2475,7 +2510,56 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         verified: Boolean(user.isVerified || user.verified),
         role: user.role || 'freelancer',
         registrationData: reg,
-        isSaved: isSaved
+        isSaved: isSaved,
+        availability: {
+          effectiveStatus,
+          isAvailable,
+          statusLabel,
+          periodText,
+          startDate: (!isAvailable || effectiveStatus === "scheduled") ? availRecord?.startDate : null,
+          endDate: (!isAvailable || effectiveStatus === "scheduled") ? availRecord?.endDate : null,
+          reason: publicReason,
+        },
+        services: services.map((s) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          categoryId: s.categoryId,
+          skills: s.skills,
+          thumbnailUrl: s.thumbnailUrl,
+          rateAmount: s.rateAmount,
+          rateUnit: s.rateUnit,
+          currency: s.currency || "INR",
+        })),
+        certifications: certificates.map((c) => ({
+          id: c.id,
+          name: c.name,
+          issuer: c.issuer,
+          issued: c.issued,
+          expirationDate: c.expirationDate,
+          doesNotExpire: c.doesNotExpire,
+          credentialUrl: c.credentialUrl || c.url,
+          credentialId: c.credentialId || c.number,
+          description: c.description,
+          skillsUsed: c.skillsUsed,
+          fileUrl: c.fileUrl,
+        })),
+        achievements: achievements.map((a) => ({
+          id: a.id,
+          title: a.title,
+          achievementType: a.achievementType,
+          organization: a.organization,
+          achievementDate: a.achievementDate,
+          description: a.description,
+          evidenceUrl: a.evidenceUrl,
+        })),
+        languages: languages.map((l) => ({
+          id: l.id,
+          languageCode: l.languageCode,
+          languageName: l.languageName,
+          proficiency: l.proficiency,
+          isNative: l.isNative,
+        })),
       }));
     }
 

@@ -141,11 +141,15 @@ model User {
   deviceTokens            DeviceToken[]
   featuredServices        FeaturedService[]
   founderProfile          FounderProfile?
-  freelancerCertificates  FreelancerCertificate[]
-  freelancerEducations    FreelancerEducation[]
-  freelancerExperiences   FreelancerExperience[]
-  freelancerProfile       FreelancerProfile?
-  investorProfile         InvestorProfile?
+  freelancerCertificates   FreelancerCertificate[]
+  freelancerEducations     FreelancerEducation[]
+  freelancerExperiences    FreelancerExperience[]
+  freelancerAchievements   FreelancerAchievement[]
+  freelancerServices       FreelancerService[]
+  freelancerLanguages      FreelancerLanguage[]
+  freelancerAvailabilities FreelancerAvailability[]
+  freelancerProfile        FreelancerProfile?
+  investorProfile          InvestorProfile?
   invoices                Invoice[]
   reactions               MessageReaction[]
   notificationLogs        NotificationLog[]
@@ -1782,23 +1786,102 @@ model FreelancerEducation {
 }
 
 model FreelancerCertificate {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  name       String
-  issuer     String
-  number     String
-  issued     String
-  url        String?
-  verified   Boolean  @default(false)
-  fileUrl    String?  @map("file_url")
-  fileType   String?  @map("file_type")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-  skillsUsed String?  @map("skills_used")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  name                String
+  issuer              String
+  number              String   @default("")
+  issued              String   @default("")
+  url                 String?
+  verified            Boolean  @default(false)
+  fileUrl             String?  @map("file_url")
+  fileType            String?  @map("file_type")
+  expirationDate      String?  @map("expiration_date")
+  doesNotExpire       Boolean  @default(false) @map("does_not_expire")
+  credentialId        String?  @map("credential_id")
+  credentialUrl       String?  @map("credential_url")
+  categoryId          String?  @map("category_id")
+  description         String?  @db.Text
+  attachmentReference String?  @map("attachment_reference")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  skillsUsed          String?  @map("skills_used")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("freelancer_certificates")
+}
+
+model FreelancerAchievement {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  title               String
+  achievementType     String   @map("achievement_type")
+  organization        String?
+  achievementDate     String   @map("achievement_date")
+  categoryId          String?  @map("category_id")
+  description         String?  @db.Text
+  evidenceUrl         String?  @map("evidence_url")
+  attachmentReference String?  @map("attachment_reference")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("freelancer_achievements")
+}
+
+model FreelancerService {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  title        String
+  description  String   @db.Text
+  categoryId   String?  @map("category_id")
+  skills       String?  @db.Text
+  thumbnailUrl String?  @map("thumbnail_url")
+  rateAmount   Float?   @map("rate_amount")
+  rateUnit     String?  @map("rate_unit")
+  currency     String?  @default("INR")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("freelancer_services")
+}
+
+model FreelancerLanguage {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  languageCode String   @map("language_code")
+  languageName String   @map("language_name")
+  proficiency  String
+  isNative     Boolean  @default(false) @map("is_native")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, languageCode])
+  @@index([userId])
+  @@map("freelancer_languages")
+}
+
+model FreelancerAvailability {
+  id                     String    @id @default(uuid())
+  userId                 String    @map("user_id")
+  status                 String    @default("available")
+  startDate              String?   @map("start_date")
+  endDate                String?   @map("end_date")
+  reasonCode             String?   @map("reason_code")
+  customReason           String?   @map("custom_reason")
+  privateNotes           String?   @map("private_notes") @db.Text
+  reasonPublicVisibility Boolean   @default(true) @map("reason_public_visibility")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("freelancer_availabilities")
 }
 
 model Proposal {
