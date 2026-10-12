@@ -1,21 +1,43 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth.js';
 import { prisma } from '../../config/db.js';
+import { FooterPublicService } from '../../modules/footer/footer.service.js';
+
+const footerService = new FooterPublicService();
 
 export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
+
+    // 1. Fetch public platform channels (configured by admin)
+    const footerData = await footerService.getPublishedFooter().catch(() => null);
+    const platformSocialLinks = (footerData?.socialLinks || [])
+      .filter((s: any) => s.isEnabled !== false)
+      .map((s: any) => ({
+        id: s.id,
+        platform: s.platform,
+        url: s.url,
+        label: s.label,
+        isPlatform: true,
+      }));
+
+    // 2. Fetch user's profile links if authenticated or query has userId
+    let userLinks: any[] = [];
+    const targetUserId = userId || (req.query?.userId as string);
+    if (targetUserId) {
+      userLinks = await (prisma as any).socialLink.findMany({
+        where: { userId: targetUserId },
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => []);
     }
 
-    const links = await (prisma as any).socialLink.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
+    res.json({
+      success: true,
+      data: platformSocialLinks,
+      channels: platformSocialLinks,
+      userLinks,
+      links: platformSocialLinks.length > 0 ? platformSocialLinks : userLinks,
     });
-
-    res.json({ success: true, links });
   } catch (error) {
     console.error('Error fetching social links:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });

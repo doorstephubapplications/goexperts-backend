@@ -1349,6 +1349,21 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           }).catch(() => {});
         }
       }
+      const normPrimary = normalizePortalRole(user.role);
+      const ownerActivatedRoles: string[] = [];
+      if (user.userRoles && Array.isArray(user.userRoles)) { 
+        user.userRoles.forEach((ur: any) => { 
+          if (ur.status === "active") ownerActivatedRoles.push(normalizePortalRole(ur.role)); 
+        }); 
+      }
+      if (user.freelancerProfile || user.role === "freelancer") ownerActivatedRoles.push("freelancer");
+      if (user.clientProfile || user.role === "client" || user.role === "business") ownerActivatedRoles.push("client");
+      if (user.founderProfile || user.role === "founder" || user.role === "startup") ownerActivatedRoles.push("founder");
+      if (user.investorProfile || user.role === "investor") ownerActivatedRoles.push("investor");
+      if (!ownerActivatedRoles.includes(normPrimary)) {
+        ownerActivatedRoles.push(normPrimary);
+      }
+      const activatedRoles = teamInfo ? teamInfo.permittedDashboards : Array.from(new Set(ownerActivatedRoles));
 
       const rawPassword = user.password?.includes(':') 
         ? decryptPassword(user.password) 
@@ -1374,10 +1389,12 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           expiredAt: subscriptionGate.expiredAt ?? null,
           isOwner: !teamInfo,
           accountType: teamInfo ? "team_member" : "owner",
-          permittedDashboards: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
+          permittedDashboards: activatedRoles,
+          activatedRoles,
+          activeRoles: activatedRoles,
+          roles: activatedRoles,
+          userRoles: user.userRoles || [],
           modulePermissions: teamInfo ? teamInfo.modulePermissions : null,
-          activeRoles: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
-          roles: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
           teamMembership: teamInfo ? {
             id: teamInfo.membership.id,
             clientId: teamInfo.membership.clientId,
@@ -1428,12 +1445,24 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
         },
       });
       if (user) {
-        const [completion, subscriptionGate]: any[] = await Promise.all([
+        const [completion, subscriptionGate, kycReadiness]: any[] = await Promise.all([
           safeProfileCompletion(user.id),
           safeSubscriptionGate(user.id),
+          safeKycReadiness(user.id),
         ]);
         const isPlanExpired = subscriptionGate.planExpired === true || subscriptionGate.status === 'expired';
         const effectiveStatus = isPlanExpired ? 'inactive' : user.status;
+        const teamInfo = await safeTeamInfo(user.id, user.email);
+        let effectiveRole = user.role;
+        if (teamInfo) {
+          if (!teamInfo.permittedDashboards.includes(user.role)) {
+            effectiveRole = teamInfo.permittedDashboards[0] || "client";
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { role: effectiveRole }
+            }).catch(() => {});
+          }
+        }
 
         let sanitizedFallback: any;
         try {
@@ -1486,12 +1515,21 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           }
         } catch(e) {}
 
-        const kycReadiness = buildKycReadiness(user);
-        const teamInfo = await safeTeamInfo(user.id, user.email);
-        let effectiveRole = user.role;
-        if (teamInfo && !teamInfo.permittedDashboards.includes(user.role)) {
-          effectiveRole = teamInfo.permittedDashboards[0] || "client";
+        const normPrimary = normalizePortalRole(user.role);
+        const ownerActivatedRoles: string[] = [];
+        if (user.userRoles && Array.isArray(user.userRoles)) { 
+          user.userRoles.forEach((ur: any) => { 
+            if (ur.status === "active") ownerActivatedRoles.push(normalizePortalRole(ur.role)); 
+          }); 
         }
+        if (user.freelancerProfile || user.role === "freelancer") ownerActivatedRoles.push("freelancer");
+        if (user.clientProfile || user.role === "client" || user.role === "business") ownerActivatedRoles.push("client");
+        if (user.founderProfile || user.role === "founder" || user.role === "startup") ownerActivatedRoles.push("founder");
+        if (user.investorProfile || user.role === "investor") ownerActivatedRoles.push("investor");
+        if (!ownerActivatedRoles.includes(normPrimary)) {
+          ownerActivatedRoles.push(normPrimary);
+        }
+        const activatedRoles = teamInfo ? teamInfo.permittedDashboards : Array.from(new Set(ownerActivatedRoles));
 
         return res.json({
           success: true,
@@ -1514,10 +1552,12 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
               expiredAt: subscriptionGate.expiredAt ?? null,
               isOwner: !teamInfo,
               accountType: teamInfo ? "team_member" : "owner",
-              permittedDashboards: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
+              permittedDashboards: activatedRoles,
+              activatedRoles,
+              activeRoles: activatedRoles,
+              roles: activatedRoles,
+              userRoles: user.userRoles || [],
               modulePermissions: teamInfo ? teamInfo.modulePermissions : null,
-              activeRoles: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
-              roles: teamInfo ? teamInfo.permittedDashboards : [effectiveRole],
               teamMembership: teamInfo ? {
                 id: teamInfo.membership.id,
                 clientId: teamInfo.membership.clientId,
@@ -3076,15 +3116,43 @@ export const switchRole = async (req: AuthenticatedRequest, res: Response, next:
   try {
     const { role } = req.body;
     if (!role) return res.status(400).json(errorResponse('Role is required', 'BAD_REQUEST'));
-    const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { userRoles: true } });
+    const user = await prisma.user.findUnique({ 
+      where: { id: req.user.id }, 
+      include: { 
+        userRoles: true,
+        freelancerProfile: true,
+        clientProfile: true,
+        founderProfile: true,
+        investorProfile: true,
+      } 
+    });
     if (!user) return res.status(404).json(errorResponse('User not found', 'NOT_FOUND'));
-    let isAllowed = user.role === role;
+    
+    const normRole = normalizePortalRole(role);
+    let isAllowed = user.role === normRole;
     if (!isAllowed) {
-      const isActivated = user.userRoles.find(r => r.role === role && r.status === 'active');
-      if (!isActivated) return res.status(403).json(errorResponse('Role is not activated', 'ROLE_NOT_ENTITLED'));
+      const isActivated = user.userRoles.find(r => normalizePortalRole(r.role) === normRole && r.status === 'active');
+      const hasProfile = (normRole === 'freelancer' && !!(user as any).freelancerProfile) ||
+                         (normRole === 'client' && !!(user as any).clientProfile) ||
+                         (normRole === 'founder' && !!(user as any).founderProfile) ||
+                         (normRole === 'investor' && !!(user as any).investorProfile);
+      const isExplicitlyInactive = user.userRoles.some(r => normalizePortalRole(r.role) === normRole && r.status !== 'active');
+      if (!isActivated && (isExplicitlyInactive || !hasProfile)) {
+        return res.status(403).json(errorResponse('Role is not activated', 'ROLE_NOT_ENTITLED'));
+      }
     }
     
-    return res.status(200).json(successResponse('Switched workspace successfully', { activeWorkspace: role as string }));
+    if (user.role !== normRole && typeof (prisma?.user as any)?.update === 'function') {
+      await (prisma.user as any).update({
+        where: { id: user.id },
+        data: { role: normRole }
+      }).catch(() => {});
+    }
+    
+    return res.status(200).json(successResponse('Switched workspace successfully', { 
+      activeWorkspace: normRole as string,
+      role: normRole as string 
+    }));
   } catch (err) {
     next(err);
   }

@@ -42,7 +42,7 @@ export function validateFooterHref(href: string, routeType: string): boolean {
 
 let footerCache: any = null;
 let footerCacheTime = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 5 * 1000; // 5 seconds cache for fast live updates
 
 export class FooterPublicService {
   public async getPublishedFooter() {
@@ -51,7 +51,7 @@ export class FooterPublicService {
       return footerCache;
     }
 
-    const config = await prisma.footerConfig.findFirst({
+    let config = await prisma.footerConfig.findFirst({
       where: { status: 'PUBLISHED' },
       include: {
         columns: {
@@ -65,7 +65,6 @@ export class FooterPublicService {
           },
         },
         socialLinks: {
-          where: { isEnabled: true },
           orderBy: { sortOrder: 'asc' },
         },
         appLinks: {
@@ -77,6 +76,34 @@ export class FooterPublicService {
         },
       },
     });
+
+    if (!config) {
+      config = await prisma.footerConfig.findFirst({
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          columns: {
+            where: { isEnabled: true },
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              links: {
+                where: { isEnabled: true },
+                orderBy: { sortOrder: 'asc' },
+              },
+            },
+          },
+          socialLinks: {
+            orderBy: { sortOrder: 'asc' },
+          },
+          appLinks: {
+            where: { isEnabled: true },
+          },
+          legalLinks: {
+            where: { isEnabled: true },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+    }
 
     if (!config) return null;
 
@@ -112,6 +139,7 @@ export class FooterPublicService {
         platform: s.platform,
         url: s.url,
         label: s.label,
+        isEnabled: s.isEnabled === true,
       })),
       appLinks: config.appLinks
         .filter((a) => a.isEnabled && a.url?.startsWith('https://'))
@@ -252,19 +280,47 @@ export class FooterAdminService {
 
   // Social links
   public async upsertSocialLinks(configId: string, links: any[]) {
+    const formattedLinks = links.map((l, i) => ({
+      platform: l.platform,
+      url: l.url,
+      label: l.label,
+      sortOrder: i,
+      isEnabled: l.isEnabled === true || l.isEnabled === "true" || l.isEnabled === 1,
+    }));
+
     await prisma.footerSocialLink.deleteMany({ where: { footerConfigId: configId } });
-    if (links.length > 0) {
+    if (formattedLinks.length > 0) {
       await prisma.footerSocialLink.createMany({
-        data: links.map((l, i) => ({
+        data: formattedLinks.map((l) => ({
           footerConfigId: configId,
-          platform: l.platform,
-          url: l.url,
-          label: l.label,
-          sortOrder: i,
-          isEnabled: l.isEnabled ?? true,
+          ...l,
         })),
       });
     }
+
+    // Also sync across any other configs (e.g. published config) so changes reflect immediately on website
+    try {
+      const otherConfigs = await prisma.footerConfig.findMany({
+        where: { id: { not: configId } },
+      });
+      for (const cfg of otherConfigs) {
+        await prisma.footerSocialLink.deleteMany({ where: { footerConfigId: cfg.id } });
+        if (formattedLinks.length > 0) {
+          await prisma.footerSocialLink.createMany({
+            data: formattedLinks.map((l) => ({
+              footerConfigId: cfg.id,
+              ...l,
+            })),
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[FooterService] sync social error:', e);
+    }
+
+    // Invalidate public cache immediately
+    footerCache = null;
+    footerCacheTime = 0;
   }
 
   // Legal links
@@ -281,5 +337,9 @@ export class FooterAdminService {
         })),
       });
     }
+
+    // Invalidate public cache immediately
+    footerCache = null;
+    footerCacheTime = 0;
   }
 }
