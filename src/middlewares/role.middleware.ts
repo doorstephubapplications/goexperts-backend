@@ -34,16 +34,16 @@ export const portalRoleMiddleware = (roles: string[]) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    const userRole = String(req.user.role || "").toLowerCase();
+    if (req.user.type === "admin" || userRole === "admin" || userRole === "super_admin") {
+      return next();
+    }
+
     if (req.user.type !== "portal") {
       return res.status(403).json({
         success: false,
         message: "Forbidden: portal account required",
       });
-    }
-
-    const userRole = String(req.user.role || "").toLowerCase();
-    if (userRole === "admin" || userRole === "super_admin") {
-      return next();
     }
 
     // Always allow profile setup, onboarding, verification, and settings endpoints so owners can activate roles
