@@ -1445,11 +1445,11 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
         },
       });
       if (user) {
-        const [completion, subscriptionGate, kycReadiness]: any[] = await Promise.all([
+        const [completion, subscriptionGate]: any[] = await Promise.all([
           safeProfileCompletion(user.id),
           safeSubscriptionGate(user.id),
-          safeKycReadiness(user.id),
         ]);
+        const kycReadiness = buildKycReadiness(user);
         const isPlanExpired = subscriptionGate.planExpired === true || subscriptionGate.status === 'expired';
         const effectiveStatus = isPlanExpired ? 'inactive' : user.status;
         const teamInfo = await safeTeamInfo(user.id, user.email);
