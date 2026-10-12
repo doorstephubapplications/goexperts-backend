@@ -90,7 +90,9 @@ router.get("/documents", investorOnly, listInvestorDocuments as any);
 router.post("/documents", investorOnly, addInvestorDocument as any);
 
 router.get("/subscription", investorOnly, listInvestorSubscriptions as any);
+router.get("/subscriptions", investorOnly, listInvestorSubscriptions as any);
 router.post("/subscription/purchase", investorOnly, purchaseInvestorSubscription as any);
+router.post("/subscriptions/purchase", investorOnly, purchaseInvestorSubscription as any);
 
 router.get("/settings", investorOnly, getInvestorSettings as any);
 router.patch("/settings", investorOnly, updateInvestorSettings as any);

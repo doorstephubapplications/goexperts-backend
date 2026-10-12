@@ -118,7 +118,9 @@ router.patch("/notifications/read-all", markAllFounderNotificationsRead as any);
 router.patch("/notifications/:id/read", markFounderNotificationRead as any);
 
 router.get("/subscription", listFounderSubscriptions as any);
+router.get("/subscriptions", listFounderSubscriptions as any);
 router.post("/subscription/purchase", purchaseFounderSubscription as any);
+router.post("/subscriptions/purchase", purchaseFounderSubscription as any);
 
 router.get("/settings", getFounderSettings as any);
 router.patch("/settings", updateFounderSettings as any);

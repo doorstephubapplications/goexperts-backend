@@ -152,7 +152,9 @@ router.post("/wallet/withdraw", withdrawFreelancerWallet as any);
 router.get("/invoices", listFreelancerInvoices as any);
 
 router.get("/subscriptions", listFreelancerSubscriptions as any);
+router.get("/subscription", listFreelancerSubscriptions as any);
 router.post("/subscriptions/purchase", purchaseFreelancerSubscription as any);
+router.post("/subscription/purchase", purchaseFreelancerSubscription as any);
 
 router.get("/experience", getFreelancerExperience as any);
 router.put("/experience", putFreelancerExperience as any);

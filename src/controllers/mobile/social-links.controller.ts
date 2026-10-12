@@ -11,7 +11,7 @@ export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<v
 
     // 1. Fetch public platform channels (configured by admin)
     const footerData = await footerService.getPublishedFooter().catch(() => null);
-    const platformSocialLinks = (footerData?.socialLinks || [])
+    let platformSocialLinks = (footerData?.socialLinks || [])
       .filter((s: any) => s.isEnabled !== false && typeof s.url === 'string' && s.url.trim().length > 0)
       .map((s: any) => ({
         id: s.id,
@@ -20,6 +20,23 @@ export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<v
         label: s.label || s.platform,
         isPlatform: true,
       }));
+
+    // Ensure Twitter / X channel is present if missing from footer config
+    const hasTwitter = platformSocialLinks.some((l: any) => {
+      const p = String(l.platform || '').toUpperCase();
+      return p === 'TWITTER' || p === 'X' || (l.url && (l.url.includes('twitter.com') || l.url.includes('x.com')));
+    });
+
+    if (!hasTwitter) {
+      const defaultTwitterUrl = process.env.TWITTER_URL || 'https://x.com/goexpertsindia';
+      platformSocialLinks.push({
+        id: 'canonical-platform-twitter',
+        platform: 'TWITTER',
+        url: defaultTwitterUrl,
+        label: 'Follow Go Experts on X (Twitter)',
+        isPlatform: true,
+      });
+    }
 
     // 2. Fetch user's profile links if targetUserId is available
     const targetUserId = userId || (req.query?.userId as string);
