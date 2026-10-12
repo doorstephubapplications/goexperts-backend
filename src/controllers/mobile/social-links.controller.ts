@@ -1,15 +1,12 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../../middleware/auth.js';
 import { prisma } from '../../config/db.js';
 import { FooterPublicService } from '../../modules/footer/footer.service.js';
 
 const footerService = new FooterPublicService();
 
-export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getPlatformSocialLinks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.id;
-
-    // 1. Fetch public platform channels (configured by admin)
     const footerData = await footerService.getPublishedFooter().catch(() => null);
     let platformSocialLinks = (footerData?.socialLinks || [])
       .filter((s: any) => s.isEnabled !== false && typeof s.url === 'string' && s.url.trim().length > 0)
@@ -21,7 +18,6 @@ export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<v
         isPlatform: true,
       }));
 
-    // Ensure Twitter / X channel is present if missing from footer config
     const hasTwitter = platformSocialLinks.some((l: any) => {
       const p = String(l.platform || '').toUpperCase();
       return p === 'TWITTER' || p === 'X' || (l.url && (l.url.includes('twitter.com') || l.url.includes('x.com')));
@@ -38,30 +34,79 @@ export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<v
       });
     }
 
-    // 2. Fetch user's profile links if targetUserId is available
-    const targetUserId = userId || (req.query?.userId as string);
-    if (targetUserId) {
-      const userLinks = await (prisma as any).socialLink.findMany({
-        where: { userId: targetUserId },
-        orderBy: { createdAt: 'desc' },
-      }).catch(() => []);
-
-      res.json({
-        success: true,
-        data: platformSocialLinks,
-        ...(userLinks && userLinks.length > 0 ? { userLinks } : {}),
-      });
-      return;
-    }
-
     res.json({
       success: true,
       data: platformSocialLinks,
     });
   } catch (error) {
-    console.error('Error fetching social links:', error);
+    console.error('Error fetching platform social links:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
+};
+
+export const getUserSocialLinks = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const targetUserId = (req.query?.userId as string) || req.user?.id;
+    if (!targetUserId) {
+      res.status(400).json({ success: false, message: 'userId is required or session must be authenticated' });
+      return;
+    }
+
+    // 1. Fetch links from dedicated socialLink table
+    const tableLinks = await (prisma as any).socialLink.findMany({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: 'desc' },
+    }).catch(() => []);
+
+    // 2. Also check freelancerProfile for any saved profile URLs
+    const profile = await (prisma as any).freelancerProfile.findUnique({
+      where: { userId: targetUserId },
+      select: {
+        linkedInUrl: true,
+        githubUrl: true,
+        dribbbleUrl: true,
+        portfolioUrl: true,
+        websiteUrl: true,
+      },
+    }).catch(() => null);
+
+    const mergedLinks = [...tableLinks];
+    if (profile) {
+      const existingPlatforms = new Set(mergedLinks.map((l: any) => String(l.platform || '').toLowerCase()));
+      if (profile.linkedInUrl && !existingPlatforms.has('linkedin')) {
+        mergedLinks.push({ id: `profile-linkedin-${targetUserId}`, userId: targetUserId, platform: 'LINKEDIN', url: profile.linkedInUrl });
+      }
+      if (profile.githubUrl && !existingPlatforms.has('github')) {
+        mergedLinks.push({ id: `profile-github-${targetUserId}`, userId: targetUserId, platform: 'GITHUB', url: profile.githubUrl });
+      }
+      if (profile.dribbbleUrl && !existingPlatforms.has('dribbble')) {
+        mergedLinks.push({ id: `profile-dribbble-${targetUserId}`, userId: targetUserId, platform: 'DRIBBLE', url: profile.dribbbleUrl });
+      }
+      if (profile.portfolioUrl && !existingPlatforms.has('portfolio')) {
+        mergedLinks.push({ id: `profile-portfolio-${targetUserId}`, userId: targetUserId, platform: 'PORTFOLIO', url: profile.portfolioUrl });
+      }
+      if (profile.websiteUrl && !existingPlatforms.has('website')) {
+        mergedLinks.push({ id: `profile-website-${targetUserId}`, userId: targetUserId, platform: 'WEBSITE', url: profile.websiteUrl });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: mergedLinks,
+    });
+  } catch (error) {
+    console.error('Error fetching user social links:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const getSocialLinks = async (req: AuthRequest, res: Response): Promise<void> => {
+  const targetUserId = req.query?.userId as string;
+  // If request explicitly targets a user with ?userId= or /me, return user social links
+  if (targetUserId) {
+    return getUserSocialLinks(req, res);
+  }
+  return getPlatformSocialLinks(req, res);
 };
 
 export const addSocialLink = async (req: AuthRequest, res: Response): Promise<void> => {
