@@ -13,15 +13,27 @@ export const getCurrentPlan = async (req: AuthRequest, res: Response, next: Next
 
 export const getAvailablePlans = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const role = req.user.role;
     const plans = await prisma.subscriptionPlan.findMany({
       where: {
         status: 'active',
-        role: req.user.role,
+        OR: [
+          { role },
+          { role: 'all' },
+          { planType: { in: ['addon', 'all_access', 'additional_role'] } }
+        ],
         amount: { gt: 0 },
         duration: { not: '90_days' }
-      }
+      },
+      orderBy: [{ sortOrder: 'asc' }, { amount: 'asc' }]
     });
-    return res.json(successResponse('Available plans retrieved', plans));
+    return res.json({
+      success: true,
+      message: 'Available plans retrieved',
+      data: plans || [],
+      rows: plans || [],
+      total: plans?.length || 0
+    });
   } catch (error) { next(error); }
 };
 

@@ -1756,8 +1756,12 @@ router.get("/pricing_plans", async (req: Request, res: Response, next: NextFunct
       visibility: { notIn: ["grandfathered", "archived", "private", "internal"] },
     };
 
-    if (role) {
-      whereCondition.role = role;
+    if (role && role !== "all") {
+      whereCondition.OR = [
+        { role },
+        { role: "all" },
+        { planType: { in: ["addon", "all_access", "additional_role"] } }
+      ];
     }
 
     let includeFree = false;
@@ -1777,7 +1781,7 @@ router.get("/pricing_plans", async (req: Request, res: Response, next: NextFunct
 
     const plans = await prisma.subscriptionPlan.findMany({
       where: whereCondition,
-      orderBy: { amount: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { amount: "asc" }],
     });
     return res.json({ success: true, data: plans || [], rows: plans || [], total: plans?.length || 0 });
   } catch (err) {

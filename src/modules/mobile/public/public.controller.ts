@@ -1864,10 +1864,17 @@ export const getPricingPlans = async (req: Request, res: Response, next: NextFun
   try {
     const industryId = req.query.industryId as string | undefined;
     const role = req.query.role as string | undefined;
-    const whereCondition: any = { status: "active" };
+    const whereCondition: any = { 
+      status: "active",
+      visibility: { notIn: ["grandfathered", "archived", "private", "internal"] },
+    };
 
-    if (role) {
-      whereCondition.role = role;
+    if (role && role !== "all") {
+      whereCondition.OR = [
+        { role },
+        { role: "all" },
+        { planType: { in: ["addon", "all_access", "additional_role"] } },
+      ];
     }
 
     let includeFree = false;
@@ -1887,7 +1894,7 @@ export const getPricingPlans = async (req: Request, res: Response, next: NextFun
 
     const plans = await prisma.subscriptionPlan.findMany({
       where: whereCondition,
-      orderBy: { amount: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { amount: "asc" }],
     });
 
     // Some endpoints expect `rows` and `total` for list responses.

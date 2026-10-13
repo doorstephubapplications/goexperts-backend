@@ -9,13 +9,31 @@ import { PaymentReadinessError } from '../../../services/mobile/profile-readines
 export const getPlans = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const requestedRole = (req.query.role as string) || req.user?.role;
+    const where: any = {
+      status: 'active',
+      visibility: { notIn: ['grandfathered', 'archived', 'private', 'internal'] },
+    };
+
+    if (requestedRole && requestedRole !== 'all') {
+      where.OR = [
+        { role: requestedRole },
+        { role: 'all' },
+        { planType: { in: ['addon', 'all_access', 'additional_role'] } },
+      ];
+    }
+
     const plans = await prisma.subscriptionPlan.findMany({
-      where: {
-        status: 'active',
-        role: requestedRole,
-      },
+      where,
+      orderBy: [{ sortOrder: 'asc' }, { amount: 'asc' }],
     });
-    return res.json(successResponse('Subscription plans retrieved', plans));
+    return res.json({
+      success: true,
+      message: 'Subscription plans retrieved',
+      data: plans || [],
+      rows: plans || [],
+      total: plans?.length || 0,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
     next(error);
   }
