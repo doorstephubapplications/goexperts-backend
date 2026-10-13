@@ -2638,9 +2638,10 @@ router.get("/help-center/articles/:slug", async (req: Request, res: Response, ne
 // Public Investors List
 router.get("/investors", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page = 1, pageSize = 12 } = req.query;
-    const skip = (Number(page) - 1) * Number(pageSize);
-    const take = Number(pageSize);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 12));
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
     let filters: any = {};
     if (req.query.filters) {
@@ -2651,29 +2652,89 @@ router.get("/investors", async (req: Request, res: Response, next: NextFunction)
 
     const where: any = { role: { in: ["investor", "Investor"] }, deletedAt: null };
 
-    if (filters.industry && filters.industry.in && filters.industry.in.length > 0) {
-      where.investorProfile = { ...where.investorProfile, focusAreas: { contains: filters.industry.in[0] } };
-    }
-    if (filters.stage && filters.stage.in) {
-      where.investorProfile = { ...where.investorProfile, preferredStage: { in: filters.stage.in } };
-    }
-    
-    if (req.query.search) {
+    // Search filter across firm name, user full name, bio/pitch, and focus areas
+    const searchQuery = String(req.query.search || req.query.q || "").trim();
+    if (searchQuery) {
       where.OR = [
-        { fullName: { contains: String(req.query.search) } },
-        { investorProfile: { firm: { contains: String(req.query.search) } } }
+        { fullName: { contains: searchQuery } },
+        { bio: { contains: searchQuery } },
+        { investorProfile: { firm: { contains: searchQuery } } },
+        { investorProfile: { focusAreas: { contains: searchQuery } } },
       ];
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      include: { investorProfile: true },
-      skip,
-      take,
-      orderBy: { createdAt: "desc" }
-    });
-    
-    const total = await prisma.user.count({ where });
+    // Industry / Focus Area Filter
+    const industryParam = req.query.industry || (filters.industry && filters.industry.in && filters.industry.in[0]);
+    if (industryParam && industryParam !== "all") {
+      const indStr = String(industryParam).trim();
+      where.investorProfile = {
+        ...(where.investorProfile || {}),
+        focusAreas: { contains: indStr },
+      };
+    }
+
+    // Stage Filter
+    const stageParam = req.query.stage || (filters.stage && (filters.stage.in || filters.stage));
+    if (stageParam && stageParam !== "all") {
+      if (Array.isArray(stageParam)) {
+        where.investorProfile = {
+          ...(where.investorProfile || {}),
+          preferredStage: { in: stageParam },
+        };
+      } else {
+        where.investorProfile = {
+          ...(where.investorProfile || {}),
+          preferredStage: { contains: String(stageParam).trim() },
+        };
+      }
+    }
+
+    // Investor Type Filter
+    const typeParam = req.query.type;
+    if (typeParam && typeParam !== "all") {
+      where.investorProfile = {
+        ...(where.investorProfile || {}),
+        investorType: { contains: String(typeParam).trim() },
+      };
+    }
+
+    // Location Filter
+    const locationParam = req.query.location;
+    if (locationParam && locationParam !== "all") {
+      const locStr = String(locationParam).trim();
+      where.country = { contains: locStr };
+    }
+
+    // Ticket Min / Max Budget Filter
+    if (req.query.minTicket) {
+      const minVal = Number(req.query.minTicket);
+      if (!isNaN(minVal)) {
+        where.investorProfile = {
+          ...(where.investorProfile || {}),
+          ticketMin: { gte: minVal },
+        };
+      }
+    }
+    if (req.query.maxTicket) {
+      const maxVal = Number(req.query.maxTicket);
+      if (!isNaN(maxVal)) {
+        where.investorProfile = {
+          ...(where.investorProfile || {}),
+          ticketMax: { lte: maxVal },
+        };
+      }
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: { investorProfile: true },
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count({ where }),
+    ]);
 
     const allIndustries = await prisma.industry.findMany().catch(() => []);
     const allStages = await prisma.startupStage.findMany().catch(() => []);
@@ -2691,8 +2752,8 @@ router.get("/investors", async (req: Request, res: Response, next: NextFunction)
         const trimmed = id.trim();
         const found = list.find(x => x.id === trimmed);
         if (found) return found.name;
-        if (isUUID(trimmed)) return null; // If it's a UUID but not found, hide it
-        return trimmed; // If it's a regular string like "Multi-sector", keep it
+        if (isUUID(trimmed)) return null;
+        return trimmed;
       }).filter(Boolean).join(", ");
     };
 
@@ -2701,16 +2762,22 @@ router.get("/investors", async (req: Request, res: Response, next: NextFunction)
       return {
         id: u.id,
         name: p?.firm || u.fullName || "Unnamed Investor",
+        firmName: p?.firm || u.fullName || "Unnamed Investor",
         pitch: u.bio || "Investment firm focused on early stage startups.",
-        industry: resolveNames(p?.focusAreas || "", allOptions) || "Multi-sector",
-        stage: resolveNames(p?.preferredStage || "", allStages) || "Seed",
-        location: resolveNames(u.country || "", allOptions) || u.country || "Remote",
+        industry: resolveNames(p?.focusAreas || "", allOptions) || p?.focusAreas || "Multi-sector",
+        stage: resolveNames(p?.preferredStage || "", allStages) || p?.preferredStage || "Seed",
+        location: resolveNames(u.country || "", allOptions) || [u.city, u.country].filter(Boolean).join(", ") || u.country || "Remote",
         funding: (p?.ticketMin && p?.ticketMax) ? `$${p.ticketMin.toLocaleString()} - $${p.ticketMax.toLocaleString()}` : "Undisclosed",
-        verified: true
+        ticketMin: p?.ticketMin || null,
+        ticketMax: p?.ticketMax || null,
+        type: p?.investorType || "Venture Capital",
+        deals: p?.deals || 0,
+        avatarUrl: u.avatarUrl || null,
+        verified: Boolean(u.isVerified || u.verified || true),
       };
     });
 
-    res.json({ success: true, rows, total, page: Number(page), pageSize: Number(pageSize) });
+    res.json({ success: true, rows, total, page, pageSize });
   } catch (err) {
     next(err);
   }
@@ -2818,49 +2885,166 @@ router.get("/investors/:id", async (req: Request, res: Response, next: NextFunct
 // Public Founders List
 router.get("/founders", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page = 1, pageSize = 12 } = req.query;
-    const skip = (Number(page) - 1) * Number(pageSize);
-    const take = Number(pageSize);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 12));
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
-    const where: any = { role: { in: ["founder", "Founder"] }, deletedAt: null };
+    let filters: any = {};
+    if (req.query.filters) {
+      try {
+        filters = JSON.parse(req.query.filters as string);
+      } catch {}
+    }
 
-    if (req.query.search) {
-      const q = String(req.query.search).trim();
+    const where: any = { 
+      role: { in: ["founder", "Founder"] }, 
+      deletedAt: null 
+    };
+
+    // Server-Side Search across Founder Name, Startup Name, Industry, Pitch, City, Country
+    const searchQuery = String(req.query.search || req.query.q || "").trim();
+    if (searchQuery) {
       where.OR = [
-        { fullName: { contains: q } },
-        { founderProfile: { startupName: { contains: q } } },
-        { founderProfile: { industry: { contains: q } } },
+        { fullName: { contains: searchQuery } },
+        { bio: { contains: searchQuery } },
+        { city: { contains: searchQuery } },
+        { country: { contains: searchQuery } },
+        { founderProfile: { startupName: { contains: searchQuery } } },
+        { founderProfile: { industry: { contains: searchQuery } } },
+        { founderProfile: { pitch: { contains: searchQuery } } },
       ];
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      include: { founderProfile: true },
-      skip,
-      take,
-      orderBy: { createdAt: "desc" },
-    });
+    // Server-Side Industry Filter
+    const industryParam = req.query.industry || (filters.industry && (filters.industry.in?.[0] || filters.industry));
+    if (industryParam && industryParam !== "all" && industryParam !== "All") {
+      const indStr = String(industryParam).trim();
+      where.founderProfile = {
+        ...(where.founderProfile || {}),
+        industry: { contains: indStr },
+      };
+    }
 
-    const total = await prisma.user.count({ where });
+    // Server-Side Stage Filter
+    const stageParam = req.query.stage || (filters.stage && (filters.stage.in?.[0] || filters.stage));
+    if (stageParam && stageParam !== "all" && stageParam !== "All") {
+      const stageStr = String(stageParam).trim();
+      where.founderProfile = {
+        ...(where.founderProfile || {}),
+        stage: { contains: stageStr },
+      };
+    }
+
+    // Server-Side Location Filter
+    const locationParam = req.query.location || (filters.location && (filters.location.in?.[0] || filters.location));
+    if (locationParam && locationParam !== "all" && locationParam !== "All") {
+      const locStr = String(locationParam).trim();
+      where.OR = [
+        ...(where.OR || []),
+        { city: { contains: locStr } },
+        { country: { contains: locStr } },
+      ];
+    }
+
+    const [users, total, allIndustries, allStages, allCountries, masterOptions] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: { founderProfile: true },
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count({ where }),
+      prisma.industry.findMany().catch(() => []),
+      prisma.startupStage.findMany().catch(() => []),
+      prisma.country.findMany().catch(() => []),
+      (prisma as any).masterOption?.findMany({ select: { id: true, label: true, value: true } }).catch(() => []) || [],
+    ]);
+
+    const allTaxonomies = [...allIndustries, ...allStages, ...allCountries];
+
+    // Comprehensive ID and slug cleaner
+    const cleanTaxonomyValue = (raw: string | null | undefined, fallback: string): string => {
+      if (!raw || typeof raw !== "string") return fallback;
+      const trimmed = raw.trim();
+      if (!trimmed) return fallback;
+
+      // Handle comma-separated values
+      const parts = trimmed.split(",").map((p) => p.trim()).filter(Boolean);
+      const cleanedParts = parts.map((part) => {
+        // 1. Check against masterOption label/value
+        const foundMaster = masterOptions.find((m: any) => m.id === part || m.value === part);
+        if (foundMaster?.label) return foundMaster.label;
+
+        // 2. Check against Industry, StartupStage, Country
+        const foundTax = allTaxonomies.find((t: any) => t.id === part || t.name === part);
+        if (foundTax?.name) return foundTax.name;
+
+        // 3. Check for 'opt_startup_stage_...' or 'opt_startup_goal_...'
+        if (/^opt_/i.test(part)) {
+          const stripped = part.replace(/^opt_[a-z0-9]+_/i, "").replace(/[_-]+/g, " ").trim();
+          if (stripped && !/^[0-9a-f-]{10,}$/i.test(stripped)) {
+            return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+          }
+          return null;
+        }
+
+        // 4. If it's a UUID or hex hash, discard it
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(part) || /^[0-9a-f]{12,}$/i.test(part)) {
+          return null;
+        }
+
+        // 5. Clean up underscores/slugs if it looks like snake_case or slug
+        if (part.includes("_") && !part.includes(" ")) {
+          return part.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        }
+
+        return part;
+      }).filter(Boolean);
+
+      return cleanedParts.length > 0 ? cleanedParts.join(", ") : fallback;
+    };
+
+    // Helper to sanitize strings like roles, names, startup names
+    const sanitizeDisplay = (raw: string | null | undefined, fallback: string): string => {
+      if (!raw || typeof raw !== "string") return fallback;
+      const trimmed = raw.trim();
+      if (
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed) ||
+        /^[0-9a-f]{8,}[-_][0-9a-f]{4,}/i.test(trimmed) ||
+        /^be[0-9a-f-]{10,}/i.test(trimmed) ||
+        /^opt_/i.test(trimmed)
+      ) {
+        // Try to match masterOption
+        const found = masterOptions.find((m: any) => m.id === trimmed || m.value === trimmed);
+        return found?.label || fallback;
+      }
+      return trimmed;
+    };
 
     const rows = users.map((u) => {
       const fp = u.founderProfile;
       return {
         id: u.id,
-        name: u.fullName || "Founder",
-        role: fp?.founderRole || "Founder",
-        startupName: fp?.startupName || "",
-        industry: fp?.industry || "Technology",
-        stage: fp?.stage || "MVP",
-        location: [u.city, u.country].filter(Boolean).join(", ") || u.country || "",
+        name: sanitizeDisplay(u.fullName, "Founder"),
+        role: sanitizeDisplay(fp?.founderRole, "Founder & CEO"),
+        startupName: sanitizeDisplay(fp?.startupName, ""),
+        industry: cleanTaxonomyValue(fp?.industry, "Technology"),
+        stage: cleanTaxonomyValue(fp?.stage, "Early Stage"),
+        pitch: fp?.pitch && !fp.pitch.includes("be3c") ? fp.pitch : (u.bio && !u.bio.includes("be3c") ? u.bio : "Building scalable innovations and connecting with strategic partners."),
+        location: cleanTaxonomyValue(u.country, [u.city, u.country].filter(Boolean).join(", ") || "Remote"),
         avatarUrl: u.avatarUrl || null,
         coverUrl: u.coverImageUrl || null,
         identityVerified: Boolean(u.isVerified || u.verified),
         status: u.status || "active",
+        teamSize: fp?.teamSize || 1,
+        raised: fp?.raised || 0,
+        targetRaise: fp?.targetRaise || 0,
       };
     });
 
-    res.json({ success: true, rows, total, page: Number(page), pageSize: Number(pageSize) });
+    res.json({ success: true, rows, total, page, pageSize });
   } catch (err) {
     next(err);
   }
