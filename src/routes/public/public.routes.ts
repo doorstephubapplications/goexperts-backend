@@ -58,6 +58,154 @@ router.get("/clients", getClients);
 router.get("/clients/:id", getById("client"));
 router.get("/clients/:id/faqs", getPublicUserFaqs as any);
 
+// Public Client Profile sections (Projects, Team, Services)
+router.get("/clients/:id/projects", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawId = req.params.id;
+    if (!rawId) return res.json({ success: true, data: [], rows: [] });
+
+    let targetUserId = rawId;
+    const cleanSearch = rawId.replace(/[-_]+/g, " ").trim();
+    const u = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawId },
+          { email: rawId },
+          { fullName: { contains: cleanSearch } },
+          { clientProfile: { is: { company: { contains: cleanSearch } } } },
+        ],
+      },
+      select: { id: true, fullName: true },
+    }).catch(() => null);
+    if (u?.id) targetUserId = u.id;
+
+    const projects = await prisma.project.findMany({
+      where: {
+        client: targetUserId,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    const shaped = projects.map((p) => {
+      let techStack: string[] = [];
+      try {
+        if (p.skills) {
+          techStack = typeof p.skills === "string" ? p.skills.split(",").map((s) => s.trim()).filter(Boolean) : p.skills;
+        }
+      } catch {}
+      return {
+        id: p.id,
+        title: p.title,
+        cat: p.category || "Technology",
+        budget: p.budgetMax ? `₹${p.budgetMin ? Math.round(p.budgetMin / 1000) + "k" : "0"} – ₹${Math.round(p.budgetMax / 1000)}k` : "Negotiable",
+        timeline: p.duration || "4–8 weeks",
+        experience: p.experienceLevel || "All Levels",
+        location: p.location || "Remote",
+        applications: (p as any).proposalsCount ?? 0,
+        status: p.status || "Active",
+        tech: techStack.length > 0 ? techStack : ["Full Stack", "Cloud", "API"],
+        description: p.description,
+      };
+    });
+
+    return res.json({ success: true, data: shaped, rows: shaped, total: shaped.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/clients/:id/team", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawId = req.params.id;
+    if (!rawId) return res.json({ success: true, data: [], rows: [] });
+
+    let targetUserId = rawId;
+    const cleanSearch = rawId.replace(/[-_]+/g, " ").trim();
+    const u = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawId },
+          { email: rawId },
+          { fullName: { contains: cleanSearch } },
+          { clientProfile: { is: { company: { contains: cleanSearch } } } },
+        ],
+      },
+      select: { id: true, fullName: true, clientProfile: true, registrationData: true },
+    }).catch(() => null);
+    if (u?.id) targetUserId = u.id;
+
+    const members = await (prisma as any).clientTeamMember.findMany({
+      where: { clientId: targetUserId },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    let shaped = members.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      role: m.role || "Team Member",
+      department: m.department || "Engineering",
+      avatar: m.name ? m.name.slice(0, 2).toUpperCase() : "TM",
+      email: m.email || "",
+    }));
+
+    if (shaped.length === 0 && u?.fullName) {
+      shaped = [
+        {
+          id: `lead_${targetUserId}`,
+          name: u.fullName,
+          role: u.clientProfile?.jobTitle || "Founder & Managing Director",
+          department: "Executive Leadership",
+          avatar: u.fullName.slice(0, 2).toUpperCase(),
+          email: "",
+        },
+      ];
+    }
+
+    return res.json({ success: true, data: shaped, rows: shaped, total: shaped.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/clients/:id/services", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawId = req.params.id;
+    if (!rawId) return res.json({ success: true, data: [], rows: [] });
+
+    let targetUserId = rawId;
+    const cleanSearch = rawId.replace(/[-_]+/g, " ").trim();
+    const u = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawId },
+          { email: rawId },
+          { fullName: { contains: cleanSearch } },
+          { clientProfile: { is: { company: { contains: cleanSearch } } } },
+        ],
+      },
+      select: { id: true },
+    }).catch(() => null);
+    if (u?.id) targetUserId = u.id;
+
+    const settingRow = await prisma.setting.findUnique({
+      where: { key: `profile_services:${targetUserId}` },
+    }).catch(() => null);
+
+    let rows: any[] = [];
+    if (settingRow?.value) {
+      try {
+        const parsed = JSON.parse(settingRow.value);
+        if (Array.isArray(parsed)) rows = parsed;
+      } catch {}
+    }
+
+    return res.json({ success: true, data: rows, rows, total: rows.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // How It Works Dynamic Page
 router.get("/how-it-works", getHowItWorksPage);
 
