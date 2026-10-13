@@ -1113,7 +1113,8 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
 
     // Server-side search filter against DB
     if (search) {
-      const searchWords = search.split(/\s+/).filter((w) => w.length >= 2);
+      const searchWords = search.split(/\s+/).map((w) => w.trim()).filter((w) => w.length >= 2);
+      const isDomainWord = (w: string) => ['goexperts', 'gmail', 'com', 'in', 'org', 'net', 'mail'].includes(w.toLowerCase());
 
       // Match industries if search query relates to an industry name
       const matchingIndustries = search.length >= 2
@@ -1121,7 +1122,7 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
             where: {
               OR: [
                 { name: { contains: search } },
-                ...searchWords.map((w) => ({ name: { contains: w } })),
+                ...searchWords.filter((w) => !isDomainWord(w)).map((w) => ({ name: { contains: w } })),
               ],
             },
             select: { id: true, name: true },
@@ -1130,9 +1131,8 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
       const searchIndIds = matchingIndustries.map((i) => i.id);
       const searchIndNames = matchingIndustries.map((i) => i.name);
 
-      const orSearchTerms: any[] = [
+      const phraseTerms: any[] = [
         { fullName: { contains: search } },
-        { email: { contains: search } },
         { phone: { contains: search } },
         { city: { contains: search } },
         { country: { contains: search } },
@@ -1142,32 +1142,48 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
         { clientProfile: { is: { jobTitle: { contains: search } } } },
       ];
 
-      // Also search individual words for multi-word queries like "Saikiran Goexperts"
-      if (searchWords.length > 1) {
-        searchWords.forEach((word) => {
-          orSearchTerms.push(
-            { fullName: { contains: word } },
-            { email: { contains: word } },
-            { city: { contains: word } },
-            { bio: { contains: word } },
-            { registrationData: { contains: word } },
-            { clientProfile: { is: { company: { contains: word } } } }
-          );
-        });
+      if (search.includes('@') || !isDomainWord(search)) {
+        phraseTerms.push({ email: { contains: search } });
       }
 
       // Add matching industry IDs and names
       searchIndIds.forEach((id) => {
-        orSearchTerms.push({ clientProfile: { is: { industry: { contains: id } } } });
-        orSearchTerms.push({ registrationData: { contains: id } });
+        phraseTerms.push({ clientProfile: { is: { industry: { contains: id } } } });
+        phraseTerms.push({ registrationData: { contains: id } });
       });
       searchIndNames.forEach((name) => {
-        orSearchTerms.push({ clientProfile: { is: { industry: { contains: name } } } });
-        orSearchTerms.push({ bio: { contains: name } });
-        orSearchTerms.push({ registrationData: { contains: name } });
+        phraseTerms.push({ clientProfile: { is: { industry: { contains: name } } } });
+        phraseTerms.push({ bio: { contains: name } });
+        phraseTerms.push({ registrationData: { contains: name } });
       });
 
-      andConditions.push({ OR: orSearchTerms });
+      if (searchWords.length > 1) {
+        // Multi-word query (e.g. "Saikiran Goexperts"): require each word to match (AND logic)
+        const wordConditions: any[] = searchWords.map((word) => {
+          const wordOr: any[] = [
+            { fullName: { contains: word } },
+            { bio: { contains: word } },
+            { city: { contains: word } },
+            { country: { contains: word } },
+            { registrationData: { contains: word } },
+            { clientProfile: { is: { company: { contains: word } } } },
+            { clientProfile: { is: { jobTitle: { contains: word } } } },
+          ];
+          if (word.includes('@') || !isDomainWord(word)) {
+            wordOr.push({ email: { contains: word } });
+          }
+          return { OR: wordOr };
+        });
+
+        andConditions.push({
+          OR: [
+            { OR: phraseTerms },
+            { AND: wordConditions },
+          ],
+        });
+      } else {
+        andConditions.push({ OR: phraseTerms });
+      }
     }
 
     // Server-side industry / category filter against DB

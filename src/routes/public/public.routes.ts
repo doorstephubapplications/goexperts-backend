@@ -43,6 +43,8 @@ import {
   getCompanySizes,
   getExperienceLevels,
   getDesignations,
+  getClients,
+  getById,
 } from "../../modules/mobile/public/public.controller.js";
 
 const router = Router();
@@ -51,6 +53,8 @@ router.get("/countries", getCountries);
 router.get("/states", getStates);
 router.get("/skills", getSkills);
 router.get("/industries", getIndustries);
+router.get("/clients", getClients);
+router.get("/clients/:id", getById("client"));
 
 // How It Works Dynamic Page
 router.get("/how-it-works", getHowItWorksPage);
