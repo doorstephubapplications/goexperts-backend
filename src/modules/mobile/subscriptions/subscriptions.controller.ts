@@ -6,9 +6,33 @@ import { initiatePaymentService } from '../payments/payments.service.js';
 import { getKycApprovedCurrentSubscription } from '../../../services/mobile/subscription.service.js';
 import { PaymentReadinessError } from '../../../services/mobile/profile-readiness.service.js';
 
+import { formatRecord } from '../../../common/helpers/crud-factory.js';
+
+export const formatMobilePlanRecord = (row: any) => {
+  const formatted = formatRecord(row);
+  if (!formatted) return formatted;
+  const { slug, ...withoutSlug } = formatted;
+  return withoutSlug;
+};
+
+export const normalizeDuration = (raw: any): string | undefined => {
+  if (!raw) return undefined;
+  const lower = String(raw).toLowerCase().trim();
+  if (lower.includes('month')) return 'monthly';
+  if (lower.includes('year') || lower.includes('annual')) return 'yearly';
+  if (lower.includes('quarter')) return 'quarterly';
+  if (lower === '180_days' || lower === '180days' || lower === '6months' || lower === '6_months') return '180_days';
+  if (lower === '90_days' || lower === '90days' || lower === '3months' || lower === '3_months') return '90_days';
+  if (lower === 'all') return undefined;
+  return lower;
+};
+
 export const getPlans = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const requestedRole = (req.query.role as string) || req.user?.role;
+    const rawDuration = (req.query.duration || req.query.billingCycle || req.query.billing_cycle || req.query.cycle || req.query.period || req.query.interval) as string | undefined;
+    const normalizedDuration = normalizeDuration(rawDuration);
+
     const where: any = {
       status: 'active',
       visibility: { notIn: ['grandfathered', 'archived', 'private', 'internal'] },
@@ -22,16 +46,33 @@ export const getPlans = async (req: AuthRequest, res: Response, next: NextFuncti
       ];
     }
 
+    if (normalizedDuration) {
+      where.duration = normalizedDuration;
+    }
+
     const plans = await prisma.subscriptionPlan.findMany({
       where,
       orderBy: [{ sortOrder: 'asc' }, { amount: 'asc' }],
     });
+
+    const formattedPlans = (plans || []).map(formatMobilePlanRecord);
+    const monthlyPlans = formattedPlans.filter((p: any) => p.duration === 'monthly');
+    const yearlyPlans = formattedPlans.filter((p: any) => p.duration === 'yearly');
+    const addonPlans = formattedPlans.filter((p: any) => p.planType === 'addon');
+    const monthlyAddons = addonPlans.filter((p: any) => p.duration === 'monthly');
+    const yearlyAddons = addonPlans.filter((p: any) => p.duration === 'yearly');
+
     return res.json({
       success: true,
       message: 'Subscription plans retrieved',
-      data: plans || [],
-      rows: plans || [],
-      total: plans?.length || 0,
+      rows: formattedPlans,
+      data: formattedPlans,
+      total: formattedPlans.length,
+      monthly: monthlyPlans,
+      yearly: yearlyPlans,
+      addons: addonPlans,
+      monthlyAddons,
+      yearlyAddons,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

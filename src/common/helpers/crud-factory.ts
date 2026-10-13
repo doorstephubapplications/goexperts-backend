@@ -2,6 +2,25 @@ import { Response, Request, NextFunction, Router } from "express";
 import { prisma } from "../../config/database.js";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 
+// Helper to format generic master records with description, code, and slug
+export const formatRecord = (row: any) => {
+  if (!row) return row;
+  const label = row.label || row.name || row.title || row.value || "Reference Item";
+  const slugVal = row.slug || row.code || label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const codeVal = row.code || row.referenceCode || row.value || label.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+  const descVal = row.description || `Platform reference catalog configuration option for ${label}.`;
+
+  return {
+    ...row,
+    name: row.name || label,
+    label: row.label || label,
+    description: descVal,
+    code: codeVal,
+    referenceCode: codeVal,
+    slug: slugVal,
+  };
+};
+
 export function createCrudRouter(
   modelName: keyof typeof prisma,
   searchColumns: string[] = [],
@@ -14,25 +33,6 @@ export function createCrudRouter(
   if (!db) {
     throw new Error(`Model ${String(modelName)} does not exist in Prisma Client.`);
   }
-
-  // Helper to format generic master records with description, code, and slug
-  const formatRecord = (row: any) => {
-    if (!row) return row;
-    const label = row.label || row.name || row.title || row.value || "Reference Item";
-    const slugVal = row.slug || row.code || label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    const codeVal = row.code || row.referenceCode || row.value || label.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
-    const descVal = row.description || `Platform reference catalog configuration option for ${label}.`;
-
-    return {
-      ...row,
-      name: row.name || label,
-      label: row.label || label,
-      description: descVal,
-      code: codeVal,
-      referenceCode: codeVal,
-      slug: slugVal,
-    };
-  };
 
   const applyCustomMappings = async (mName: string, rows: any[]) => {
     if (rows.length === 0) return rows;

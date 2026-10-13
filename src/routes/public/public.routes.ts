@@ -3,6 +3,8 @@ import { prisma } from "../../config/database.js";
 import { sendAccountDeletedEmail } from "../../services/mobile/email.service.js";
 import { listFreelancersCompat } from "../../common/helpers/prisma-compat.js";
 import { SETTINGS_DEFAULTS } from "../../services/settings/settings.defaults.js";
+import { formatRecord } from "../../common/helpers/crud-factory.js";
+import { normalizeDuration } from "../../modules/mobile/subscriptions/subscriptions.controller.js";
 import {
   getHomeCmsContent,
   getHomePagePayload,
@@ -1751,6 +1753,8 @@ router.get("/pricing_plans", async (req: Request, res: Response, next: NextFunct
   try {
     const industryId = req.query.industryId as string | undefined;
     const role = req.query.role as string | undefined;
+    const rawDuration = (req.query.duration || req.query.billingCycle || req.query.billing_cycle || req.query.cycle || req.query.period || req.query.interval) as string | undefined;
+    const normalizedDuration = normalizeDuration(rawDuration);
     const whereCondition: any = { 
       status: "active",
       visibility: { notIn: ["grandfathered", "archived", "private", "internal"] },
@@ -1774,7 +1778,9 @@ router.get("/pricing_plans", async (req: Request, res: Response, next: NextFunct
       }
     }
 
-    if (!includeFree) {
+    if (normalizedDuration) {
+      whereCondition.duration = normalizedDuration;
+    } else if (!includeFree) {
       whereCondition.amount = { gt: 0 };
       whereCondition.duration = { not: "90_days" };
     }
@@ -1783,7 +1789,24 @@ router.get("/pricing_plans", async (req: Request, res: Response, next: NextFunct
       where: whereCondition,
       orderBy: [{ sortOrder: "asc" }, { amount: "asc" }],
     });
-    return res.json({ success: true, data: plans || [], rows: plans || [], total: plans?.length || 0 });
+    const formattedPlans = (plans || []).map(formatRecord);
+    const monthlyPlans = formattedPlans.filter((p: any) => p.duration === 'monthly');
+    const yearlyPlans = formattedPlans.filter((p: any) => p.duration === 'yearly');
+    const addonPlans = formattedPlans.filter((p: any) => p.planType === 'addon');
+    const monthlyAddons = addonPlans.filter((p: any) => p.duration === 'monthly');
+    const yearlyAddons = addonPlans.filter((p: any) => p.duration === 'yearly');
+
+    return res.json({
+      success: true,
+      data: formattedPlans,
+      rows: formattedPlans,
+      total: formattedPlans.length,
+      monthly: monthlyPlans,
+      yearly: yearlyPlans,
+      addons: addonPlans,
+      monthlyAddons,
+      yearlyAddons,
+    });
   } catch (err) {
     next(err);
   }

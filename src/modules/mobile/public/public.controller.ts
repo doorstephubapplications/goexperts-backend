@@ -14,6 +14,7 @@ import {
 } from '../../../services/mobile/project-list-query.service.js';
 import { SETTINGS_DEFAULTS } from '../../../services/settings/settings.defaults.js';
 import { notifyProfileViewed } from '../../../services/mobile/push-events.service.js';
+import { formatMobilePlanRecord, normalizeDuration } from '../subscriptions/subscriptions.controller.js';
 
 const oneOrMany = <T>(items: T[]): T | T[] => items.length === 1 ? items[0] : items;
 
@@ -1095,6 +1096,8 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
     const userId = (req as any).user?.id as string | undefined;
+    const search = String(req.query.search || req.query.q || '').trim();
+    const industry = String(req.query.industry || req.query.category || '').trim();
 
     const where: any = {
       role: 'client',
@@ -1106,13 +1109,106 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
       where.id = { not: userId };
     }
 
+    const andConditions: any[] = [];
+
+    // Server-side search filter against DB
+    if (search) {
+      const searchWords = search.split(/\s+/).filter((w) => w.length >= 2);
+
+      // Match industries if search query relates to an industry name
+      const matchingIndustries = search.length >= 2
+        ? await prisma.industry.findMany({
+            where: {
+              OR: [
+                { name: { contains: search } },
+                ...searchWords.map((w) => ({ name: { contains: w } })),
+              ],
+            },
+            select: { id: true, name: true },
+          }).catch(() => [])
+        : [];
+      const searchIndIds = matchingIndustries.map((i) => i.id);
+      const searchIndNames = matchingIndustries.map((i) => i.name);
+
+      const orSearchTerms: any[] = [
+        { fullName: { contains: search } },
+        { email: { contains: search } },
+        { phone: { contains: search } },
+        { city: { contains: search } },
+        { country: { contains: search } },
+        { bio: { contains: search } },
+        { registrationData: { contains: search } },
+        { clientProfile: { is: { company: { contains: search } } } },
+        { clientProfile: { is: { jobTitle: { contains: search } } } },
+      ];
+
+      // Also search individual words for multi-word queries like "Saikiran Goexperts"
+      if (searchWords.length > 1) {
+        searchWords.forEach((word) => {
+          orSearchTerms.push(
+            { fullName: { contains: word } },
+            { email: { contains: word } },
+            { city: { contains: word } },
+            { bio: { contains: word } },
+            { registrationData: { contains: word } },
+            { clientProfile: { is: { company: { contains: word } } } }
+          );
+        });
+      }
+
+      // Add matching industry IDs and names
+      searchIndIds.forEach((id) => {
+        orSearchTerms.push({ clientProfile: { is: { industry: { contains: id } } } });
+        orSearchTerms.push({ registrationData: { contains: id } });
+      });
+      searchIndNames.forEach((name) => {
+        orSearchTerms.push({ clientProfile: { is: { industry: { contains: name } } } });
+        orSearchTerms.push({ bio: { contains: name } });
+        orSearchTerms.push({ registrationData: { contains: name } });
+      });
+
+      andConditions.push({ OR: orSearchTerms });
+    }
+
+    // Server-side industry / category filter against DB
+    if (industry && industry.toLowerCase() !== 'all') {
+      const indRows = await prisma.industry.findMany({
+        where: {
+          OR: [
+            { name: { contains: industry } },
+            { id: industry },
+          ],
+        },
+        select: { id: true, name: true },
+      }).catch(() => []);
+
+      const matchingIds = indRows.map((r) => r.id);
+      const matchingNames = [...new Set([industry, ...indRows.map((r) => r.name)])];
+
+      const industryConditions: any[] = [
+        ...matchingIds.map((id) => ({ clientProfile: { is: { industry: { contains: id } } } })),
+        ...matchingIds.map((id) => ({ registrationData: { contains: id } })),
+        ...matchingNames.map((name) => ({ clientProfile: { is: { industry: { contains: name } } } })),
+        ...matchingNames.map((name) => ({ bio: { contains: name } })),
+        ...matchingNames.map((name) => ({ registrationData: { contains: name } })),
+      ];
+
+      andConditions.push({ OR: industryConditions });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
     const [clients, total] = await Promise.all([
       prisma.user.findMany({
         where,
         include: { clientProfile: true },
-        skip, take: limit
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
       }),
-      prisma.user.count({ where })
+      prisma.user.count({ where }),
     ]);
 
     const allIndIds = new Set<string>();
@@ -1864,6 +1960,9 @@ export const getPricingPlans = async (req: Request, res: Response, next: NextFun
   try {
     const industryId = req.query.industryId as string | undefined;
     const role = req.query.role as string | undefined;
+    const rawDuration = (req.query.duration || req.query.billingCycle || req.query.billing_cycle || req.query.cycle || req.query.period || req.query.interval) as string | undefined;
+    const normalizedDuration = normalizeDuration(rawDuration);
+
     const whereCondition: any = { 
       status: "active",
       visibility: { notIn: ["grandfathered", "archived", "private", "internal"] },
@@ -1887,7 +1986,9 @@ export const getPricingPlans = async (req: Request, res: Response, next: NextFun
       }
     }
 
-    if (!includeFree) {
+    if (normalizedDuration) {
+      whereCondition.duration = normalizedDuration;
+    } else if (!includeFree) {
       whereCondition.amount = { gt: 0 };
       whereCondition.duration = { not: "90_days" };
     }
@@ -1897,13 +1998,25 @@ export const getPricingPlans = async (req: Request, res: Response, next: NextFun
       orderBy: [{ sortOrder: "asc" }, { amount: "asc" }],
     });
 
-    // Some endpoints expect `rows` and `total` for list responses.
+    const formattedPlans = (plans || []).map(formatMobilePlanRecord);
+    const monthlyPlans = formattedPlans.filter((p: any) => p.duration === 'monthly');
+    const yearlyPlans = formattedPlans.filter((p: any) => p.duration === 'yearly');
+    const addonPlans = formattedPlans.filter((p: any) => p.planType === 'addon');
+    const monthlyAddons = addonPlans.filter((p: any) => p.duration === 'monthly');
+    const yearlyAddons = addonPlans.filter((p: any) => p.duration === 'yearly');
+
     return res.json({
       success: true,
       message: 'Pricing plans retrieved',
-      data: plans || [],
-      rows: plans || [],
-      total: plans?.length || 0
+      rows: formattedPlans,
+      data: formattedPlans,
+      total: formattedPlans.length,
+      monthly: monthlyPlans,
+      yearly: yearlyPlans,
+      addons: addonPlans,
+      monthlyAddons,
+      yearlyAddons,
+      timestamp: new Date().toISOString(),
     });
   } catch (error) { next(error); }
 };
@@ -2586,10 +2699,26 @@ export const getById = (modelName: string) => async (req: Request, res: Response
 
     if (modelName === 'client') {
       const id = req.params.id;
-      const user = await prisma.user.findFirst({
+      let user = await prisma.user.findFirst({
         where: { id },
         include: { clientProfile: true }
       }).catch(() => null);
+
+      if (!user) {
+        const cleanSearch = id.replace(/[-_]+/g, ' ').trim();
+        user = await prisma.user.findFirst({
+          where: {
+            role: 'client',
+            status: 'active',
+            deletedAt: null,
+            OR: [
+              { fullName: { contains: cleanSearch } },
+              { clientProfile: { is: { company: { contains: cleanSearch } } } },
+            ],
+          },
+          include: { clientProfile: true },
+        }).catch(() => null);
+      }
 
       if (!user) {
         return res.status(404).json({ success: false, message: 'Client not found' });
