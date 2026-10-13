@@ -122,6 +122,7 @@ export const getPublicUserFaqs = async (req: Request, res: Response, next: NextF
 
     // Resolve target userId if given a slug
     let targetUserId = id;
+    const cleanSearch = id.replace(/[-_]+/g, ' ').trim();
     const userRow = await prisma.user.findFirst({
       where: {
         OR: [
@@ -131,6 +132,8 @@ export const getPublicUserFaqs = async (req: Request, res: Response, next: NextF
           { slug: id } as any,
           { freelancerProfile: { id } as any },
           { freelancerProfile: { slug: id } as any },
+          { fullName: { contains: cleanSearch } },
+          { clientProfile: { is: { company: { contains: cleanSearch } } } },
         ],
       },
       select: { id: true },

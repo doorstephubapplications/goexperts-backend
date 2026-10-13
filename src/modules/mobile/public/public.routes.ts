@@ -109,6 +109,7 @@ router.post('/freelancers/:id/save', authenticate, saveFreelancer);
 router.delete('/freelancers/:id/save', authenticate, unsaveFreelancer);
 router.get('/clients', authenticateOptional, directoryCache, getClients);
 router.get('/clients/:id', directoryCache, getById('client'));
+router.get('/clients/:id/faqs', getPublicUserFaqs as any);
 router.get('/investors', authenticateOptional, directoryCache, getInvestors);
 router.get('/investors/saved', authenticate, getSavedInvestors);
 router.get('/investors/:id', authenticateOptional, getById('investor'));

@@ -22,6 +22,7 @@ import {
   getPostProjectPagePayload,
   listPublicProjects,
 } from "../../services/public/projects.service.js";
+import { getPublicUserFaqs } from "../../controllers/user-faqs.controller.js";
 import { getSettingsSection } from "../../services/settings/settings.service.js";
 import { getHowItWorksPage } from "../../controllers/public/how-it-works.controller.js";
 import { sendDeleteAccountOtp, verifyDeleteAccountOtp } from "../../controllers/auth/auth.controller.js";
@@ -55,6 +56,7 @@ router.get("/skills", getSkills);
 router.get("/industries", getIndustries);
 router.get("/clients", getClients);
 router.get("/clients/:id", getById("client"));
+router.get("/clients/:id/faqs", getPublicUserFaqs as any);
 
 // How It Works Dynamic Page
 router.get("/how-it-works", getHowItWorksPage);
