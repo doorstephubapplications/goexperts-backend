@@ -2724,7 +2724,6 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         const cleanSearch = id.replace(/[-_]+/g, ' ').trim();
         user = await prisma.user.findFirst({
           where: {
-            role: 'client',
             status: 'active',
             deletedAt: null,
             OR: [
