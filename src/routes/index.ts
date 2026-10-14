@@ -100,6 +100,10 @@ import activityRoutes from "./activity/activity.routes.js";
 import supportRoutes from "./support/support.routes.js";
 import connectionsRoutes from "./connections/connections.routes.js";
 
+// Tasks & Workflows
+router.use("/tasks", tasksRoutes);
+router.use("/v1/tasks", tasksRoutes);
+
 // Shared Messages routes (real-time chat API for all roles)
 router.use("/messages", messagesRoutes);
 router.use("/connections", connectionsRoutes);

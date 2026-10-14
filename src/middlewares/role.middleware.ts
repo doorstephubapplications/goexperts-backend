@@ -82,6 +82,11 @@ export const portalRoleMiddleware = (roles: string[]) => {
           roles.map((x) => x.toLowerCase()).includes(r)
         );
 
+      // For shared portal routes (messages, watchlist, tasks, teams, projects, etc.), allow access immediately
+      if (isSharedPortalRoute) {
+        return next();
+      }
+
       const requestedWorkspace = String(req.user.activeWorkspace || userRole).toLowerCase();
 
       // Workspace context check (unless shared route)
@@ -96,7 +101,6 @@ export const portalRoleMiddleware = (roles: string[]) => {
       }
 
       // We now need to prove the user actually OWNS the requestedWorkspace
-      // For shared routes, we MUST verify the specific requested workspace they are trying to act as.
       const targetRolesToVerify = isProfileActivationPath ? allowed : [requestedWorkspace];
 
       // 4. Role-specific routes: Check if owner has activated the target profile in DB
@@ -113,7 +117,15 @@ export const portalRoleMiddleware = (roles: string[]) => {
         },
       });
 
+      // Workspace owners and platform accounts have global access across portals
       if (userWithProfiles) {
+        const isOwner = (userWithProfiles as any).isOwner === true || 
+                        (userWithProfiles as any).accountType === "owner" || 
+                        !teamInfo;
+        if (isOwner) {
+          return next();
+        }
+
         // Strict Check: Primary Role OR explicitly activated in UserRole table
         const hasPrimaryOrActivatedRole = targetRolesToVerify.some((r) => {
           const norm = r.toLowerCase();

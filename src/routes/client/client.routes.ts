@@ -140,14 +140,14 @@ router.post("/subscription/purchase", purchaseClientSubscription as any);
 // router.post("/documents", addClientDocument as any);
 // router.delete("/documents/:id", deleteClientDocument as any);
 
-router.get("/team", listClientTeam as any);
-router.get("/roles", listClientRoles as any);
-router.get("/invitations", listClientInvitations as any);
-router.post("/team", addClientTeamMember as any);
-router.post("/team/:id/resend", resendClientTeamInvite as any);
-router.post("/team/resend", resendClientTeamInvite as any);
-router.put("/team/:id", updateClientTeamMember as any);
-router.delete("/team/:id", deleteClientTeamMember as any);
+router.get("/team", multiRole, listClientTeam as any);
+router.get("/roles", multiRole, listClientRoles as any);
+router.get("/invitations", multiRole, listClientInvitations as any);
+router.post("/team", multiRole, addClientTeamMember as any);
+router.post("/team/:id/resend", multiRole, resendClientTeamInvite as any);
+router.post("/team/resend", multiRole, resendClientTeamInvite as any);
+router.put("/team/:id", multiRole, updateClientTeamMember as any);
+router.delete("/team/:id", multiRole, deleteClientTeamMember as any);
 
 // router.get("/pipeline", listClientPipeline as any);
 // router.get("/referrals", getClientReferrals as any);
