@@ -3,6 +3,7 @@ import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { logActivityEvent } from "../../services/activity/activity.service.js";
+import { decryptPassword } from "../../utils/crypto.util.js";
 
 function money(n: number, currency = "USD") {
   const value = Number.isFinite(n) ? n : 0;
@@ -859,6 +860,9 @@ export const getFreelancerDashboard = async (
           verified: Boolean(user.isVerified || user.verified),
           kycVerified: Boolean(user.isVerified || user.verified),
           role: user.role,
+        plainPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
+        currentPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
+        originalPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
         },
         kpis,
         hero: {
@@ -1125,6 +1129,9 @@ export const getFreelancerProfile = async (
         status: user.status,
         verified: Boolean(user.isVerified || user.verified),
         role: user.role,
+        plainPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
+        currentPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
+        originalPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
         completionPct: completion.overall,
         profileCompletion: completion.items,
         rating: Number(profile?.rating ?? 0) || 0,

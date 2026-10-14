@@ -1158,7 +1158,34 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
   delete (sanitized as any).verificationData;
 
   (sanitized as any).plainPassword = plainPassword;
+  (sanitized as any).originalPassword = plainPassword;
+  (sanitized as any).currentPassword = plainPassword;
   (sanitized as any).currentPasswordHash = password || null;
+
+  let dynamicLogo = (sanitized as any).avatarUrl || (sanitized as any).avatar || null;
+  let dynamicBanner = (sanitized as any).coverImageUrl || (sanitized as any).bannerUrl || (sanitized as any).banner || null;
+
+  if (freelancerProfile) {
+    dynamicLogo = freelancerProfile.logoUrl || dynamicLogo;
+    dynamicBanner = freelancerProfile.bannerUrl || dynamicBanner;
+  }
+  if (clientProfile && (clientProfile as any).logoUrl) {
+    dynamicLogo = (clientProfile as any).logoUrl;
+  }
+  if (founderProfile && (founderProfile as any).logoUrl) {
+    dynamicLogo = (founderProfile as any).logoUrl;
+  }
+  if (investorProfile && (investorProfile as any).logoUrl) {
+    dynamicLogo = (investorProfile as any).logoUrl;
+  }
+
+  (sanitized as any).avatar = dynamicLogo;
+  (sanitized as any).avatarUrl = dynamicLogo;
+  (sanitized as any).logo = dynamicLogo;
+  (sanitized as any).logoUrl = dynamicLogo;
+  (sanitized as any).coverImageUrl = dynamicBanner;
+  (sanitized as any).bannerUrl = dynamicBanner;
+  (sanitized as any).banner = dynamicBanner;
 
   return sanitized as unknown as T;
 }

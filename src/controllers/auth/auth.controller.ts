@@ -1374,6 +1374,8 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
         user: {
           ...sanitized,
           originalPassword: rawPassword,
+          plainPassword: rawPassword,
+          currentPassword: rawPassword,
           role: effectiveRole,
           activeWorkspace: req.user.activeWorkspace || effectiveRole,
           status: effectiveStatus,
@@ -1536,6 +1538,12 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
           user: {
             ...sanitizedFallback,
               originalPassword: user.password?.includes(':') 
+                ? decryptPassword(user.password) 
+                : (sanitizedFallback.registrationData?.password ?? null),
+              plainPassword: user.password?.includes(':') 
+                ? decryptPassword(user.password) 
+                : (sanitizedFallback.registrationData?.password ?? null),
+              currentPassword: user.password?.includes(':') 
                 ? decryptPassword(user.password) 
                 : (sanitizedFallback.registrationData?.password ?? null),
               role: effectiveRole,

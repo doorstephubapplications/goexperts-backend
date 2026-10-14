@@ -60,6 +60,27 @@ adminUsersRouter.get("/", async (req: Request, res: Response, next: NextFunction
         }
       })
     ]);
+
+    // Fetch startup ideas for any founder users to enrich logo/banner if missing
+    const founderUserNames = users
+      .filter(u => u.role?.toLowerCase() === "founder" && (!u.coverImageUrl || !u.avatarUrl))
+      .map(u => u.fullName)
+      .filter(Boolean);
+
+    let founderStartups: any[] = [];
+    if (founderUserNames.length > 0) {
+      try {
+        founderStartups = await prisma.startupIdea.findMany({
+          where: {
+            deletedAt: null,
+            OR: founderUserNames.map(name => ({ founder: { contains: name } }))
+          },
+          select: { founder: true, logo: true, coverUrl: true }
+        });
+      } catch (e) {
+        console.error("Error fetching founder startups in list:", e);
+      }
+    }
     
     // Map to normalized contract
     const data = users.map(user => {
@@ -78,12 +99,45 @@ adminUsersRouter.get("/", async (req: Request, res: Response, next: NextFunction
         verificationStatus = "APPROVED";
       }
 
+      let profileLogo = user.avatarUrl || null;
+      let profileBanner = user.coverImageUrl || null;
+      if (user.freelancerProfile) {
+        profileLogo = user.freelancerProfile.logoUrl || profileLogo;
+        profileBanner = user.freelancerProfile.bannerUrl || profileBanner;
+      }
+      if (user.clientProfile) {
+        profileLogo = (user.clientProfile as any).logoUrl || profileLogo;
+      }
+      if (user.founderProfile) {
+        profileLogo = (user.founderProfile as any).logoUrl || profileLogo;
+      }
+      if (user.investorProfile) {
+        profileLogo = (user.investorProfile as any).logoUrl || profileLogo;
+      }
+
+      if (user.role?.toLowerCase() === "founder" && (!profileBanner || !profileLogo)) {
+        const matchingStartup = founderStartups.find(s => 
+          s.founder && user.fullName && s.founder.toLowerCase().includes(user.fullName.toLowerCase())
+        );
+        if (matchingStartup) {
+          if (!profileBanner) profileBanner = matchingStartup.coverUrl || matchingStartup.cover || null;
+          if (!profileLogo) profileLogo = matchingStartup.logo || matchingStartup.logoUrl || null;
+        }
+      }
+
       return {
         id: user.id,
         role: user.role.toUpperCase(),
         name: user.fullName || "Unknown",
+        fullName: user.fullName || "Unknown",
         email: user.email,
-        avatar: user.avatarUrl || null,
+        avatar: profileLogo,
+        avatarUrl: profileLogo,
+        logo: profileLogo,
+        logoUrl: profileLogo,
+        coverImageUrl: profileBanner,
+        bannerUrl: profileBanner,
+        banner: profileBanner,
         status: user.status.toUpperCase(),
         verificationStatus,
         profileCompletion,
@@ -433,10 +487,56 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
       currentPassword = user.password.includes(':') ? decryptPassword(user.password) : user.password;
     }
 
+    let profileLogo = user.avatarUrl || null;
+    let profileBanner = user.coverImageUrl || null;
+    if (user.freelancerProfile) {
+      profileLogo = user.freelancerProfile.logoUrl || profileLogo;
+      profileBanner = user.freelancerProfile.bannerUrl || profileBanner;
+    }
+    if (user.clientProfile) {
+      profileLogo = (user.clientProfile as any).logoUrl || profileLogo;
+    }
+    if (user.founderProfile) {
+      profileLogo = (user.founderProfile as any).logoUrl || profileLogo;
+    }
+    if (user.investorProfile) {
+      profileLogo = (user.investorProfile as any).logoUrl || profileLogo;
+    }
+
+    if (user.role?.toLowerCase() === "founder" && (!profileBanner || !profileLogo)) {
+      try {
+        const startup = await prisma.startupIdea.findFirst({
+          where: {
+            deletedAt: null,
+            OR: [
+              { founder: { contains: user.fullName } },
+              { founder: { contains: user.email } },
+              { founder: { contains: user.id } },
+              ...(user.founderProfile?.startupName ? [{ startup: { contains: user.founderProfile.startupName } }] : [])
+            ]
+          },
+          orderBy: { createdAt: "desc" }
+        });
+        if (startup) {
+          if (!profileBanner) profileBanner = startup.coverUrl || (startup as any).cover || null;
+          if (!profileLogo) profileLogo = startup.logo || (startup as any).logoUrl || null;
+        }
+      } catch (e) {
+        console.error("Error fetching founder startup idea for cover/logo:", e);
+      }
+    }
+
     res.json({
       success: true,
       data: {
         ...user,
+        avatar: profileLogo,
+        avatarUrl: profileLogo,
+        logo: profileLogo,
+        logoUrl: profileLogo,
+        coverImageUrl: profileBanner,
+        bannerUrl: profileBanner,
+        banner: profileBanner,
         currentPassword,
         verificationCenter,
         verificationStats,

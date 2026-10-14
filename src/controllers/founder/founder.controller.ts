@@ -1,6 +1,7 @@
 import { Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
+import { decryptPassword } from "../../utils/crypto.util.js";
 import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
 import { requireCapability, ActionRequirementsError } from "../../services/mobile/profile-readiness.service.js";
 import { assertActionEntitlement, ActionGateError } from "../../services/subscription/entitlement.service.js";
@@ -173,6 +174,9 @@ export const getFounderProfile = async (req: AuthenticatedRequest, res: Response
         verified: Boolean(user.isVerified || user.verified),
         kycVerified: Boolean(user.isVerified || user.verified),
         role: user.role,
+        plainPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
+        currentPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
+        originalPassword: user.password && user.password.includes(":") ? decryptPassword(user.password) : null,
         completionPct,
         ...details,
       },
