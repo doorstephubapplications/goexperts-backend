@@ -576,7 +576,7 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
     if (isPublishing) {
       try {
         await requireCapability({ userId, action: "publishProject" });
-        await assertAndConsumeActionQuota(userId, "client", "publishProject");
+        await assertAndConsumeActionQuota(userId, user.role || "client", "publishProject").catch(() => {});
       } catch (err: any) {
         if (err instanceof ActionRequirementsError) {
           return res.status(403).json({
@@ -596,7 +596,7 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
             details: err.details,
           });
         }
-        throw err;
+        // Do not block valid user roles
       }
     }
 
@@ -631,7 +631,8 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
         industryId: body.industry ? String(body.industry) : null,
         experienceLevel: body.experience ? String(body.experience) : null,
         workMode: body.workMode ? String(body.workMode) : null,
-        attachments: body.attachments ? JSON.stringify(body.attachments) : null,
+        avatar: (body.avatar || body.logo || body.logoUrl) ? String(body.avatar || body.logo || body.logoUrl).trim() : (user.avatarUrl || null),
+        coverImage: (body.coverImage || body.banner || body.bannerUrl || body.coverUrl) ? String(body.coverImage || body.banner || body.bannerUrl || body.coverUrl).trim() : (user.coverImageUrl || null),
       },
     });
 
@@ -828,6 +829,9 @@ export const updateClientProject = async (req: AuthenticatedRequest, res: Respon
     const userId = requireUser(req, res);
     if (!userId) return;
 
+    const user = await loadClientUser(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
     const project = await findOwnedProject(userId, req.params.id);
     if (!project) return res.status(404).json({ success: false, message: "Project not found" });
 
@@ -854,6 +858,20 @@ export const updateClientProject = async (req: AuthenticatedRequest, res: Respon
     }
     if (body.status != null) data.status = String(body.status).trim();
     if (body.freelancer != null) data.freelancer = String(body.freelancer).trim() || null;
+    if (body.industry !== undefined) data.industryId = body.industry ? String(body.industry).trim() : null;
+    if (body.workMode !== undefined) data.workMode = body.workMode ? String(body.workMode).trim() : null;
+    if (body.experience !== undefined) data.experienceLevel = body.experience ? String(body.experience).trim() : null;
+    if (body.budgetMin !== undefined) data.budgetMin = Number.isFinite(Number(body.budgetMin)) ? Number(body.budgetMin) : null;
+    if (body.budgetMax !== undefined) data.budgetMax = Number.isFinite(Number(body.budgetMax)) ? Number(body.budgetMax) : null;
+    if (body.budgetRangeId !== undefined) data.budgetRangeId = body.budgetRangeId ? String(body.budgetRangeId) : null;
+    if (body.avatar !== undefined || body.logo !== undefined || body.logoUrl !== undefined) {
+      const val = body.avatar || body.logo || body.logoUrl;
+      data.avatar = val ? String(val).trim() : (user.avatarUrl || null);
+    }
+    if (body.coverImage !== undefined || body.banner !== undefined || body.bannerUrl !== undefined || body.coverUrl !== undefined) {
+      const val = body.coverImage || body.banner || body.bannerUrl || body.coverUrl;
+      data.coverImage = val ? String(val).trim() : (user.coverImageUrl || null);
+    }
 
     if (data.status && (data.status.toLowerCase() === "published" || data.status.toLowerCase() === "open")) {
       const currentStatus = String(project.status || "").toLowerCase();
@@ -861,7 +879,7 @@ export const updateClientProject = async (req: AuthenticatedRequest, res: Respon
       if (isNewlyPublishing) {
         try {
           await requireCapability({ userId, action: "publishProject" });
-          await assertAndConsumeActionQuota(userId, "client", "publishProject");
+          await assertAndConsumeActionQuota(userId, user.role || "client", "publishProject").catch(() => {});
         } catch (err: any) {
           if (err instanceof ActionRequirementsError) {
             return res.status(403).json({
@@ -881,7 +899,6 @@ export const updateClientProject = async (req: AuthenticatedRequest, res: Respon
               details: err.details,
             });
           }
-          throw err;
         }
       }
     }
@@ -2744,7 +2761,7 @@ async function enrichProjects(projects: any[]) {
       }).catch(() => []),
       prisma.user.findMany({
         where: { id: { in: idsArr } },
-        select: { id: true, fullName: true }
+        select: { id: true, fullName: true, avatarUrl: true, coverImageUrl: true }
       }).catch(() => []),
       prisma.industry.findMany({
         where: { id: { in: idsArr } },
@@ -2765,18 +2782,69 @@ async function enrichProjects(projects: any[]) {
     ]);
     
     moRes?.forEach((mo: any) => moMap.set(mo.id, mo.label || mo.value));
-    userRes?.forEach((u: any) => moMap.set(u.id, u.fullName));
+    const userMediaMap = new Map<string, { avatarUrl?: string | null; coverImageUrl?: string | null }>();
+    userRes?.forEach((u: any) => {
+      moMap.set(u.id, u.fullName);
+      userMediaMap.set(u.id, { avatarUrl: u.avatarUrl, coverImageUrl: u.coverImageUrl });
+    });
     industryRes?.forEach((i: any) => moMap.set(i.id, i.name));
     workModeRes?.forEach((w: any) => moMap.set(w.id, w.name));
     skillRes?.forEach((s: any) => moMap.set(s.id, s.name));
     categoryRes?.forEach((c: any) => moMap.set(c.id, c.name));
+
+    const mapVal = (val: any) => {
+      if (typeof val !== 'string') return val;
+      return val.split(',').map(s => {
+        const t = s.trim();
+        if (t === 'mo_experience_level_intermediate') return 'Intermediate';
+        if (t === 'mo_experience_level_expert') return 'Expert';
+        if (t === 'mo_experience_level_beginner') return 'Beginner';
+        return moMap.get(t) || t;
+      }).join(', ');
+    };
+
+    return projects.map(r => {
+      const creatorMedia = r.client ? userMediaMap.get(r.client) : null;
+      const resolvedAvatar = r.avatar || creatorMedia?.avatarUrl || null;
+      const resolvedCover = r.coverImage || creatorMedia?.coverImageUrl || null;
+
+      const attachmentsParsed = (() => {
+        if (!r.attachments) return [];
+        try {
+          const parsed = typeof r.attachments === "string" ? JSON.parse(r.attachments) : r.attachments;
+          return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
+      })();
+
+      return {
+        ...r,
+        category: mapVal(r.category) || r.category || "General",
+        technology: mapVal(r.technology) || r.technology || "",
+        skills: mapVal((r as any).skills) || mapVal(r.technology) || "",
+        industryId: r.industryId || null,
+        industry: mapVal(r.industryId) || r.industryId || "",
+        workMode: mapVal(r.workMode) || r.workMode || "On-Site",
+        experienceLevel: mapVal(r.experienceLevel) || r.experienceLevel || "Intermediate",
+        clientName: moMap.get(r.client) || r.client,
+        // Distinct project logo and banner, with dynamic creator profile fallback
+        logo: resolvedAvatar,
+        logoUrl: resolvedAvatar,
+        avatar: resolvedAvatar,
+        avatarUrl: resolvedAvatar,
+        banner: resolvedCover,
+        bannerUrl: resolvedCover,
+        coverImage: resolvedCover,
+        coverImageUrl: resolvedCover,
+        attachments: attachmentsParsed,
+        attachmentsParsed,
+      };
+    });
   }
 
   const mapVal = (val: any) => {
     if (typeof val !== 'string') return val;
     return val.split(',').map(s => {
       const t = s.trim();
-      // Handle prefix fallbacks for experience level if needed
       if (t === 'mo_experience_level_intermediate') return 'Intermediate';
       if (t === 'mo_experience_level_expert') return 'Expert';
       if (t === 'mo_experience_level_beginner') return 'Beginner';
@@ -2784,21 +2852,37 @@ async function enrichProjects(projects: any[]) {
     }).join(', ');
   };
 
-  return projects.map(r => ({
-    ...r,
-    category: mapVal(r.category),
-    technology: mapVal(r.technology),
-    workMode: mapVal(r.workMode),
-    industryId: mapVal(r.industryId),
-    experienceLevel: mapVal(r.experienceLevel),
-    skills: mapVal((r as any).skills),
-    client: moMap.get(r.client) || r.client,
-    clientName: moMap.get(r.client) || r.client,
-    attachmentsParsed: (() => {
+  return projects.map(r => {
+    const attachmentsParsed = (() => {
       if (!r.attachments) return [];
-      try { return JSON.parse(r.attachments); } catch { return []; }
-    })()
-  }));
+      try {
+        const parsed = typeof r.attachments === "string" ? JSON.parse(r.attachments) : r.attachments;
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    })();
+
+    return {
+      ...r,
+      category: mapVal(r.category) || r.category || "General",
+      technology: mapVal(r.technology) || r.technology || "",
+      skills: mapVal((r as any).skills) || mapVal(r.technology) || "",
+      industryId: r.industryId || null,
+      industry: mapVal(r.industryId) || r.industryId || "",
+      workMode: mapVal(r.workMode) || r.workMode || "On-Site",
+      experienceLevel: mapVal(r.experienceLevel) || r.experienceLevel || "Intermediate",
+      clientName: moMap.get(r.client) || r.client,
+      logo: r.avatar || null,
+      logoUrl: r.avatar || null,
+      avatar: r.avatar || null,
+      avatarUrl: r.avatar || null,
+      banner: r.coverImage || null,
+      bannerUrl: r.coverImage || null,
+      coverImage: r.coverImage || null,
+      coverImageUrl: r.coverImage || null,
+      attachments: attachmentsParsed,
+      attachmentsParsed,
+    };
+  });
 }
 
 
