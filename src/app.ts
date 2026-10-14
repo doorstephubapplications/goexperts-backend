@@ -1,3 +1,4 @@
+import "./config/env.js";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";

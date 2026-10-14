@@ -263,28 +263,25 @@ export const updateUserKyc = async (req: Request, res: Response, next: NextFunct
         const wasKycApproved = getVerificationStats(user).kycApproved;
 
         // Toggle explicit verified flag on the user record directly
+        // Explicit verified toggle (only if KYC is fully approved)
         if (updatePayload.verified !== undefined || updatePayload.isVerified !== undefined) {
             const isVerified = Boolean(updatePayload.verified ?? updatePayload.isVerified);
-            
-            if (isVerified) {
-                const checkStats = getVerificationStats(user);
-                if (checkStats.missingCount > 0) {
-                    return res.status(400).json({ 
-                        success: false, 
-                        message: `Cannot approve user. ${checkStats.missingCount} mandatory verification documents are missing.` 
-                    });
-                }
+            const checkStats = getVerificationStats(user);
+            if (isVerified && !checkStats.kycApproved) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Cannot verify user. Mandatory KYC documents are not verified yet." 
+                });
             }
             await prisma.user.update({
                 where: { id },
                 data: { verified: isVerified, isVerified }
             });
-            
-            if (isVerified) {
+            if (isVerified && checkStats.kycApproved) {
                 const { sendAccountActiveEmail } = await import("../../services/mobile/email.service.js");
                 const userObj = await prisma.user.findFirst({ where: { id }, select: { id: true, email: true, fullName: true } });
                 if (userObj && userObj.email) {
-                    await sendAccountActiveEmail(userObj.email, userObj.fullName || 'User');
+                    await sendAccountActiveEmail(userObj.email, userObj.fullName || "User");
                     await activateFreePlanAfterKyc(userObj.id);
                     await triggerWelcomeBonus(userObj);
                 }

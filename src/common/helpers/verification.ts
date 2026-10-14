@@ -96,9 +96,7 @@ export function buildVerificationItems(user: any, stored: Record<string, Partial
         } else if (key === "phone") {
             value = user.phone || value || "Not submitted";
             status = user.phone ? (fromStore.status as any) || "verified" : "missing";
-        } else if (key === "personal_id_1" || key === "personal_id_2") {
-            if (!value) value = accountVerified ? "Account verified by admin" : "Not submitted";
-            if (accountVerified && status === "missing") status = "verified";
+        } else if (key === "personal_id_1" || key === "personal_id_2") { if (!value) value = "Not submitted";
         } else if (key === "address") {
             if (!value) {
                 value = user.location || "Not submitted";

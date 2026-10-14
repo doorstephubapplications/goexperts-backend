@@ -628,12 +628,18 @@ export const sendVerificationEmail = async (to: string, token: string) => {
   return sendEmail(to, rendered.subject, rendered.html);
 };
 
-export const sendAccountDeletedEmail = async (to: string, name: string) => {
+export const sendAccountDeletedEmail = async (to: string, name: string, role?: string) => {
   const firstName = (name || 'User').split(' ')[0];
+  const formattedRole = role
+    ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()
+    : 'User';
   const rendered = await renderEmailTemplate("tpl_account_deleted", {
     full_name: name || 'User',
     firstName,
     email: to,
+    role: formattedRole,
+    user_role: formattedRole,
+    account_role: formattedRole,
     support_email: 'servicedesk@goexperts.in',
     deletion_date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
   });

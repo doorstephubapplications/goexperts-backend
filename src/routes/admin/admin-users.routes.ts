@@ -5,6 +5,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendAdminWalletCreditEmail } from "../../services/mobile/email.service.js";
 import { decryptPassword } from "../../utils/crypto.util.js";
+import { getVerificationStats } from "../../common/helpers/verification.js";
 
 export const adminUsersRouter = Router();
 
@@ -208,12 +209,19 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
     
     // Normalize Verification Center Structure
     let profile = user.freelancerProfile || user.clientProfile || user.founderProfile || user.investorProfile;
+    let verificationStats: any = null;
+    try {
+      verificationStats = getVerificationStats(user);
+    } catch (e) {
+      console.error("Error computing verificationStats:", e);
+    }
+
     let verificationCenter: any = {
-      email: user.isVerified || user.verified ? "VERIFIED" : "PENDING",
-      phone: user.phone ? "VERIFIED" : "PENDING",
+      email: (user.isVerified || user.verified) ? "VERIFIED" : "PENDING",
+      phone: (user.phone && user.phone.length > 5) ? "VERIFIED" : "PENDING",
       profile: user.completionPercentage && user.completionPercentage >= 80 ? "COMPLETED" : "PENDING",
-      kyc: "PENDING",
-      documents: "PENDING",
+      kyc: verificationStats?.kycApproved ? "APPROVED" : (verificationStats?.kycStatus || "PENDING"),
+      documents: verificationStats?.kycApproved ? "APPROVED" : "PENDING",
       documentsList: []
     };
 
@@ -223,6 +231,9 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         if (vJson.kycApproved) {
           verificationCenter.kyc = "APPROVED";
           verificationCenter.documents = "APPROVED";
+        } else if (vJson.kycRejected) {
+          verificationCenter.kyc = "REJECTED";
+          verificationCenter.documents = "REJECTED";
         } else if (vJson.kycSubmitted) {
           verificationCenter.kyc = "IN_REVIEW";
           verificationCenter.documents = "SUBMITTED";
@@ -428,6 +439,7 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         ...user,
         currentPassword,
         verificationCenter,
+        verificationStats,
         projects: enrichedProjects,
         projectsCount: enrichedProjects.length,
         teams: enrichedTeams,
@@ -724,6 +736,19 @@ const updateUserHandler = async (req: Request, res: Response, next: NextFunction
       }
     });
 
+    if (updatedUser) {
+      try {
+        const { getVerificationStats } = await import("../../common/helpers/verification.js");
+        const stats = getVerificationStats(updatedUser);
+        if (stats.kycApproved) {
+          const { ensureWelcomeBonusForVerifiedUser } = await import("../../common/helpers/portal-shared.js");
+          await ensureWelcomeBonusForVerifiedUser(updatedUser.id);
+        }
+      } catch (err) {
+        console.error("Error auto-checking KYC welcome bonus on user update:", err);
+      }
+    }
+
     res.json({ success: true, message: "User updated successfully", data: updatedUser });
   } catch (err) {
     next(err);
@@ -865,7 +890,7 @@ adminUsersRouter.delete("/bulk", async (req: Request, res: Response, next: NextF
     const deletedUsers = await prisma.user.findMany({ where: { id: { in: ids } } });
     for (const u of deletedUsers) {
       if (u.email) {
-        sendAccountDeletedEmail(u.email, u.fullName || 'User').catch(console.error);
+        sendAccountDeletedEmail(u.email, u.fullName || 'User', u.role).catch(console.error);
       }
     }
     
@@ -882,7 +907,7 @@ adminUsersRouter.delete("/:id", async (req: Request, res: Response, next: NextFu
       data: { deletedAt: new Date() }
     });
     if (updatedUser.email) {
-      sendAccountDeletedEmail(updatedUser.email, updatedUser.fullName || 'User').catch(console.error);
+      sendAccountDeletedEmail(updatedUser.email, updatedUser.fullName || 'User', updatedUser.role).catch(console.error);
     }
     res.json({ success: true, message: "User deleted successfully" });
   } catch (err) {
@@ -976,6 +1001,36 @@ adminUsersRouter.patch("/:id/kyc-document", async (req: Request, res: Response, 
       where: { id: targetProfile.id },
       data: updateData
     });
+
+    // Check if user has now fulfilled all KYC requirements
+    try {
+      const freshUser = await prisma.user.findFirst({
+        where: { id: userId, deletedAt: null },
+        include: {
+          freelancerProfile: true,
+          clientProfile: true,
+          founderProfile: true,
+          investorProfile: true
+        }
+      });
+      if (freshUser) {
+        const { getVerificationStats } = await import("../../common/helpers/verification.js");
+        const stats = getVerificationStats(freshUser);
+        if (stats.kycApproved) {
+          const wasAlreadyVerified = Boolean(freshUser.verified && freshUser.isVerified);
+          if (!wasAlreadyVerified) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { verified: true, isVerified: true }
+            });
+          }
+          const { ensureWelcomeBonusForVerifiedUser } = await import("../../common/helpers/portal-shared.js");
+          await ensureWelcomeBonusForVerifiedUser(userId);
+        }
+      }
+    } catch (e) {
+      console.error("Error auto-verifying user KYC after document update:", e);
+    }
 
     if (user.email) {
       let docLabel = key;

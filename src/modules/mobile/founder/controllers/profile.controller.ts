@@ -38,7 +38,7 @@ export const getStartup = async (req: AuthRequest, res: Response, next: NextFunc
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, fullName: true, email: true, avatarUrl: true, bio: true, phone: true, country: true, city: true, role: true, registrationData: true }
+      select: { id: true, fullName: true, email: true, avatarUrl: true, bio: true, phone: true, country: true, city: true, role: true, registrationData: true, createdAt: true, updatedAt: true }
     });
 
     const [profile, idea] = await Promise.all([
@@ -52,22 +52,6 @@ export const getStartup = async (req: AuthRequest, res: Response, next: NextFunc
       }).catch(() => null)
     ]);
 
-    if (!idea) {
-      return res.json(successResponse('No startup details found', null));
-    }
-
-    const startup = idea;
-
-    let rawBids: any[] = [];
-    try {
-      rawBids = await prisma.investment.findMany({
-        where: { startup: startup.id, deletedAt: null },
-        orderBy: { createdAt: 'desc' }
-      });
-    } catch {
-      rawBids = [];
-    }
-
     const startupDetails = await getJsonSetting(req.user.id, "startup-details", {});
     const founderDetails = await getJsonSetting(req.user.id, "founder-profile-details", {});
 
@@ -76,6 +60,56 @@ export const getStartup = async (req: AuthRequest, res: Response, next: NextFunc
       ...startupDetails,
       ...founderDetails
     };
+
+    if (!idea && !profile?.startupName && !reg.startupName && !profile?.pitch && !reg.pitch) {
+      return res.json(successResponse('No startup details found', null));
+    }
+
+    const startupName = idea?.startupName || idea?.startup || idea?.title || profile?.startupName || reg.startupName || "";
+    const startupPitch = idea?.pitch || idea?.description || profile?.pitch || reg.pitch || reg.description || user?.bio || "";
+    const startupIndustry = idea?.industry || profile?.industry || reg.industry || reg.category || "";
+    const startupStage = idea?.stage || profile?.stage || reg.stage || "";
+    const targetFunding = idea?.funding || idea?.amountRaising || profile?.targetRaise || reg.targetRaise || reg.funding || 0;
+    const raisedFunding = profile?.raised ?? reg.raised ?? 0;
+    const equityOffered = idea?.equity || idea?.equityOffered || reg.equity || reg.equityOffered || 0;
+
+    const startup = idea || {
+      id: profile?.id || `fnd_${req.user.id}`,
+      startup: startupName,
+      startupName: startupName,
+      name: startupName,
+      title: startupName,
+      description: startupPitch,
+      pitch: startupPitch,
+      oneLinePitch: startupPitch,
+      industry: startupIndustry,
+      stage: startupStage,
+      funding: targetFunding,
+      targetRaise: targetFunding,
+      amountRaising: targetFunding,
+      raised: raisedFunding,
+      equity: equityOffered,
+      equityOffered: equityOffered,
+      status: "active",
+      visibility: "public",
+      teamSize: profile?.teamSize ?? (reg.teamSize ? parseInt(reg.teamSize) : 1),
+      businessPlan: reg.businessPlan || null,
+      pitchDeck: profile?.pitchDeck || reg.pitchDeck || null,
+      createdAt: profile?.createdAt || user?.createdAt,
+      updatedAt: profile?.updatedAt || user?.updatedAt,
+    };
+
+    let rawBids: any[] = [];
+    if (idea?.id) {
+      try {
+        rawBids = await prisma.investment.findMany({
+          where: { startup: idea.id, deletedAt: null },
+          orderBy: { createdAt: 'desc' }
+        });
+      } catch {
+        rawBids = [];
+      }
+    }
 
     const countryId = await resolveId(user?.country || reg.country || "", "Country");
     const userObj = {
@@ -101,25 +135,38 @@ export const getStartup = async (req: AuthRequest, res: Response, next: NextFunc
     }
 
     const [stageObj, industryObj, categoryObj] = await Promise.all([
-      resolveOptionObject(startup?.stage),
-      resolveOptionObject(startup?.industry),
-      resolveOptionObject(startup?.category),
+      resolveOptionObject(startupStage),
+      resolveOptionObject(startupIndustry),
+      resolveOptionObject(startupIndustry),
     ]);
 
     const result: any = {
       ...startup,
-      stage: stageObj,
-      industry: industryObj,
-      category: categoryObj,
-      industryId: industryObj.id,
-      stageId: stageObj.id,
-      categoryId: categoryObj.id,
-      industryName: industryObj.name,
-      stageName: stageObj.name,
-      categoryName: categoryObj.name,
+      id: startup.id || profile?.id || `fnd_${req.user.id}`,
+      startup: startupName,
+      startupName: startupName,
+      name: startupName,
+      title: startupName,
+      pitch: startupPitch,
+      oneLinePitch: startupPitch,
+      description: startupPitch,
+      funding: targetFunding,
+      targetRaise: targetFunding,
+      amountRaising: targetFunding,
+      raised: raisedFunding,
+      equity: equityOffered,
+      equityOffered: equityOffered,
+      stage: stageObj?.name || startupStage,
+      stageId: stageObj?.id || startupStage,
+      stageName: stageObj?.name || startupStage,
+      industry: industryObj?.name || startupIndustry,
+      industryId: industryObj?.id || startupIndustry,
+      industryName: industryObj?.name || startupIndustry,
+      category: categoryObj?.name || startupIndustry,
+      categoryId: categoryObj?.id || startupIndustry,
+      categoryName: categoryObj?.name || startupIndustry,
       documents,
       teamSize: profile?.teamSize ?? (reg.teamSize ? parseInt(reg.teamSize) : 1),
-      description: startup.description || reg.description || reg.pitch || user?.bio || "",
       problemStatement: reg.problemStatement || "",
       solution: reg.solution || "",
       targetCustomers: reg.targetCustomers || "",

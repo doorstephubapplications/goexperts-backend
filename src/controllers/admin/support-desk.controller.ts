@@ -29,11 +29,24 @@ export const listAdminTickets = async (req: AuthenticatedRequest, res: Response,
     if (categoryId) where.categoryId = String(categoryId);
     
     if (search) {
-      const q = String(search);
+      const q = String(search).trim();
+      const matchedUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { fullName: { contains: q } },
+            { email: { contains: q } },
+          ],
+        },
+        select: { id: true },
+        take: 100,
+      }).catch(() => []);
+      const matchedUserIds = matchedUsers.map((u) => u.id);
+
       where.OR = [
         { ticketNumber: { contains: q } },
         { subject: { contains: q } },
-        { requesterId: { contains: q } }
+        { requesterId: { contains: q } },
+        ...(matchedUserIds.length > 0 ? [{ requesterId: { in: matchedUserIds } }] : []),
       ];
     }
 

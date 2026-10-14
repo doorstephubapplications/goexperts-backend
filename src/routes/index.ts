@@ -405,6 +405,26 @@ router.post("/admin/contact-page/publish", authMiddleware as any, roleMiddleware
 router.get("/admin/contact-enquiries", authMiddleware as any, roleMiddleware(["admin"]) as any, listContactEnquiries);
 router.get("/admin/contact-enquiries/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, getContactEnquiryById);
 router.patch("/admin/contact-enquiries/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, updateContactEnquiry);
+router.delete("/admin/contact-enquiries/:id", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
+  try {
+    await prisma.contactEnquiry.delete({ where: { id: req.params.id } });
+    res.json({ success: true, message: "Enquiry deleted successfully." });
+  } catch (err) {
+    next(err);
+  }
+});
+router.post("/admin/contact-enquiries/bulk-delete", authMiddleware as any, roleMiddleware(["admin"]) as any, async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "Array of ids is required" });
+    }
+    const result = await prisma.contactEnquiry.deleteMany({ where: { id: { in: ids } } });
+    res.json({ success: true, count: result.count, message: `${result.count} enquiries deleted successfully.` });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Careers CMS, Jobs & Applications Admin Routes
 router.get("/admin/careers-page", authMiddleware as any, roleMiddleware(["admin"]) as any, getAdminCareersPage);
@@ -790,19 +810,29 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     ?? (Array.isArray(rest.clientContracts) ? rest.clientContracts.length : undefined)
     ?? 0;
 
-  const totalSpend = freelancerProfile.totalSpend
-    ?? clientProfile.totalSpend
-    ?? founderProfile.raised
-    ?? rest.total_spend
-    ?? rest.totalSpend
-    ?? rest.raised
-    ?? 0;
+  const userRole = String(rest.role || "").toLowerCase();
 
-  const ticketMin = investorProfile.ticketMin ?? rest.ticket_min ?? rest.ticketMin ?? regData.ticketMin ?? 25000;
-  const ticketMax = investorProfile.ticketMax ?? rest.ticket_max ?? rest.ticketMax ?? regData.ticketMax ?? 250000;
-  const deals = investorProfile.deals ?? rest.deals ?? 0;
-  const raised = founderProfile.raised ?? rest.raised ?? regData.raised ?? 0;
-  const stage = founderProfile.stage ?? rest.stage ?? regData.stage ?? null;
+  const totalSpend = (userRole === "client" || userRole === "business")
+    ? (clientProfile.totalSpend ?? rest.total_spend ?? rest.totalSpend ?? 0)
+    : (userRole === "freelancer"
+      ? (freelancerProfile.totalSpend ?? rest.total_spend ?? rest.totalSpend ?? 0)
+      : null);
+
+  const ticketMin = (userRole === "investor" || investorProfile.ticketMin != null)
+    ? (investorProfile.ticketMin ?? rest.ticket_min ?? rest.ticketMin ?? regData.ticketMin ?? 25000)
+    : null;
+  const ticketMax = (userRole === "investor" || investorProfile.ticketMax != null)
+    ? (investorProfile.ticketMax ?? rest.ticket_max ?? rest.ticketMax ?? regData.ticketMax ?? 250000)
+    : null;
+  const deals = (userRole === "investor" || investorProfile.deals != null)
+    ? (investorProfile.deals ?? rest.deals ?? 0)
+    : 0;
+  const raised = (userRole === "founder" || founderProfile.raised != null)
+    ? (founderProfile.raised ?? rest.raised ?? regData.raised ?? 0)
+    : null;
+  const stage = (userRole === "founder" || founderProfile.stage != null)
+    ? (founderProfile.stage ?? rest.stage ?? regData.stage ?? null)
+    : null;
 
   const workModeArr = Array.isArray(regData.workMode) ? regData.workMode : (freelancerProfile.workMode ? String(freelancerProfile.workMode).split(",").map(s => s.trim()) : (regData.workModeIds || []));
   const industryArr = Array.isArray(regData.industry) ? regData.industry : (freelancerProfile.industry || clientProfile.industry || founderProfile.industry ? String(freelancerProfile.industry || clientProfile.industry || founderProfile.industry).split(",").map(s => s.trim()) : (regData.industryIds || []));
@@ -1016,6 +1046,9 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     deals,
     raised,
     stage,
+    stageName: stage,
+    industry: userRole === "founder" ? (founderProfile.industry ?? regData.industry ?? (industryArr.length ? (indNames[0] || industryArr[0]) : null)) : industry,
+    industryName: userRole === "founder" ? (founderProfile.industry ?? regData.industry ?? (industryArr.length ? (indNames[0] || industryArr[0]) : null)) : (indNames[0] || null),
     rating: freelancerProfile.rating ?? 5.0,
     verified: profileApproved,
     profileApproved,
@@ -1038,12 +1071,23 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
       requiredPersonalVerified: verificationStats.requiredPersonalVerified,
       requiredBusinessVerified: verificationStats.requiredBusinessVerified,
     },
-    // Freelancer fields
-    title: freelancerProfile.titleHeadline ?? regData.titleHeadline ?? rest.titleHeadline ?? "Freelancer",
-    titleHeadline: freelancerProfile.titleHeadline ?? regData.titleHeadline ?? rest.titleHeadline ?? "Freelancer",
-    professionalTitle: freelancerProfile.titleHeadline ?? regData.titleHeadline ?? rest.titleHeadline ?? "Freelancer",
-    bio: freelancerProfile.bio ?? founderProfile.founderBio ?? rest.bio ?? regData.bio ?? regData.founderBio ?? null,
-    overview: freelancerProfile.bio ?? founderProfile.founderBio ?? rest.bio ?? regData.bio ?? regData.founderBio ?? null,
+    // Role-tailored title & overview
+    title: (userRole === "founder" ? (founderProfile.founderRole || regData.founderRole || "Founder / CEO")
+      : userRole === "client" ? (clientProfile.jobTitle || regData.jobTitle || "Client")
+      : userRole === "investor" ? (investorProfile.investorType || regData.investorType || "Investor")
+      : (freelancerProfile.titleHeadline || regData.titleHeadline || rest.titleHeadline || "Freelancer")),
+    titleHeadline: (userRole === "founder" ? (founderProfile.founderRole || regData.founderRole || "Founder / CEO")
+      : userRole === "client" ? (clientProfile.jobTitle || regData.jobTitle || "Client")
+      : userRole === "investor" ? (investorProfile.investorType || regData.investorType || "Investor")
+      : (freelancerProfile.titleHeadline || regData.titleHeadline || rest.titleHeadline || "Freelancer")),
+    professionalTitle: (userRole === "founder" ? (founderProfile.founderRole || regData.founderRole || "Founder / CEO")
+      : userRole === "client" ? (clientProfile.jobTitle || regData.jobTitle || "Client")
+      : userRole === "investor" ? (investorProfile.investorType || regData.investorType || "Investor")
+      : (freelancerProfile.titleHeadline || regData.titleHeadline || rest.titleHeadline || "Freelancer")),
+    bio: (userRole === "founder" ? (founderProfile.founderBio || regData.founderBio || rest.bio || regData.bio || null)
+      : (freelancerProfile.bio || rest.bio || regData.bio || founderProfile.founderBio || null)),
+    overview: (userRole === "founder" ? (founderProfile.founderBio || regData.founderBio || rest.bio || regData.bio || null)
+      : (freelancerProfile.bio || rest.bio || regData.bio || founderProfile.founderBio || null)),
     hourly_rate: freelancerProfile.hourlyRate ?? regData.hourlyRate ?? null,
     hourlyRate: freelancerProfile.hourlyRate ?? regData.hourlyRate ?? null,
     experience: freelancerProfile.experience ?? regData.experienceLevel ?? null,
@@ -1882,7 +1926,7 @@ adminFreelancersRouter.delete("/:id", async (req: Request, res: Response, next: 
     });
 
     if (user.email) {
-      sendAccountDeletedEmail(user.email, user.fullName).catch(console.error);
+      sendAccountDeletedEmail(user.email, user.fullName, user.role).catch(console.error);
     }
 
     res.json({ success: true, ok: true });
@@ -2137,7 +2181,7 @@ adminClientsRouter.delete("/:id", async (req: Request, res: Response, next: Next
     });
 
     if (user.email) {
-      sendAccountDeletedEmail(user.email, user.fullName).catch(console.error);
+      sendAccountDeletedEmail(user.email, user.fullName, user.role).catch(console.error);
     }
 
     res.json({ success: true, ok: true });
@@ -2351,7 +2395,7 @@ adminInvestorsRouter.delete("/:id", async (req: Request, res: Response, next: Ne
     });
 
     if (user.email) {
-      sendAccountDeletedEmail(user.email, user.fullName).catch(console.error);
+      sendAccountDeletedEmail(user.email, user.fullName, user.role).catch(console.error);
     }
 
     res.json({ success: true, ok: true });
@@ -2566,7 +2610,7 @@ adminFoundersRouter.delete("/:id", async (req: Request, res: Response, next: Nex
     });
 
     if (user.email) {
-      sendAccountDeletedEmail(user.email, user.fullName).catch(console.error);
+      sendAccountDeletedEmail(user.email, user.fullName, user.role).catch(console.error);
     }
 
     res.json({ success: true, ok: true });

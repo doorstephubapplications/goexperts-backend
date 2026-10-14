@@ -42,7 +42,7 @@ server.listen(port, async () => {
       console.log(`🗄️ Database Connected: ${dbUrl}`);
     }
   } catch (dbErr: any) {
-    console.error(`⚠️ Database Connection Warning: Cannot reach MySQL server at localhost:3306`);
+    console.error(`⚠️ Database Connection Warning:`, dbErr?.message || dbErr);
     console.error(`👉 Background queue worker and scheduler are paused until database connection is restored.`);
   }
 

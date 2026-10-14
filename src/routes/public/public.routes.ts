@@ -1284,7 +1284,7 @@ router.post("/delete-requests/:id/approve", async (req: Request, res: Response, 
     });
     
     if (user.email) {
-      sendAccountDeletedEmail(user.email, user.fullName || 'User').catch(console.error);
+      sendAccountDeletedEmail(user.email, user.fullName || 'User', user.role).catch(console.error);
     }
     
     res.json({ success: true, message: `Account deletion approved for ${user.email}. User has been deactivated.`, user });

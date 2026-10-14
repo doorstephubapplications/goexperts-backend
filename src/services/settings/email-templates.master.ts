@@ -27,11 +27,10 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     subject: "Verify Your Go Experts Account 📧",
     variables: [
       "{full_name}",
-      "{verification_link}",
-      "{otp_code}",
+      "{email}",
       "{app_url}",
-      "{app_name}",
-      "{company_name}"
+      "{role}",
+      "{user_role}"
     ],
     body: "Hello {{full_name}},\n\nThank you for registering with Go Experts. Please click the button or link below to verify your email address (Link & Code expire in 15 minutes):\n\n{{verification_link}}\n\nYour Verification OTP Code: {{otp_code}}\n\nIf you did not create an account, you can safely ignore this email.\n\nThank you,\nGo Experts Team",
     html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; overflow: hidden;">
@@ -182,7 +181,9 @@ export const MASTER_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     variables: [
       "{full_name}",
       "{email}",
-      "{app_url}"
+      "{app_url}",
+      "{role}",
+      "{user_role}"
     ],
     body: "Hi {{full_name}},\n\nThis is to confirm that your GoExperts account ({{email}}) and all associated data have been permanently deleted as requested.\n\nIf you did not request this deletion, contact our support team immediately at servicedesk@goexperts.in.\n\nThe GoExperts Team",
     html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748; background: #ffffff; border-radius: 12px; border: 1px solid #eaedf1; padding: 32px 24px;">
