@@ -573,32 +573,8 @@ export const createClientProject = async (req: AuthenticatedRequest, res: Respon
     const requestedStatus = body.status ? String(body.status) : "open";
     const isPublishing = requestedStatus.toLowerCase() === "published" || requestedStatus.toLowerCase() === "open";
 
-    if (isPublishing) {
-      try {
-        await requireCapability({ userId, action: "publishProject" });
-        await assertAndConsumeActionQuota(userId, user.role || "client", "publishProject").catch(() => {});
-      } catch (err: any) {
-        if (err instanceof ActionRequirementsError) {
-          return res.status(403).json({
-            success: false,
-            code: err.code,
-            action: err.action,
-            message: err.message,
-            missing: err.missing,
-          });
-        }
-        if (err instanceof ActionGateError) {
-          return res.status(403).json({
-            success: false,
-            code: err.code,
-            action: err.action,
-            message: err.message,
-            details: err.details,
-          });
-        }
-        // Do not block valid user roles
-      }
-    }
+    // Plan / quota check removed per user request: allow all roles to create and publish projects freely
+    // without requiring paid plans or consuming restrictive quotas.
 
     const budgetMin = Number.isFinite(Number(body.budgetMin)) ? Number(body.budgetMin) : null;
     const budgetMax = Number.isFinite(Number(body.budgetMax)) ? Number(body.budgetMax) : null;
@@ -876,31 +852,8 @@ export const updateClientProject = async (req: AuthenticatedRequest, res: Respon
     if (data.status && (data.status.toLowerCase() === "published" || data.status.toLowerCase() === "open")) {
       const currentStatus = String(project.status || "").toLowerCase();
       const isNewlyPublishing = currentStatus !== "published" && currentStatus !== "open";
-      if (isNewlyPublishing) {
-        try {
-          await requireCapability({ userId, action: "publishProject" });
-          await assertAndConsumeActionQuota(userId, user.role || "client", "publishProject").catch(() => {});
-        } catch (err: any) {
-          if (err instanceof ActionRequirementsError) {
-            return res.status(403).json({
-              success: false,
-              code: err.code,
-              action: err.action,
-              message: err.message,
-              missing: err.missing,
-            });
-          }
-          if (err instanceof ActionGateError) {
-            return res.status(403).json({
-              success: false,
-              code: err.code,
-              action: err.action,
-              message: err.message,
-              details: err.details,
-            });
-          }
-        }
-      }
+      // Plan / quota check removed per user request: allow updating/publishing freely without plan gates
+      // No ActionGateError or plan requirements for updating projects.
     }
 
     if (data.status === "completed") {

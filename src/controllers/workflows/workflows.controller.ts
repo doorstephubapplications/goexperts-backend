@@ -178,31 +178,8 @@ export const publishProject = async (req: AuthenticatedRequest, res: Response, n
       return res.json({ success: true, message: "Project is already published", project });
     }
 
-    // Ensure capability and subscription entitlement are met before publishing
-    try {
-      await requireCapability({ userId, action: "publishProject" });
-      await assertAndConsumeActionQuota(userId, "client", "publishProject");
-    } catch (err: any) {
-      if (err instanceof ActionRequirementsError) {
-        return res.status(403).json({
-          success: false,
-          code: err.code,
-          action: err.action,
-          message: err.message,
-          missing: err.missing,
-        });
-      }
-      if (err instanceof ActionGateError) {
-        return res.status(403).json({
-          success: false,
-          code: err.code,
-          action: err.action,
-          message: err.message,
-          details: err.details,
-        });
-      }
-      throw err;
-    }
+    // Plan / quota check removed per user request: allow publishing projects freely without plan gates
+    // Any role can publish projects without plan-based action restrictions.
 
     const updated = await prisma.project.update({
       where: { id },
