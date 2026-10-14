@@ -250,11 +250,65 @@ export const getFounderStartup = async (req: AuthenticatedRequest, res: Response
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     const startup = await findExistingStartup(user);
-    if (!startup) {
-      return res.json({ success: true, message: "No startup idea found", data: null });
-    }
     const details = await getJsonSetting(userId, "startup-details", {});
-    res.json({ success: true, data: { ...startup, ...details } });
+
+    if (startup) {
+      return res.json({ success: true, data: { ...startup, ...details } });
+    }
+
+    // Dynamic fallback to founderProfile and registration data if no published startup idea exists yet
+    const profile = user.founderProfile;
+    let regData: any = {};
+    if ((user as any).registrationData) {
+      try {
+        regData = typeof (user as any).registrationData === "string"
+          ? JSON.parse((user as any).registrationData)
+          : (user as any).registrationData;
+      } catch (e) {}
+    }
+
+    const startupName = profile?.startupName || regData.startupName || (details as any).startup || null;
+    if (startupName) {
+      const syntheticStartup = {
+        id: profile?.id || null,
+        startup: startupName,
+        startupName: startupName,
+        founder: user.fullName || user.id,
+        founderId: user.id,
+        industry: profile?.industry || regData.industry || "General",
+        category: profile?.industry || regData.industry || "General",
+        stage: profile?.stage || regData.stage || "Idea/Concept",
+        stageName: profile?.stage || regData.stage || "Idea/Concept",
+        funding: Number(profile?.targetRaise ?? regData.targetRaise ?? 0),
+        targetRaise: Number(profile?.targetRaise ?? regData.targetRaise ?? 0),
+        raised: Number(profile?.raised ?? regData.raised ?? 0),
+        equity: Number(regData.equity ?? 0),
+        pitch: profile?.pitch || regData.pitch || "",
+        oneLinePitch: profile?.pitch || regData.pitch || "",
+        founderRole: profile?.founderRole || regData.founderRole || null,
+        founderBio: profile?.founderBio || regData.founderBio || user.bio || null,
+        teamSize: profile?.teamSize ?? regData.teamSize ?? 1,
+        primaryGoal: profile?.primaryGoal || regData.primaryGoal || null,
+        visibility: "Public",
+        status: "active",
+        logo: user.avatarUrl || null,
+        coverUrl: user.coverImageUrl || null,
+        pitchDeck: (profile as any)?.pitchDeck || regData.pitchDeck || null,
+        businessPlan: (profile as any)?.businessPlan || regData.businessPlan || null,
+        createdAt: profile?.createdAt || user.createdAt,
+        updatedAt: profile?.updatedAt || user.updatedAt,
+      };
+
+      return res.json({
+        success: true,
+        data: {
+          ...syntheticStartup,
+          ...details,
+        },
+      });
+    }
+
+    return res.json({ success: true, message: "No startup idea found", data: null });
   } catch (err) {
     handleError(err, res, next);
   }

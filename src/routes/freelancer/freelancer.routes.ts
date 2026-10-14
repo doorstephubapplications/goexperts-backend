@@ -92,6 +92,11 @@ router.use(authMiddleware as any);
 // Portal media upload is needed DURING onboarding for avatars and documents
 router.post("/media/upload", upload.single("file"), uploadFile as any);
 
+// Notifications must be accessible during onboarding / registration header
+router.get("/notifications", listFreelancerNotifications as any);
+router.patch("/notifications/read-all", markAllFreelancerNotificationsRead as any);
+router.patch("/notifications/:id/read", markFreelancerNotificationRead as any);
+
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["freelancer", "client", "investor", "founder", "admin", "super_admin"]) as any);
 
@@ -109,10 +114,7 @@ router.patch("/profile", updateFreelancerProfile as any);
 router.put("/profile", updateFreelancerProfile as any);
 router.patch("/profile/cover", updateFreelancerCover as any);
 
-router.get("/notifications", listFreelancerNotifications as any);
 router.post("/notifications", createFreelancerNotification as any);
-router.patch("/notifications/read-all", markAllFreelancerNotificationsRead as any);
-router.patch("/notifications/:id/read", markFreelancerNotificationRead as any);
 
 router.get("/verification", getMyVerification as any);
 router.patch("/verification", updateMyVerification as any);
