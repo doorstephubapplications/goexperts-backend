@@ -189,6 +189,15 @@ function handleError(err: unknown, res: Response, next: NextFunction) {
   if (err instanceof HttpError) {
     return res.status(err.statusCode).json({ success: false, message: err.message });
   }
+  if (err instanceof ActionGateError) {
+    return res.status(403).json({
+      success: false,
+      code: err.code,
+      action: err.action,
+      message: err.message,
+      details: err.details,
+    });
+  }
   next(err);
 }
 
@@ -2315,17 +2324,39 @@ export const toggleSavedFreelancer = async (req: AuthenticatedRequest, res: Resp
       return res.json({ success: true, saved: false, rows, total: rows.length, message: "Freelancer not saved" });
     }
 
+    const targetRole = (req.user?.role && ['client', 'founder', 'investor', 'freelancer'].includes(req.user.role.toLowerCase())) 
+      ? req.user.role.toLowerCase() 
+      : 'client';
+
     if (existing >= 0 && action !== 'save') {
       // remove (toggle off or explicit unsave)
       next = rows.filter((_: any, i: number) => i !== existing);
       saved = false;
-      const entitlement = await resolveRoleEntitlement(userId, 'client', 'saveFreelancer');
-      if (entitlement.subscriptionId) {
-        await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+      try {
+        const entitlement = await resolveRoleEntitlement(userId, targetRole, 'saveFreelancer');
+        if (entitlement.subscriptionId) {
+          await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+        }
+      } catch {
+        // Safe fallback if not entitled
       }
     } else {
       // not yet saved → add
-      await assertAndConsumeActionQuota(userId, 'client', 'saveFreelancer');
+      try {
+        await assertAndConsumeActionQuota(userId, targetRole, 'saveFreelancer');
+      } catch (quotaErr) {
+        // If the user's role is not client (e.g. browsing as freelancer or has no client subscription),
+        // try checking if client role is entitled, otherwise if it's ActionGateError, throw so handleError returns 403
+        if (targetRole !== 'client') {
+          try {
+            await assertAndConsumeActionQuota(userId, 'client', 'saveFreelancer');
+          } catch {
+            throw quotaErr;
+          }
+        } else {
+          throw quotaErr;
+        }
+      }
       const entry = {
         id: `sf-${Date.now()}`,
         freelancerId,
@@ -2361,9 +2392,16 @@ export const removeSavedFreelancer = async (req: AuthenticatedRequest, res: Resp
     await setJsonSetting(userId, "savedFreelancers", next);
 
     if (next.length < rows.length) {
-      const entitlement = await resolveRoleEntitlement(userId, 'client', 'saveFreelancer');
-      if (entitlement.subscriptionId) {
-        await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+      const targetRole = (req.user?.role && ['client', 'founder', 'investor', 'freelancer'].includes(req.user.role.toLowerCase())) 
+        ? req.user.role.toLowerCase() 
+        : 'client';
+      try {
+        const entitlement = await resolveRoleEntitlement(userId, targetRole, 'saveFreelancer');
+        if (entitlement.subscriptionId) {
+          await rollbackActionUsage(entitlement.subscriptionId, 'saveFreelancer');
+        }
+      } catch {
+        // Safe fallback
       }
     }
 

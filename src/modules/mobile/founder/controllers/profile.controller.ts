@@ -198,20 +198,27 @@ export const uploadCover = async (req: AuthRequest, res: Response, next: NextFun
   try { return respondWithUploadedFile(req, res, 'Cover uploaded'); } catch (error) { next(error); }
 };
 
+import { resolveProfileCompletion } from '../../../../services/mobile/profile-completion.service.js';
+
 export const getProfileCompletion = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const [user, profile] = await Promise.all([
-      prisma.user.findUnique({ where: { id: req.user.id } }),
-      prisma.founderProfile.findUnique({ where: { userId: req.user.id } })
-    ]);
+    const result = await resolveProfileCompletion(req.user.id, 'founder');
     const steps = [
-      { step: 'Basic Info', done: !!user?.fullName },
-      { step: 'Startup Name', done: !!profile?.startupName },
-      { step: 'Industry', done: !!profile?.industry },
-      { step: 'Stage', done: !!profile?.stage },
-      { step: 'Logo', done: !!user?.avatarUrl }
+      ...result.requirements.core.missing.map(m => ({ step: m.label, done: false, required: true })),
+      ...result.completedSteps.map(s => ({ step: s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), done: true, required: true }))
     ];
-    const done = steps.filter(s => s.done).length;
-    return res.json(successResponse('Profile completion', { percentage: Math.round((done / steps.length) * 100), steps }));
+    return res.json(successResponse('Profile completion', {
+      percentage: result.profileCompletion,
+      percent: result.profileCompletion,
+      profileCompletion: result.profileCompletion,
+      isProfileComplete: result.isProfileComplete,
+      profileLevel: result.profileLevel,
+      operationalReady: result.operationalReady,
+      requirements: result.requirements,
+      verification: result.verification,
+      completedSteps: result.completedSteps,
+      pendingSteps: result.pendingSteps,
+      steps
+    }));
   } catch (error) { next(error); }
 };

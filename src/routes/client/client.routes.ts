@@ -160,9 +160,9 @@ router.delete("/team/:id", multiRole, deleteClientTeamMember as any);
 router.post("/media/upload", upload.single("file"), uploadFile as any);
 
 // Saved freelancers (bookmark)
-router.get("/freelancers/saved", listSavedFreelancers as any);
-router.post("/freelancers/save", toggleSavedFreelancer as any);
-router.delete("/freelancers/saved/:id", removeSavedFreelancer as any);
+router.get("/freelancers/saved", multiRole, listSavedFreelancers as any);
+router.post("/freelancers/save", multiRole, toggleSavedFreelancer as any);
+router.delete("/freelancers/saved/:id", multiRole, removeSavedFreelancer as any);
 
 // Professional Services
 import {

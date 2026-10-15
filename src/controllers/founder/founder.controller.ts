@@ -41,6 +41,15 @@ function handleError(err: unknown, res: Response, next: NextFunction) {
   if (err instanceof HttpError) {
     return res.status(err.statusCode).json({ success: false, message: err.message });
   }
+  if (err instanceof ActionGateError) {
+    return res.status(403).json({
+      success: false,
+      code: err.code,
+      action: err.action,
+      message: err.message,
+      details: err.details,
+    });
+  }
   next(err);
 }
 

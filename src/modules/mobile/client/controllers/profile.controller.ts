@@ -234,21 +234,27 @@ export const uploadDocuments = async (req: AuthRequest, res: Response, next: Nex
   }
 };
 
+import { resolveProfileCompletion } from '../../../../services/mobile/profile-completion.service.js';
+
 export const getProfileCompletion = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const profile = await prisma.clientProfile.findUnique({ where: { userId: req.user.id } });
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const result = await resolveProfileCompletion(req.user.id, 'client');
     const steps = [
-      { step: 'Basic info', done: !!profile },
-      { step: 'Company name', done: !!profile?.company },
-      { step: 'Industry', done: !!profile?.industry },
-      { step: 'Logo', done: !!user?.avatarUrl },
-      { step: 'Address', done: !!(user?.city || user?.country) },
+      ...result.requirements.core.missing.map(m => ({ step: m.label, done: false, required: true })),
+      ...result.completedSteps.map(s => ({ step: s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), done: true, required: true }))
     ];
-    const completed = steps.filter((s) => s.done).length;
     return res.json(
       successResponse('Profile completion', {
-        percent: Math.round((completed / steps.length) * 100),
+        percentage: result.profileCompletion,
+        percent: result.profileCompletion,
+        profileCompletion: result.profileCompletion,
+        isProfileComplete: result.isProfileComplete,
+        profileLevel: result.profileLevel,
+        operationalReady: result.operationalReady,
+        requirements: result.requirements,
+        verification: result.verification,
+        completedSteps: result.completedSteps,
+        pendingSteps: result.pendingSteps,
         steps,
       })
     );

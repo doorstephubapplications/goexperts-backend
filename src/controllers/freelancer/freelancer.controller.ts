@@ -222,25 +222,45 @@ function profileCompletion(user: any, profile: any) {
   const hasText = (v: any) => typeof v === 'string' && v.trim().length > 0;
   const hasNumber = (v: any) => typeof v === 'number' && !isNaN(v);
   const fp = profile;
-  const steps = {
-    personal_info:       hasText(user.fullName) && hasText(user.email),
-    professional_info:   hasText(user.bio) && (hasText(fp?.titleHeadline) || hasText(user.bio)),
-    skills:              hasText(fp?.skills),
-    experience:          hasText(fp?.experience) || hasNumber(fp?.hourlyRate),
-    portfolio:           hasText(fp?.portfolioUrl) || hasText(fp?.linkedInUrl) || hasText(fp?.githubUrl) || hasText(fp?.dribbbleUrl),
-    avatar:              hasText(user.avatarUrl),
-    location:            hasText(user.city) || hasText(user.country),
-    resume:              hasText(fp?.resumeUrl),
+
+  const fields = {
+    fullName: hasText(user?.fullName),
+    email: hasText(user?.email),
+    avatar: hasText(user?.avatarUrl),
+    coverImage: hasText(user?.coverImageUrl),
+    country: hasText(user?.country),
+    city: hasText(user?.city),
+    title: hasText(fp?.titleHeadline),
+    bio: hasText(user?.bio),
+    skills: hasText(fp?.skills),
+    experience: hasText(fp?.experience) || hasText(fp?.experienceLevel),
+    availability: hasText(fp?.availability),
+    rate: hasNumber(fp?.hourlyRate),
+    portfolio: hasText(fp?.portfolioUrl) || hasText(fp?.githubUrl) || hasText(fp?.dribbbleUrl) || hasText(fp?.linkedInUrl),
+    resume: hasText(fp?.resumeUrl),
   };
 
-  const p1 = (steps.personal_info ? 1 : 0) + (steps.avatar ? 1 : 0) + (steps.location ? 1 : 0);
-  const personalScore = Math.round((p1 / 3) * 100);
-  
-  const p2 = (steps.professional_info ? 1 : 0) + (steps.skills ? 1 : 0) + (steps.experience ? 1 : 0);
-  const professionalScore = Math.round((p2 / 3) * 100);
-  
-  const portfolioScore = steps.portfolio ? 100 : 0;
-  const resumeScore = steps.resume ? 100 : 0;
+  // Section scores matching resolveProfileCompletion weights:
+  // Personal (identity 20 pts + location 15 pts = 35 max):
+  //   fullName & email: 10, avatar: 5, coverImage: 5, country & city: 15
+  let personalEarned = 0;
+  if (fields.fullName && fields.email) personalEarned += 10;
+  if (fields.avatar) personalEarned += 5;
+  if (fields.coverImage) personalEarned += 5;
+  if (fields.country && fields.city) personalEarned += 15;
+  const personalScore = Math.round((personalEarned / 35) * 100);
+
+  // Professional (professional 30 pts + skills 20 pts + rate/avail 15 pts = 65 max):
+  //   title, bio, experience: 30, skills: 20, rate or availability: 15
+  let professionalEarned = 0;
+  if (fields.title && fields.bio && fields.experience) professionalEarned += 30;
+  if (fields.skills) professionalEarned += 20;
+  if (fields.rate || fields.availability) professionalEarned += 15;
+  const professionalScore = Math.round((professionalEarned / 65) * 100);
+
+  // Portfolio & Resume recommended sections
+  const portfolioScore = fields.portfolio ? 100 : 0;
+  const resumeScore = fields.resume ? 100 : 0;
 
   const items = [
     { label: "Personal Info", pct: personalScore },
@@ -248,10 +268,9 @@ function profileCompletion(user: any, profile: any) {
     { label: "Portfolio", pct: portfolioScore },
     { label: "Resume", pct: resumeScore },
   ];
-  
-  const completedCount = Object.values(steps).filter(Boolean).length;
-  const overall = Math.round((completedCount / 8) * 100);
-  
+
+  const overall = personalEarned + professionalEarned;
+
   return { overall, items };
 }
 

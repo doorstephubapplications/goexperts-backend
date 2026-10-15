@@ -36,22 +36,28 @@ export const uploadDocuments = async (req: AuthRequest, res: Response, next: Nex
   try { return respondWithUploadedFile(req, res, 'Document uploaded'); } catch (error) { next(error); }
 };
 
+import { resolveProfileCompletion } from '../../../../services/mobile/profile-completion.service.js';
+
 export const getProfileCompletion = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const [user, profile] = await Promise.all([
-      prisma.user.findUnique({ where: { id: req.user.id } }),
-      prisma.investorProfile.findUnique({ where: { userId: req.user.id } })
-    ]);
+    const result = await resolveProfileCompletion(req.user.id, 'investor');
     const steps = [
-      { step: 'Basic info', done: !!user?.fullName },
-      { step: 'Bio', done: !!user?.bio },
-      { step: 'Firm', done: !!profile?.firm },
-      { step: 'Investment range', done: !!profile?.ticketMin },
-      { step: 'Focus areas', done: !!profile?.focusAreas },
-      { step: 'Avatar', done: !!user?.avatarUrl }
+      ...result.requirements.core.missing.map(m => ({ step: m.label, done: false, required: true })),
+      ...result.completedSteps.map(s => ({ step: s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), done: true, required: true }))
     ];
-    const done = steps.filter(s => s.done).length;
-    return res.json(successResponse('Profile completion', { percentage: Math.round((done / steps.length) * 100), steps }));
+    return res.json(successResponse('Profile completion', {
+      percentage: result.profileCompletion,
+      percent: result.profileCompletion,
+      profileCompletion: result.profileCompletion,
+      isProfileComplete: result.isProfileComplete,
+      profileLevel: result.profileLevel,
+      operationalReady: result.operationalReady,
+      requirements: result.requirements,
+      verification: result.verification,
+      completedSteps: result.completedSteps,
+      pendingSteps: result.pendingSteps,
+      steps
+    }));
   } catch (error) { next(error); }
 };
 

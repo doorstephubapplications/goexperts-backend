@@ -6,6 +6,7 @@ import { prisma } from "../../config/database.js";
 import { sendAccountDeletedEmail, sendKycDocumentStatusEmail, sendAdminWalletCreditEmail } from "../../services/mobile/email.service.js";
 import { decryptPassword } from "../../utils/crypto.util.js";
 import { getVerificationStats } from "../../common/helpers/verification.js";
+import { resolveProfileCompletion } from "../../services/mobile/profile-completion.service.js";
 
 export const adminUsersRouter = Router();
 
@@ -270,10 +271,18 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
       console.error("Error computing verificationStats:", e);
     }
 
+    let dynamicCompletion = user.completionPercentage ?? 0;
+    try {
+      const comp = await resolveProfileCompletion(user.id, user.role);
+      if (typeof comp?.profileCompletion === 'number') {
+        dynamicCompletion = comp.profileCompletion;
+      }
+    } catch (e) {}
+
     let verificationCenter: any = {
       email: (user.isVerified || user.verified) ? "VERIFIED" : "PENDING",
       phone: (user.phone && user.phone.length > 5) ? "VERIFIED" : "PENDING",
-      profile: user.completionPercentage && user.completionPercentage >= 80 ? "COMPLETED" : "PENDING",
+      profile: dynamicCompletion >= 80 ? "COMPLETED" : "PENDING",
       kyc: verificationStats?.kycApproved ? "APPROVED" : (verificationStats?.kycStatus || "PENDING"),
       documents: verificationStats?.kycApproved ? "APPROVED" : "PENDING",
       documentsList: []
@@ -592,6 +601,8 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         bannerUrl: profileBanner,
         banner: profileBanner,
         currentPassword,
+        completionPercentage: dynamicCompletion,
+        profileCompletion: dynamicCompletion,
         verificationCenter,
         verificationStats,
         projects: enrichedProjects,
@@ -1014,6 +1025,14 @@ adminUsersRouter.get("/:id/insights", async (req: Request, res: Response, next: 
       ? await (prisma as any).adminAuditLog.count({ where: { targetUserId: userId } }).catch(() => 0)
       : 0;
 
+    let dynamicCompletion = user.completionPercentage ?? 0;
+    try {
+      const comp = await resolveProfileCompletion(userId, user.role);
+      if (typeof comp?.profileCompletion === 'number') {
+        dynamicCompletion = comp.profileCompletion;
+      }
+    } catch (e) {}
+
     res.json({
       success: true,
       data: {
@@ -1025,7 +1044,7 @@ adminUsersRouter.get("/:id/insights", async (req: Request, res: Response, next: 
         totalTransactions: txCount,
         auditLogsCount: auditCount,
         currentPlan: user.subscriptions?.[0]?.plan?.name || "Free Tier",
-        completionScore: user.completionPercentage || 85,
+        completionScore: dynamicCompletion,
         lastActive: user.lastLoginAt || user.updatedAt || user.createdAt
       }
     });
