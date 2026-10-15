@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from "express";
+﻿import { Router, Request, Response, NextFunction } from "express";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
@@ -1110,9 +1110,9 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     currentTeamId: regData.currentTeamId ?? clientProfile.currentTeam ?? regData.currentTeam ?? regData.teamSize ?? regData.companySize ?? null,
     currentTeamSize: rLabel(clientProfile.currentTeam ?? regData.currentTeam ?? regData.teamSize ?? regData.companySize ?? null, COMPANY_SIZE_NAME_MAP),
     currentTeamSizeId: regData.currentTeamSizeId ?? regData.currentTeamId ?? clientProfile.currentTeam ?? regData.currentTeam ?? regData.teamSize ?? regData.companySize ?? null,
-    projectHireBudget: regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budget ?? null,
-    projectHireBudgetId: regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budget ?? null,
-    projectHireBudgetLabel: rLabel(regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budget ?? null, BUDGET_RANGE_NAME_MAP),
+    projectHireBudget: regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budgetRange ?? regData.budget ?? null,
+    projectHireBudgetId: regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budgetRange ?? regData.budget ?? null,
+    projectHireBudgetLabel: rLabel(regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budgetRange ?? regData.budget ?? null, BUDGET_RANGE_NAME_MAP),
     websiteUrl: clientProfile.websiteUrl ?? regData.websiteUrl ?? null,
     jobTitle: clientProfile.jobTitle ?? regData.jobTitle ?? null,
     // Investor fields

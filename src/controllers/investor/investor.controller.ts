@@ -326,7 +326,85 @@ export const listWatchlist = async (req: AuthenticatedRequest, res: Response, ne
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
-    const rows = await getJsonSetting(userId, "watchlist", [] as any[]);
+    const rawRows = await getJsonSetting(userId, "watchlist", [] as any[]);
+
+    // Extract target user IDs and startup IDs
+    const targetUserIds = rawRows
+      .map((r: any) => r.targetUserId || r.userId)
+      .filter((id: any) => typeof id === "string" && id.trim().length > 0);
+
+    const startupIds = rawRows
+      .map((r: any) => r.startupId)
+      .filter((id: any) => typeof id === "string" && id.trim().length > 0);
+
+    const [users, startups] = await Promise.all([
+      targetUserIds.length > 0
+        ? prisma.user.findMany({
+            where: { id: { in: targetUserIds }, deletedAt: null },
+            include: {
+              founderProfile: true,
+              investorProfile: true,
+              freelancerProfile: true,
+              clientProfile: true,
+            },
+          })
+        : Promise.resolve([]),
+      startupIds.length > 0
+        ? prisma.startupIdea.findMany({
+            where: { id: { in: startupIds }, deletedAt: null },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const startupMap = new Map(startups.map((s) => [s.id, s]));
+
+    const rows = rawRows
+      .map((item: any) => {
+        const tUserId = item.targetUserId || item.userId;
+        if (tUserId) {
+          const userObj = userMap.get(tUserId);
+          if (!userObj) return null; // Exclude if user does not exist or soft-deleted
+
+          const role = userObj.role || item.role || "user";
+          let headline = item.headline || "";
+          if (userObj.freelancerProfile?.titleHeadline) headline = userObj.freelancerProfile.titleHeadline;
+          else if (userObj.founderProfile?.startupName) headline = `Founder at ${userObj.founderProfile.startupName}`;
+          else if (userObj.investorProfile?.firm) headline = `Investor at ${userObj.investorProfile.firm}`;
+          else if (userObj.clientProfile?.company) headline = `Client at ${userObj.clientProfile.company}`;
+
+          return {
+            ...item,
+            id: item.id || `WL-${tUserId}`,
+            targetUserId: userObj.id,
+            name: userObj.fullName || item.name || "User",
+            avatar: userObj.avatarUrl || item.avatar || "",
+            role,
+            headline,
+            location: userObj.city ? `${userObj.city}, ${userObj.country || ""}`.trim() : (item.location || ""),
+            addedAt: item.addedAt || item.savedAt || new Date().toISOString(),
+          };
+        }
+
+        if (item.startupId) {
+          const s = startupMap.get(item.startupId);
+          if (!s && startupIds.includes(item.startupId)) {
+            // Soft-deleted startup
+            return null;
+          }
+          return {
+            ...item,
+            startupName: s?.startup || item.startupName,
+            logo: s?.logo || item.logo || "",
+            industry: s?.industry || item.industry || "",
+            addedAt: item.addedAt || item.savedAt || new Date().toISOString(),
+          };
+        }
+
+        return item;
+      })
+      .filter(Boolean);
+
     res.json({ success: true, rows, total: rows.length });
   } catch (err) {
     handleError(err, res, next);
@@ -339,29 +417,69 @@ export const addToWatchlist = async (req: AuthenticatedRequest, res: Response, n
     if (!userId) return;
     const body = req.body || {};
     const startupId = String(body.startupId || "").trim();
+    const targetUserId = String(body.targetUserId || body.userId || body.founderId || body.investorId || body.freelancerId || "").trim();
     let startupName = body.startupName ? String(body.startupName).trim() : "";
 
-    if (startupId) {
+    let targetUserData: any = null;
+    if (targetUserId) {
+      targetUserData = await prisma.user.findFirst({
+        where: { id: targetUserId, deletedAt: null },
+        include: {
+          founderProfile: true,
+          investorProfile: true,
+          freelancerProfile: true,
+          clientProfile: true,
+        },
+      });
+      if (!targetUserData) {
+        return res.status(404).json({ success: false, message: "Target user not found" });
+      }
+    } else if (startupId) {
       const startup = await prisma.startupIdea.findFirst({ where: { id: startupId, deletedAt: null } });
       if (!startup) return res.status(404).json({ success: false, message: "Startup not found" });
       startupName = startup.startup;
     }
-    if (!startupName) return res.status(400).json({ success: false, message: "startupId or startupName is required" });
+
+    if (!targetUserData && !startupName) {
+      return res.status(400).json({ success: false, message: "targetUserId, startupId, or startupName is required" });
+    }
 
     const rows = await getJsonSetting(userId, "watchlist", [] as any[]);
-    if (rows.some((r: any) => (startupId && r.startupId === startupId) || r.startupName === startupName)) {
+    const isAlreadyIn = rows.some((r: any) => {
+      if (targetUserId && (r.targetUserId === targetUserId || r.userId === targetUserId)) return true;
+      if (startupId && r.startupId === startupId) return true;
+      if (startupName && r.startupName === startupName) return true;
+      return false;
+    });
+
+    if (isAlreadyIn) {
       return res.status(409).json({ success: false, message: "Already in watchlist" });
+    }
+
+    let headline = body.headline || "";
+    if (targetUserData) {
+      if (targetUserData.freelancerProfile?.titleHeadline) headline = targetUserData.freelancerProfile.titleHeadline;
+      else if (targetUserData.founderProfile?.startupName) headline = `Founder at ${targetUserData.founderProfile.startupName}`;
+      else if (targetUserData.investorProfile?.firm) headline = `Investor at ${targetUserData.investorProfile.firm}`;
+      else if (targetUserData.clientProfile?.company) headline = `Client at ${targetUserData.clientProfile.company}`;
     }
 
     const item = {
       id: `WL-${Date.now().toString(36).toUpperCase()}`,
       startupId: startupId || null,
-      startupName,
+      startupName: startupName || null,
+      targetUserId: targetUserData ? targetUserData.id : null,
+      name: targetUserData ? targetUserData.fullName : (body.name || startupName),
+      avatar: targetUserData ? (targetUserData.avatarUrl || "") : (body.avatar || ""),
+      role: targetUserData ? targetUserData.role : (body.role || null),
+      headline,
+      location: targetUserData?.city ? `${targetUserData.city}, ${targetUserData.country || ""}`.trim() : (body.location || ""),
       addedAt: new Date().toISOString(),
     };
-    const next = [item, ...rows];
-    await setJsonSetting(userId, "watchlist", next);
-    res.status(201).json({ success: true, message: "Added to watchlist", data: item, rows: next });
+
+    const nextRows = [item, ...rows];
+    await setJsonSetting(userId, "watchlist", nextRows);
+    res.status(201).json({ success: true, message: "Added to watchlist", data: item, rows: nextRows, total: nextRows.length });
   } catch (err) {
     handleError(err, res, next);
   }
@@ -371,11 +489,17 @@ export const removeFromWatchlist = async (req: AuthenticatedRequest, res: Respon
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
+    const targetId = req.params.id;
     const rows = await getJsonSetting(userId, "watchlist", [] as any[]);
-    const next = rows.filter((r: any) => r.id !== req.params.id);
-    if (next.length === rows.length) return res.status(404).json({ success: false, message: "Watchlist item not found" });
-    await setJsonSetting(userId, "watchlist", next);
-    res.json({ success: true, message: "Removed from watchlist", rows: next });
+    const nextRows = rows.filter((r: any) => 
+      r.id !== targetId && 
+      r.targetUserId !== targetId && 
+      r.userId !== targetId && 
+      r.startupId !== targetId
+    );
+    if (nextRows.length === rows.length) return res.status(404).json({ success: false, message: "Watchlist item not found" });
+    await setJsonSetting(userId, "watchlist", nextRows);
+    res.json({ success: true, message: "Removed from watchlist", rows: nextRows, total: nextRows.length });
   } catch (err) {
     handleError(err, res, next);
   }

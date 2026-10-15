@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+﻿import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env.js";
@@ -895,7 +895,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         }
 
         const companySizeVal = req.body?.companySize || req.body?.currentTeam || req.body?.teamSize || null;
-        const projectHireBudgetVal = req.body?.projectHireBudget || req.body?.projectHireBudgetRange || req.body?.budget || null;
+        const projectHireBudgetVal = req.body?.projectHireBudget || req.body?.projectHireBudgetRange || req.body?.budgetRange || req.body?.budget || null;
         const hiringGoalVal = req.body?.hiringGoal || req.body?.primaryGoal || null;
 
         await tx.clientProfile.upsert({
@@ -2715,7 +2715,7 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
       ...extraData
     } = req.body || {};
 
-    const projectHireBudgetInput = req.body?.projectHireBudgetId ?? req.body?.projectHireBudget ?? req.body?.budget;
+    const projectHireBudgetInput = req.body?.projectHireBudgetId ?? req.body?.projectHireBudget ?? req.body?.budgetRange ?? req.body?.budget;
     const investorTypeInput = req.body?.investorTypeId ?? investorType;
     const focusAreasInput = req.body?.focusAreasId ?? focusAreas;
     const preferredStageInput = req.body?.preferredStageId ?? preferredStage;

@@ -211,7 +211,7 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
       data: {
         fullName,
         phone: body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone,
-        bio: body.bio != null ? String(body.bio) : existing.bio,
+        bio: body.bio != null ? String(body.bio).slice(0, 190) : existing.bio,
         avatarUrl: body.avatarUrl != null ? String(body.avatarUrl).trim() || null : (body.logo != null ? String(body.logo).trim() || null : existing.avatarUrl),
         coverImageUrl: body.coverUrl != null ? String(body.coverUrl).trim() || null : (body.bannerUrl != null ? String(body.bannerUrl).trim() || null : existing.coverImageUrl),
         city: body.city != null ? String(body.city).trim() || null : existing.city,
@@ -219,6 +219,7 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
       },
     });
 
+    const rawBio = body.bio != null ? String(body.bio) : (body.founderBio != null ? String(body.founderBio) : existing.bio);
     await prisma.founderProfile.upsert({
       where: { userId },
       update: {
@@ -226,6 +227,7 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
         industry: body.industry != null ? String(body.industry).trim() || null : existing.founderProfile?.industry ?? null,
         stage: body.stage != null ? String(body.stage).trim() || null : existing.founderProfile?.stage ?? null,
         teamSize: body.teamSize != null && body.teamSize !== "" ? Number(body.teamSize) : existing.founderProfile?.teamSize ?? 1,
+        founderBio: rawBio != null ? rawBio : existing.founderProfile?.founderBio ?? null,
       },
       create: {
         userId,
@@ -233,12 +235,13 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
         industry: body.industry != null ? String(body.industry).trim() || null : null,
         stage: body.stage != null ? String(body.stage).trim() || null : null,
         teamSize: body.teamSize != null && body.teamSize !== "" ? Number(body.teamSize) : 1,
+        founderBio: rawBio != null ? rawBio : null,
       },
     });
 
     const extraFields = [
       "website", "linkedin", "location", "education", "experience", "skills", "founderRole", "founderTypeId",
-      "targetRaise", "amountRaising", "funding", "equity", "equityOffered"
+      "targetRaise", "amountRaising", "funding", "equity", "equityOffered", "bio", "founderBio", "overview"
     ];
     const details: any = await getJsonSetting(userId, "founder-profile-details", {});
     for (const key of extraFields) {

@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+﻿import bcrypt from 'bcryptjs';
 import { sendEmail } from '../../services/mobile/email.service.js';
 import { renderEmailTemplate } from '../../services/settings/settings.service.js';
 import { Router, Request, Response, NextFunction } from "express";
@@ -614,6 +614,53 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         teamMembers: enrichedTeams,
         teamMembersCount: enrichedTeams.length,
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 2.0 GET /api/admin/users/:id/subscriptions
+// ==========================================
+adminUsersRouter.get("/:id/subscriptions", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.id;
+
+    // Fetch user subscriptions with plan and transactions
+    const subscriptions = await prisma.subscription.findMany({
+      where: { userId },
+      include: {
+        plan: true,
+        transactions: {
+          orderBy: { createdAt: "desc" },
+          take: 10
+        },
+        invoices: {
+          orderBy: { createdAt: "desc" },
+          take: 10
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    // Also fetch subscription history log records
+    const history = await prisma.subscriptionHistory.findMany({
+      where: { userId },
+      include: {
+        plan: {
+          select: { name: true, amount: true, duration: true, planType: true }
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50
+    }).catch(() => []);
+
+    res.json({
+      success: true,
+      data: subscriptions,
+      history,
+      count: subscriptions.length
     });
   } catch (err) {
     next(err);

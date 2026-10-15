@@ -50,11 +50,22 @@ import {
   listFounderReviews,
 } from "../../controllers/founder/founder.controller.js";
 
+import {
+  listWatchlist,
+  addToWatchlist,
+  removeFromWatchlist,
+} from "../../controllers/investor/investor.controller.js";
+
 const router = Router();
 
 router.use(authMiddleware as any);
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["founder", "investor", "client", "freelancer", "admin", "super_admin"]) as any);
+
+// Watchlist routes
+router.get("/watchlist", listWatchlist as any);
+router.post("/watchlist", addToWatchlist as any);
+router.delete("/watchlist/:id", removeFromWatchlist as any);
 
 router.get("/dashboard", getFounderDashboard as any);
 
