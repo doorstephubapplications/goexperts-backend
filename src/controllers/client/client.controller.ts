@@ -403,9 +403,25 @@ export const updateClientProfile = async (req: AuthenticatedRequest, res: Respon
     const fullName = body.fullName != null ? String(body.fullName).trim() : existing.fullName;
     if (!fullName) return res.status(400).json({ success: false, message: "Full name is required" });
 
+    const regUpdate: Record<string, any> = typeof existing.registrationData === "string"
+      ? (() => { try { return JSON.parse(existing.registrationData) || {}; } catch { return {}; } })()
+      : (existing.registrationData && typeof existing.registrationData === "object" && !Array.isArray(existing.registrationData))
+        ? { ...(existing.registrationData as Record<string, any>) }
+        : {};
+    if (body.companySize != null || body.currentTeam != null) {
+      const sizeVal = String(body.companySize || body.currentTeam || "").trim();
+      regUpdate.companySize = sizeVal;
+      regUpdate.currentTeam = sizeVal;
+      regUpdate.teamSize = sizeVal;
+      regUpdate.currentTeamSize = sizeVal;
+    }
+    if (body.hiringGoal != null) regUpdate.hiringGoal = String(body.hiringGoal).trim();
+    if (body.projectHireBudget != null || body.budgetRange != null) regUpdate.projectHireBudget = String(body.projectHireBudget || body.budgetRange || "").trim();
+
     await prisma.user.update({
       where: { id: userId },
       data: {
+        registrationData: JSON.stringify(regUpdate),
         fullName,
         phone: body.phone != null ? toTenDigitPhone(body.phone) || null : existing.phone,
         bio: body.bio != null ? String(body.bio) : existing.bio,
