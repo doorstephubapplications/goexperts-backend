@@ -348,6 +348,8 @@ export const shapeProjects = async (
       experienceLevelId: experienceLevelObj.id,
       experienceLevelName: experienceLevelObj.name,
       attachments: parseAttachments(project.attachments),
+      creatorRole: project.creatorRole ?? null,
+      postingType: project.creatorRole === 'task' ? 'task' : 'project',
       status: project.status,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,

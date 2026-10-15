@@ -45,6 +45,14 @@ export const listTasks = async (req: AuthenticatedRequest, res: Response, next: 
         return res.status(403).json(errorResponse('Access denied to project tasks'));
       }
       where.projectId = String(projectId);
+    } else if (req.user?.role === 'admin') {
+      const targetUser = req.query.userId ? String(req.query.userId) : null;
+      if (targetUser) {
+        where.OR = [
+          { assignedTo: targetUser },
+          { project: { client: targetUser } }
+        ];
+      }
     } else {
       // If no projectId specified, restrict to tasks assigned to this user
       where.OR = [

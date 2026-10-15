@@ -365,7 +365,29 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
       orderBy: { createdAt: "desc" }
     }).catch(() => []);
 
-    const enrichedProjects = (userProjects || []).map((p: any) => ({
+    // Filter projects into pure projects vs tasks based on creatorRole or task tagging
+    const userOnlyProjects = (userProjects || []).filter((p: any) => p.creatorRole !== 'task');
+    const userTaskProjects = (userProjects || []).filter((p: any) => p.creatorRole === 'task');
+
+    // Also fetch any standalone tasks assigned to or created for this user
+    const directTasks = await prisma.task.findMany({
+      where: {
+        OR: [
+          { assignedTo: user.id },
+          ...(user.fullName ? [{ assignedTo: user.fullName }] : []),
+          ...(user.email ? [{ assignedTo: user.email }] : [])
+        ],
+        deletedAt: null
+      },
+      include: {
+        project: {
+          select: { id: true, title: true, client: true }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    }).catch(() => []);
+
+    const enrichedProjects = userOnlyProjects.map((p: any) => ({
       ...p,
       roleInProject: (p.client === user.id || p.client === user.email)
         ? "Client / Owner"
@@ -376,6 +398,38 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
       milestonesCount: p._count?.milestones || 0,
       proposalsCount: p._count?.proposals || 0,
     }));
+
+    const enrichedTasks = [
+      ...userTaskProjects.map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        status: p.status || 'todo',
+        priority: 'Medium',
+        dueDate: p.timeline || null,
+        assignedTo: p.freelancer || null,
+        budget: p.budget || 0,
+        category: p.category || 'Task',
+        createdAt: p.createdAt,
+        type: 'task',
+        roleInTask: (p.client === user.id || p.client === user.email) ? 'Creator' : 'Assignee',
+        source: 'task_post'
+      })),
+      ...directTasks.map((t: any) => ({
+        id: t.id,
+        title: t.title || 'Untitled Task',
+        status: t.status || 'todo',
+        priority: t.priority || 'Medium',
+        progress: t.progress || 0,
+        dueDate: t.dueDate || null,
+        assignedTo: t.assignedTo || null,
+        projectTitle: t.project?.title || null,
+        projectId: t.projectId,
+        createdAt: t.createdAt,
+        type: 'task',
+        roleInTask: 'Assignee',
+        source: 'project_task'
+      }))
+    ];
 
     // Fetch user teams & team members
     const [clientTeamAsClient, clientTeamAsMember, teamsAsOwner, teamsAsMember] = await Promise.all([
@@ -542,6 +596,8 @@ adminUsersRouter.get("/:id", async (req: Request, res: Response, next: NextFunct
         verificationStats,
         projects: enrichedProjects,
         projectsCount: enrichedProjects.length,
+        tasks: enrichedTasks,
+        tasksCount: enrichedTasks.length,
         teams: enrichedTeams,
         teamsCount: enrichedTeams.length,
         teamMembers: enrichedTeams,
@@ -843,6 +899,9 @@ const updateUserHandler = async (req: Request, res: Response, next: NextFunction
         if (stats.kycApproved) {
           const { ensureWelcomeBonusForVerifiedUser } = await import("../../common/helpers/portal-shared.js");
           await ensureWelcomeBonusForVerifiedUser(updatedUser.id);
+          // Auto-activate free trial subscription & send free plan emails on KYC approval
+          const { activateFreeTrialOnKycApproval } = await import("../../services/subscription/free-trial.service.js");
+          activateFreeTrialOnKycApproval(updatedUser.id).catch((e) => console.error("[admin-users] Free trial activation error:", e));
         }
       } catch (err) {
         console.error("Error auto-checking KYC welcome bonus on user update:", err);

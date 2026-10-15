@@ -253,6 +253,7 @@ export const createProject = async (req: AuthRequest, res: Response, next: NextF
       experienceLevel,
       budgetRangeId,
       attachments, avatar, coverImage,
+      creatorRole, postingType,
     } = req.body;
 
     const resolvedIndustry = await resolveIndustryInput(industryId ?? industry);
@@ -309,6 +310,7 @@ export const createProject = async (req: AuthRequest, res: Response, next: NextF
         attachments: serializeAttachments(attachments),
         avatar: avatar || null,
         coverImage: coverImage || null,
+        creatorRole: (postingType === 'task' || creatorRole === 'task') ? 'task' : (creatorRole || null),
         status: 'open',
       },
     });
@@ -397,6 +399,7 @@ export const updateProject = async (req: AuthRequest, res: Response, next: NextF
       experienceLevelId,
       budgetRangeId,
       attachments, avatar, coverImage,
+      creatorRole, postingType,
       status,
     } = req.body;
 
@@ -452,6 +455,9 @@ export const updateProject = async (req: AuthRequest, res: Response, next: NextF
     if (attachments != null) data.attachments = serializeAttachments(attachments);
     if (avatar !== undefined) data.avatar = avatar;
     if (coverImage !== undefined) data.coverImage = coverImage;
+    if (postingType !== undefined || creatorRole !== undefined) {
+      data.creatorRole = (postingType === 'task' || creatorRole === 'task') ? 'task' : (creatorRole || null);
+    }
     if (status != null) data.status = status;
 
     const project = await (prisma.project.update as any)({

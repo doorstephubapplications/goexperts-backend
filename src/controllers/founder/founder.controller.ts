@@ -227,7 +227,10 @@ export const updateFounderProfile = async (req: AuthenticatedRequest, res: Respo
       },
     });
 
-    const extraFields = ["website", "linkedin", "location", "education", "experience", "skills", "founderRole", "founderTypeId"];
+    const extraFields = [
+      "website", "linkedin", "location", "education", "experience", "skills", "founderRole", "founderTypeId",
+      "targetRaise", "amountRaising", "funding", "equity", "equityOffered"
+    ];
     const details: any = await getJsonSetting(userId, "founder-profile-details", {});
     for (const key of extraFields) {
       if (body[key] !== undefined) {
@@ -254,10 +257,22 @@ export const getFounderStartup = async (req: AuthenticatedRequest, res: Response
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     const startup = await findExistingStartup(user);
-    const details = await getJsonSetting(userId, "startup-details", {});
+    const details: any = await getJsonSetting(userId, "startup-details", {});
 
     if (startup) {
-      return res.json({ success: true, data: { ...startup, ...details } });
+      const mergedEquity = startup.equity ?? details.equity ?? details.equityOffered ?? 0;
+      const mergedFunding = startup.funding ?? details.funding ?? details.amountRaising ?? 0;
+      return res.json({
+        success: true,
+        data: {
+          ...startup,
+          ...details,
+          equity: mergedEquity,
+          equityOffered: mergedEquity,
+          funding: mergedFunding,
+          amountRaising: mergedFunding,
+        },
+      });
     }
 
     // Dynamic fallback to founderProfile and registration data if no published startup idea exists yet
@@ -273,6 +288,9 @@ export const getFounderStartup = async (req: AuthenticatedRequest, res: Response
 
     const startupName = profile?.startupName || regData.startupName || (details as any).startup || null;
     if (startupName) {
+      const resolvedEquity = details.equity ?? details.equityOffered ?? Number(regData.equity ?? 0);
+      const resolvedFunding = details.funding ?? details.amountRaising ?? Number(profile?.targetRaise ?? regData.targetRaise ?? 0);
+
       const syntheticStartup = {
         id: profile?.id || null,
         startup: startupName,
@@ -283,10 +301,12 @@ export const getFounderStartup = async (req: AuthenticatedRequest, res: Response
         category: profile?.industry || regData.industry || "General",
         stage: profile?.stage || regData.stage || "Idea/Concept",
         stageName: profile?.stage || regData.stage || "Idea/Concept",
-        funding: Number(profile?.targetRaise ?? regData.targetRaise ?? 0),
-        targetRaise: Number(profile?.targetRaise ?? regData.targetRaise ?? 0),
+        funding: resolvedFunding,
+        targetRaise: resolvedFunding,
+        amountRaising: resolvedFunding,
         raised: Number(profile?.raised ?? regData.raised ?? 0),
-        equity: Number(regData.equity ?? 0),
+        equity: resolvedEquity,
+        equityOffered: resolvedEquity,
         pitch: profile?.pitch || regData.pitch || "",
         oneLinePitch: profile?.pitch || regData.pitch || "",
         founderRole: profile?.founderRole || regData.founderRole || null,
@@ -308,6 +328,10 @@ export const getFounderStartup = async (req: AuthenticatedRequest, res: Response
         data: {
           ...syntheticStartup,
           ...details,
+          equity: resolvedEquity,
+          equityOffered: resolvedEquity,
+          funding: resolvedFunding,
+          amountRaising: resolvedFunding,
         },
       });
     }
@@ -403,11 +427,17 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
       } catch (e) { console.error("Admin emit error", e); }
     }
 
-    if (data.startup) {
+    const profileUpdate: any = {};
+    if (data.startup) profileUpdate.startupName = data.startup;
+    if (data.industry) profileUpdate.industry = data.industry;
+    if (data.stage) profileUpdate.stage = data.stage;
+    if (data.funding !== undefined) profileUpdate.targetRaise = data.funding;
+
+    if (Object.keys(profileUpdate).length > 0) {
       await prisma.founderProfile.upsert({
         where: { userId },
-        update: { startupName: data.startup },
-        create: { userId, startupName: data.startup },
+        update: profileUpdate,
+        create: { userId, ...profileUpdate },
       });
     }
 
@@ -416,7 +446,7 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
       "legalName", "foundedYear", "country", "website", "linkedin",
       "oneLinePitch", "problem", "solution", "businessModel", 
       "revenueModel", "targetMarket", "competitiveAdvantage", 
-      "technologyStack", "amountRaising", "equityOffered", 
+      "technologyStack", "amountRaising", "funding", "equityOffered", "equity", 
       "valuation", "runway", "burnRate"
     ];
     
@@ -426,9 +456,33 @@ export const updateFounderStartup = async (req: AuthenticatedRequest, res: Respo
         details[key] = body[key];
       }
     }
+
+    if (data.equity !== undefined) {
+      details.equity = data.equity;
+      details.equityOffered = data.equity;
+    }
+    if (data.funding !== undefined) {
+      details.funding = data.funding;
+      details.amountRaising = data.funding;
+    }
+
     await setJsonSetting(userId, "startup-details", details);
 
-    res.json({ success: true, message: "Startup updated", data: { ...updated, ...details } });
+    const mergedEquity = updated?.equity ?? data.equity ?? details.equity ?? details.equityOffered ?? 0;
+    const mergedFunding = updated?.funding ?? data.funding ?? details.funding ?? details.amountRaising ?? 0;
+
+    res.json({
+      success: true,
+      message: "Startup updated",
+      data: {
+        ...updated,
+        ...details,
+        equity: mergedEquity,
+        equityOffered: mergedEquity,
+        funding: mergedFunding,
+        amountRaising: mergedFunding,
+      },
+    });
   } catch (err) {
     handleError(err, res, next);
   }
