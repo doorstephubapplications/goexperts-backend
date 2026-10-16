@@ -2876,10 +2876,10 @@ router.get("/investors/:id", async (req: Request, res: Response, next: NextFunct
         // Semantic verification badges:
         identityVerified: Boolean(user.isVerified || user.verified),
         status: user.status || "active",
-        approvedTrustCredentials: getApprovedTrustCredentials(p?.verificationJson || user?.investorProfile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || (user as any)?.verificationData),
-        verifiedDocuments: getApprovedTrustCredentials(p?.verificationJson || user?.investorProfile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || (user as any)?.verificationData),
+        approvedTrustCredentials: getApprovedTrustCredentials(p?.verificationJson, user?.investorProfile?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, (user as any)?.verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(p?.verificationJson, user?.investorProfile?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, (user as any)?.verificationData),
         trustCredentials: {
-          approvedList: getApprovedTrustCredentials(p?.verificationJson || user?.investorProfile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || (user as any)?.verificationData)
+          approvedList: getApprovedTrustCredentials(p?.verificationJson, user?.investorProfile?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, (user as any)?.verificationData)
         },
         verificationJson: p?.verificationJson || null,
         investorProfile: p || null,
@@ -3173,10 +3173,10 @@ router.get("/founders/:id", async (req: Request, res: Response, next: NextFuncti
         educationLevel: extra?.educationLevel || null,
         identityVerified: Boolean(user.isVerified || user.verified),
         status: user.status || "active",
-        approvedTrustCredentials: getApprovedTrustCredentials(fp?.verificationJson || user?.founderProfile?.verificationJson || user?.freelancerProfile?.verificationJson || user?.clientProfile?.verificationJson || (user as any)?.verificationData),
-        verifiedDocuments: getApprovedTrustCredentials(fp?.verificationJson || user?.founderProfile?.verificationJson || user?.freelancerProfile?.verificationJson || user?.clientProfile?.verificationJson || (user as any)?.verificationData),
+        approvedTrustCredentials: getApprovedTrustCredentials(fp?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, user?.investorProfile?.verificationJson, (user as any)?.verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(fp?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, user?.investorProfile?.verificationJson, (user as any)?.verificationData),
         trustCredentials: {
-          approvedList: getApprovedTrustCredentials(fp?.verificationJson || user?.founderProfile?.verificationJson || user?.freelancerProfile?.verificationJson || user?.clientProfile?.verificationJson || (user as any)?.verificationData)
+          approvedList: getApprovedTrustCredentials(fp?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, user?.investorProfile?.verificationJson, (user as any)?.verificationData)
         },
         verificationJson: fp?.verificationJson || null,
         founderProfile: fp || null,

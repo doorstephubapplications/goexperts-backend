@@ -47,11 +47,21 @@ async function logNotificationAction(params: {
 
 export const listNotifications = async (req: any, res: Response, next: NextFunction) => {
   try {
-    const { status, channel, type, page = "1", limit = "20" } = req.query;
+    const { status, channel, type, page = "1", limit = "20", search } = req.query;
     const where: any = {};
-    if (status) where.status = status;
-    if (channel) where.channel = channel;
-    if (type) where.type = type;
+    if (status && status !== "all" && status !== "ALL") where.status = status;
+    if (channel && channel !== "all" && channel !== "ALL") where.channel = channel;
+    if (type && type !== "all" && type !== "ALL") where.type = type;
+
+    if (search && String(search).trim()) {
+      const q = String(search).trim();
+      where.OR = [
+        { title: { contains: q } },
+        { message: { contains: q } },
+        { user: { fullName: { contains: q } } },
+        { user: { email: { contains: q } } },
+      ];
+    }
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [notifications, total] = await Promise.all([

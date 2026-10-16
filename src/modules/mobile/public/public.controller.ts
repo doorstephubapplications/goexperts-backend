@@ -2336,10 +2336,10 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         registrationData: reg,
         savedData: true,
         isSaved: true,
-        approvedTrustCredentials: getApprovedTrustCredentials(profile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || user?.freelancerProfile?.verificationJson || (user as any)?.verificationData),
-        verifiedDocuments: getApprovedTrustCredentials(profile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || user?.freelancerProfile?.verificationJson || (user as any)?.verificationData),
+        approvedTrustCredentials: getApprovedTrustCredentials(profile?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, user?.investorProfile?.verificationJson, (user as any)?.verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(profile?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, user?.investorProfile?.verificationJson, (user as any)?.verificationData),
         trustCredentials: {
-          approvedList: getApprovedTrustCredentials(profile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || user?.freelancerProfile?.verificationJson || (user as any)?.verificationData)
+          approvedList: getApprovedTrustCredentials(profile?.verificationJson, user?.founderProfile?.verificationJson, user?.freelancerProfile?.verificationJson, user?.clientProfile?.verificationJson, user?.investorProfile?.verificationJson, (user as any)?.verificationData)
         },
       };
 
@@ -2678,10 +2678,10 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         status: user.status || "active",
         verified: Boolean(user.isVerified || user.verified),
         role: user.role || 'freelancer',
-        approvedTrustCredentials: getApprovedTrustCredentials(user.founderProfile?.verificationJson || user.clientProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
-        verifiedDocuments: getApprovedTrustCredentials(user.founderProfile?.verificationJson || user.clientProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
+        approvedTrustCredentials: getApprovedTrustCredentials(user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.clientProfile?.verificationJson, user.investorProfile?.verificationJson, (user as any).verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.clientProfile?.verificationJson, user.investorProfile?.verificationJson, (user as any).verificationData),
         trustCredentials: {
-          approvedList: getApprovedTrustCredentials(user.founderProfile?.verificationJson || user.clientProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData)
+          approvedList: getApprovedTrustCredentials(user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.clientProfile?.verificationJson, user.investorProfile?.verificationJson, (user as any).verificationData)
         },
         registrationData: reg,
         isSaved: isSaved,
@@ -2754,7 +2754,12 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       const id = req.params.id;
       let user = await prisma.user.findFirst({
         where: { id },
-        include: { clientProfile: true }
+        include: {
+          clientProfile: true,
+          founderProfile: true,
+          freelancerProfile: true,
+          investorProfile: true
+        }
       }).catch(() => null);
 
       if (!user) {
@@ -2768,7 +2773,12 @@ export const getById = (modelName: string) => async (req: Request, res: Response
               { clientProfile: { is: { company: { contains: cleanSearch } } } },
             ],
           },
-          include: { clientProfile: true },
+          include: {
+            clientProfile: true,
+            founderProfile: true,
+            freelancerProfile: true,
+            investorProfile: true
+          },
         }).catch(() => null);
       }
 
@@ -2890,10 +2900,10 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         country: countryName,
         countryId: cntryId,
         state: user.state || reg.state || '',
-        approvedTrustCredentials: getApprovedTrustCredentials(user.clientProfile?.verificationJson || user.founderProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
-        verifiedDocuments: getApprovedTrustCredentials(user.clientProfile?.verificationJson || user.founderProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
+        approvedTrustCredentials: getApprovedTrustCredentials(user.clientProfile?.verificationJson, user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.investorProfile?.verificationJson, (user as any).verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(user.clientProfile?.verificationJson, user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.investorProfile?.verificationJson, (user as any).verificationData),
         trustCredentials: {
-          approvedList: getApprovedTrustCredentials(user.clientProfile?.verificationJson || user.founderProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData)
+          approvedList: getApprovedTrustCredentials(user.clientProfile?.verificationJson, user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.investorProfile?.verificationJson, (user as any).verificationData)
         },
         stateId: reg.stateId || user.state || '',
         totalSpend: Number(user.clientProfile?.totalSpend ?? 0),
@@ -2910,7 +2920,12 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       const id = req.params.id;
       const user = await prisma.user.findFirst({
         where: { id },
-        include: { investorProfile: true }
+        include: {
+          investorProfile: true,
+          founderProfile: true,
+          freelancerProfile: true,
+          clientProfile: true
+        }
       }).catch(() => null);
 
       if (!user) {
@@ -3055,6 +3070,11 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         status: user.status || 'active',
         verified: Boolean(user.isVerified || (user as any).verified),
         role: user.role || 'investor',
+        approvedTrustCredentials: getApprovedTrustCredentials(user.investorProfile?.verificationJson, user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.clientProfile?.verificationJson, (user as any).verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(user.investorProfile?.verificationJson, user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.clientProfile?.verificationJson, (user as any).verificationData),
+        trustCredentials: {
+          approvedList: getApprovedTrustCredentials(user.investorProfile?.verificationJson, user.founderProfile?.verificationJson, user.freelancerProfile?.verificationJson, user.clientProfile?.verificationJson, (user as any).verificationData)
+        },
         registrationData: reg,
         isSaved,
       }));

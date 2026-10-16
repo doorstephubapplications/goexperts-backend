@@ -1157,7 +1157,8 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     wallet_balance: wallet.balance ?? rest.wallet_balance ?? rest.walletBalance ?? 0,
     wallet: wallet.balance !== undefined ? wallet : { balance: rest.wallet_balance ?? rest.walletBalance ?? 0 },
 
-    approvedTrustCredentials: getApprovedTrustCredentials(clientProfile.verificationJson ?? investorProfile.verificationJson ?? founderProfile.verificationJson ?? freelancerProfile.verificationJson ?? rest.verificationData ?? null),
+    approvedTrustCredentials: getApprovedTrustCredentials(clientProfile?.verificationJson, investorProfile?.verificationJson, founderProfile?.verificationJson, freelancerProfile?.verificationJson, rest?.verificationData),
+    verifiedDocuments: getApprovedTrustCredentials(clientProfile?.verificationJson, investorProfile?.verificationJson, founderProfile?.verificationJson, freelancerProfile?.verificationJson, rest?.verificationData),
     // Organization Trust Credentials (MSME, Startup India, ISO 27001, SOC 2 Type II, MCA)
     trustCredentials: (() => {
       const vRaw = clientProfile.verificationJson ?? investorProfile.verificationJson ?? founderProfile.verificationJson ?? freelancerProfile.verificationJson ?? null;

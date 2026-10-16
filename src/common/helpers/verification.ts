@@ -313,56 +313,71 @@ export async function applyVerificationUpdate(userId: string, body: any, isAdmin
 }
 
 
-export function getApprovedTrustCredentials(raw: any): { key: string; label: string }[] {
-    if (!raw) return [];
-    let vObj: any = {};
-    if (typeof raw === "string") {
-        try {
-            vObj = JSON.parse(raw);
-        } catch {
-            return [];
-        }
-    } else if (typeof raw === "object" && raw !== null) {
-        vObj = raw;
-    } else {
-        return [];
-    }
-
-    const results: { key: string; label: string }[] = [];
+export function getApprovedTrustCredentials(...rawInputs: any[]): { key: string; label: string; title: string; docNumber?: string; url?: string | null; status: string }[] {
+    const results: { key: string; label: string; title: string; docNumber?: string; url?: string | null; status: string }[] = [];
     const seenKeys = new Set<string>();
 
-    const checkAndAdd = (key: string, item: any, fallbackLabel?: string) => {
-        if (!item) return;
-        const st = String(item.status || "").toLowerCase();
-        if (st === "verified" || st === "approved") {
-            const normalizedKey = key.toLowerCase();
-            if (!seenKeys.has(normalizedKey)) {
-                seenKeys.add(normalizedKey);
-                const label = item.title || item.label || VERIFICATION_KEY_MAP[normalizedKey] || fallbackLabel || key.toUpperCase();
-                results.push({ key: normalizedKey, label });
+    const inputs = rawInputs.flat().filter(Boolean);
+    if (inputs.length === 0) return [];
+
+    for (const raw of inputs) {
+        let vObj: any = {};
+        if (typeof raw === "string") {
+            try {
+                vObj = JSON.parse(raw);
+            } catch {
+                continue;
+            }
+        } else if (typeof raw === "object" && raw !== null) {
+            vObj = raw;
+        } else {
+            continue;
+        }
+
+        const checkAndAdd = (key: string, item: any, fallbackLabel?: string) => {
+            if (!item || typeof item !== "object") return;
+            const st = String(item.status || "").toLowerCase();
+            if (st === "verified" || st === "approved") {
+                const normalizedKey = key.toLowerCase();
+                if (!seenKeys.has(normalizedKey)) {
+                    seenKeys.add(normalizedKey);
+                    const label = item.title || item.label || VERIFICATION_KEY_MAP[normalizedKey] || fallbackLabel || key.toUpperCase();
+                    const docNumber = item.docNumber || item.value || item.number || "";
+                    const url = item.url || item.documentUrl || item.fileUrl || null;
+                    results.push({
+                        key: normalizedKey,
+                        label,
+                        title: label,
+                        ...(docNumber ? { docNumber } : {}),
+                        ...(url ? { url } : {}),
+                        status: "verified"
+                    });
+                }
+            }
+        };
+
+        // 1. Check documentsList or documents array (used by Admin KYC Center)
+        const docsArray = Array.isArray(vObj.documentsList)
+            ? vObj.documentsList
+            : Array.isArray(vObj.documents)
+            ? vObj.documents
+            : Array.isArray(vObj.kycDocuments)
+            ? vObj.kycDocuments
+            : [];
+
+        for (const doc of docsArray) {
+            if (doc && (doc.key || doc.id || doc.title)) {
+                const k = String(doc.key || doc.id || doc.title).toLowerCase();
+                checkAndAdd(k, doc, doc.title || doc.label);
             }
         }
-    };
 
-    // 1. Check documentsList or documents array (used by Admin KYC Center)
-    const docsArray = Array.isArray(vObj.documentsList)
-        ? vObj.documentsList
-        : Array.isArray(vObj.documents)
-        ? vObj.documents
-        : [];
-
-    for (const doc of docsArray) {
-        if (doc && (doc.key || doc.id || doc.title)) {
-            const k = String(doc.key || doc.id || doc.title).toLowerCase();
-            checkAndAdd(k, doc, doc.title || doc.label);
-        }
-    }
-
-    // 2. Check top-level keys in vObj (e.g. vObj.pan, vObj.aadhaar, vObj.gst, vObj.msme)
-    for (const [k, v] of Object.entries(vObj)) {
-        if (["documentsList", "documents", "statuses", "missingCount", "kycApproved", "kycSubmitted", "kycStatus"].includes(k)) continue;
-        if (v && typeof v === "object") {
-            checkAndAdd(k, v);
+        // 2. Check top-level keys in vObj (e.g. vObj.pan, vObj.aadhaar, vObj.gst, vObj.msme)
+        for (const [k, v] of Object.entries(vObj)) {
+            if (["documentsList", "documents", "statuses", "missingCount", "kycApproved", "kycSubmitted", "kycStatus", "kycDocuments"].includes(k)) continue;
+            if (v && typeof v === "object") {
+                checkAndAdd(k, v);
+            }
         }
     }
 
