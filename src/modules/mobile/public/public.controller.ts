@@ -2232,7 +2232,13 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       const id = req.params.id;
 
       const user = await prisma.user.findFirst({
-        where: { id }
+        where: { id },
+        include: {
+          founderProfile: true,
+          freelancerProfile: true,
+          clientProfile: true,
+          investorProfile: true
+        }
       }).catch(() => null);
 
       if (!user) {
@@ -2330,7 +2336,11 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         registrationData: reg,
         savedData: true,
         isSaved: true,
-        approvedTrustCredentials: getApprovedTrustCredentials(profile?.verificationJson),
+        approvedTrustCredentials: getApprovedTrustCredentials(profile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || user?.freelancerProfile?.verificationJson || (user as any)?.verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(profile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || user?.freelancerProfile?.verificationJson || (user as any)?.verificationData),
+        trustCredentials: {
+          approvedList: getApprovedTrustCredentials(profile?.verificationJson || user?.founderProfile?.verificationJson || user?.clientProfile?.verificationJson || user?.freelancerProfile?.verificationJson || (user as any)?.verificationData)
+        },
       };
 
       const idea = await prisma.startupIdea.findFirst({
@@ -2388,7 +2398,12 @@ export const getById = (modelName: string) => async (req: Request, res: Response
       const id = req.params.id;
       const user = await prisma.user.findFirst({
         where: { id },
-        include: { freelancerProfile: true }
+        include: {
+          freelancerProfile: true,
+          founderProfile: true,
+          clientProfile: true,
+          investorProfile: true
+        }
       }).catch(() => null);
 
       if (!user) {
@@ -2663,7 +2678,11 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         status: user.status || "active",
         verified: Boolean(user.isVerified || user.verified),
         role: user.role || 'freelancer',
-        approvedTrustCredentials: getApprovedTrustCredentials(user.freelancerProfile?.verificationJson),
+        approvedTrustCredentials: getApprovedTrustCredentials(user.founderProfile?.verificationJson || user.clientProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(user.founderProfile?.verificationJson || user.clientProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
+        trustCredentials: {
+          approvedList: getApprovedTrustCredentials(user.founderProfile?.verificationJson || user.clientProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData)
+        },
         registrationData: reg,
         isSaved: isSaved,
         availability: {
@@ -2871,7 +2890,11 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         country: countryName,
         countryId: cntryId,
         state: user.state || reg.state || '',
-        approvedTrustCredentials: getApprovedTrustCredentials(user.clientProfile?.verificationJson),
+        approvedTrustCredentials: getApprovedTrustCredentials(user.clientProfile?.verificationJson || user.founderProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
+        verifiedDocuments: getApprovedTrustCredentials(user.clientProfile?.verificationJson || user.founderProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData),
+        trustCredentials: {
+          approvedList: getApprovedTrustCredentials(user.clientProfile?.verificationJson || user.founderProfile?.verificationJson || user.freelancerProfile?.verificationJson || user.investorProfile?.verificationJson || (user as any).verificationData)
+        },
         stateId: reg.stateId || user.state || '',
         totalSpend: Number(user.clientProfile?.totalSpend ?? 0),
         projectsPosted,
