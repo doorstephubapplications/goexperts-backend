@@ -1,3 +1,4 @@
+import { getApprovedTrustCredentials } from "../../common/helpers/verification.js";
 import { Router, Request, Response, NextFunction } from "express";
 import { prisma } from "../../config/database.js";
 import { sendAccountDeletedEmail } from "../../services/mobile/email.service.js";
@@ -2875,6 +2876,9 @@ router.get("/investors/:id", async (req: Request, res: Response, next: NextFunct
         // Semantic verification badges:
         identityVerified: Boolean(user.isVerified || user.verified),
         status: user.status || "active",
+        approvedTrustCredentials: getApprovedTrustCredentials(p?.verificationJson),
+        verificationJson: p?.verificationJson || null,
+        investorProfile: p || null,
       },
     });
   } catch (err) {
@@ -3165,6 +3169,9 @@ router.get("/founders/:id", async (req: Request, res: Response, next: NextFuncti
         educationLevel: extra?.educationLevel || null,
         identityVerified: Boolean(user.isVerified || user.verified),
         status: user.status || "active",
+        approvedTrustCredentials: getApprovedTrustCredentials(fp?.verificationJson),
+        verificationJson: fp?.verificationJson || null,
+        founderProfile: fp || null,
         startup: startup ? {
           id: startup.id,
           name: startup.startup,

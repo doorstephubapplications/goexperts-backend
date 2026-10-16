@@ -377,6 +377,13 @@ const safeFreelancerProfileSelect = {
     hourlyRate: true,
     rating: true,
     experience: true,
+    education: true,
+    yearsOfExperience: true,
+    portfolioUrl: true,
+    websiteUrl: true,
+    linkedInUrl: true,
+    githubUrl: true,
+    dribbbleUrl: true,
     currency: true,
     monthlyRetainer: true,
     availability: true,
@@ -1014,6 +1021,11 @@ export const getFreelancerProfile = async (
     let skills = [...rawSkills];
     let skillItems: Array<{ id: string; name: string; skillId: string; skillName: string }> = [];
 
+    let regData: any = {};
+    try {
+      regData = typeof user.registrationData === "string" ? JSON.parse(user.registrationData) : (user.registrationData || {});
+    } catch (e) {}
+
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let title = profile?.titleHeadline || profile?.industry || "";
     let industry = profile?.industry || "";
@@ -1039,10 +1051,7 @@ export const getFreelancerProfile = async (
         });
       } catch (e) {}
 
-      let regData: any = {};
-      try {
-        regData = typeof user.registrationData === "string" ? JSON.parse(user.registrationData) : (user.registrationData || {});
-      } catch (e) {}
+      // regData parsed above
       
       const regMap = new Map();
       if (Array.isArray(regData.skillsList)) {
@@ -1135,6 +1144,16 @@ export const getFreelancerProfile = async (
         skills: skillItems,
         skillsText: skills.join(", "),
         hourlyRate: profile?.hourlyRate ?? null,
+        portfolioUrl: profile?.portfolioUrl || profile?.websiteUrl || regData?.portfolioUrl || "",
+        websiteUrl: profile?.websiteUrl || profile?.portfolioUrl || regData?.websiteUrl || "",
+        linkedInUrl: profile?.linkedInUrl || regData?.linkedinUrl || regData?.linkedInUrl || "",
+        githubUrl: profile?.githubUrl || regData?.githubUrl || "",
+        dribbbleUrl: profile?.dribbbleUrl || regData?.dribbbleUrl || "",
+        education: profile?.education || regData?.educationLevel || "",
+        educationLevel: profile?.education || regData?.educationLevel || "",
+        yearsOfExperience: profile?.yearsOfExperience || regData?.yearsOfExperience || "",
+        category: regData?.category || profile?.titleHeadline || "",
+        titleHeadline: profile?.titleHeadline || "",
         city: user.city || "",
         country: user.country || "",
         location,
@@ -1316,6 +1335,29 @@ export const updateFreelancerProfile = async (
     const remoteAvailability = body.remoteAvailability != null ? Boolean(body.remoteAvailability) : existing.freelancerProfile?.remoteAvailability ?? true;
     const openToTravel = body.openToTravel != null ? Boolean(body.openToTravel) : existing.freelancerProfile?.openToTravel ?? false;
 
+    const portfolioUrl = body.portfolioUrl !== undefined ? (String(body.portfolioUrl).trim() || null) : existing.freelancerProfile?.portfolioUrl;
+    const websiteUrl = body.websiteUrl !== undefined ? (String(body.websiteUrl).trim() || null) : (existing.freelancerProfile?.websiteUrl ?? portfolioUrl);
+    const linkedInUrl = (body.linkedinUrl ?? body.linkedInUrl) !== undefined ? (String(body.linkedinUrl ?? body.linkedInUrl).trim() || null) : existing.freelancerProfile?.linkedInUrl;
+    const githubUrl = body.githubUrl !== undefined ? (String(body.githubUrl).trim() || null) : existing.freelancerProfile?.githubUrl;
+    const dribbbleUrl = (body.dribbbleUrl ?? body.dribbleUrl) !== undefined ? (String(body.dribbbleUrl ?? body.dribbleUrl).trim() || null) : existing.freelancerProfile?.dribbbleUrl;
+    const education = (body.education ?? body.educationLevel) !== undefined ? (String(body.education ?? body.educationLevel).trim() || null) : existing.freelancerProfile?.education;
+    const yearsOfExperience = body.yearsOfExperience !== undefined ? (String(body.yearsOfExperience).trim() || null) : existing.freelancerProfile?.yearsOfExperience;
+    const titleHeadline = (body.titleHeadline ?? body.title ?? body.category) !== undefined ? (String(body.titleHeadline ?? body.title ?? body.category).trim() || null) : existing.freelancerProfile?.titleHeadline;
+
+    if (body.category !== undefined) {
+      try {
+        let currentRegData: any = {};
+        if (existing.registrationData) {
+          currentRegData = typeof existing.registrationData === 'string' ? JSON.parse(existing.registrationData) : existing.registrationData;
+        }
+        currentRegData.category = body.category;
+        await prisma.user.update({
+          where: { id: userId },
+          data: { registrationData: JSON.stringify(currentRegData) },
+        });
+      } catch (e) {}
+    }
+
     await prisma.freelancerProfile.upsert({
       where: { userId },
       update: {
@@ -1330,6 +1372,14 @@ export const updateFreelancerProfile = async (
         responseTime,
         remoteAvailability,
         openToTravel,
+        portfolioUrl,
+        websiteUrl,
+        linkedInUrl,
+        githubUrl,
+        dribbbleUrl,
+        education,
+        yearsOfExperience,
+        titleHeadline,
       },
       create: {
         userId,
@@ -1344,6 +1394,14 @@ export const updateFreelancerProfile = async (
         responseTime,
         remoteAvailability,
         openToTravel,
+        portfolioUrl,
+        websiteUrl,
+        linkedInUrl,
+        githubUrl,
+        dribbbleUrl,
+        education,
+        yearsOfExperience,
+        titleHeadline,
       },
     });
 
@@ -2134,4 +2192,4 @@ export const deleteFreelancerTeamMember = async (req: AuthenticatedRequest, res:
   } catch (err) {
     next(err);
   }
-};
+};

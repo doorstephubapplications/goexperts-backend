@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response, NextFunction } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
@@ -58,17 +58,18 @@ import kycRouter from "./admin/kyc.routes.js";
 import adminSupportDeskRouter from "./admin/support-desk.routes.js";
 import adminWithdrawalsRouter from "./admin/withdrawals.routes.js";
 import { adminUsersRouter } from "./admin/admin-users.routes.js";
+import { adminUserConnectionsRouter } from "./admin/admin-user-connections.routes.js";
 import { adminPushCampaignsRouter } from "./admin/admin-push-campaigns.routes.js";
 import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
-import { getVerificationStats } from "../common/helpers/verification.js";
+import { getVerificationStats, getApprovedTrustCredentials } from "../common/helpers/verification.js";
 import adminDashboardRouter from "./admin/dashboard.routes.js";
 import tasksRoutes from "./tasks.routes.js";
 
 import mobileRoutes from "../modules/mobile/index.js";
 import unifiedNotificationRoutes from "../modules/mobile/notifications/notifications.routes.js";
-import { saveInvestor, unsaveInvestor } from "../modules/mobile/public/public.controller.js";
+import { saveInvestor, unsaveInvestor, saveClient, unsaveClient, getSavedClients } from "../modules/mobile/public/public.controller.js";
 import { requireOnboarding } from "../middlewares/onboarding.middleware.js";
 
 const router = Router();
@@ -87,6 +88,9 @@ router.use("/v1/mobile", mobileRoutes);
 router.use("/mobile", mobileRoutes);
 router.post("/v1/mobile/public/investors/:id/save", authMiddleware as any, saveInvestor as any);
 router.delete("/v1/mobile/public/investors/:id/save", authMiddleware as any, unsaveInvestor as any);
+router.get("/v1/mobile/public/clients/saved", authMiddleware as any, getSavedClients as any);
+router.post("/v1/mobile/public/clients/:id/save", authMiddleware as any, saveClient as any);
+router.delete("/v1/mobile/public/clients/:id/save", authMiddleware as any, unsaveClient as any);
 
 // Subscription / Plan Activation Routes
 router.use("/subscription", subscriptionRoutes);
@@ -107,6 +111,9 @@ router.use("/v1/tasks", tasksRoutes);
 // Shared Messages routes (real-time chat API for all roles)
 router.use("/messages", messagesRoutes);
 router.use("/connections", connectionsRoutes);
+router.use("/network", connectionsRoutes);
+router.use("/v1/connections", connectionsRoutes);
+router.use("/v1/network", connectionsRoutes);
 
 // Activity Timeline routes
 router.use("/activity", activityRoutes);
@@ -344,8 +351,12 @@ router.use("/v1/help-center", publicRoutes);
 // 2.2 Admin operations
 router.use("/admin/users", authMiddleware as any, roleMiddleware(["admin"]) as any, adminUsersRouter);
 router.use("/v1/admin/users", authMiddleware as any, roleMiddleware(["admin"]) as any, adminUsersRouter);
+router.use("/admin/user-connections", authMiddleware as any, roleMiddleware(["admin"]) as any, adminUserConnectionsRouter);
+router.use("/v1/admin/user-connections", authMiddleware as any, roleMiddleware(["admin"]) as any, adminUserConnectionsRouter);
 router.use("/admin/push-campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
 router.use("/v1/admin/push-campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
+router.use("/admin/push/campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
+router.use("/v1/admin/push/campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
 router.use("/admin/dashboard", authMiddleware as any, roleMiddleware(["admin"]) as any, adminDashboardRouter);
 router.use("/admin/dashboard-old", authMiddleware as any, roleMiddleware(["admin"]) as any, dashboardRoutes);
 router.use("/admin/dashboard", authMiddleware as any, roleMiddleware(["admin"]) as any, dashboardInsightsRouter);
@@ -792,6 +803,18 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
   const wallet = rest.wallet ?? {};
   const regData = rest.registrationData ?? {};
 
+  if (freelancerProfile && typeof freelancerProfile === "object") {
+    if (!freelancerProfile.websiteUrl && (freelancerProfile.portfolioUrl || regData.websiteUrl || regData.portfolioUrl)) {
+      freelancerProfile.websiteUrl = freelancerProfile.portfolioUrl || regData.websiteUrl || regData.portfolioUrl;
+    }
+    if (!freelancerProfile.portfolioUrl && (freelancerProfile.websiteUrl || regData.portfolioUrl || regData.websiteUrl)) {
+      freelancerProfile.portfolioUrl = freelancerProfile.websiteUrl || regData.portfolioUrl || regData.websiteUrl;
+    }
+    if (!freelancerProfile.education && (regData.educationLevel || regData.education)) {
+      freelancerProfile.education = regData.educationLevel || regData.education;
+    }
+  }
+
   const industry = freelancerProfile.industry
     || clientProfile.industry
     || founderProfile.industry
@@ -1113,7 +1136,9 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
     projectHireBudget: regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budgetRange ?? regData.budget ?? null,
     projectHireBudgetId: regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budgetRange ?? regData.budget ?? null,
     projectHireBudgetLabel: rLabel(regData.projectHireBudgetId ?? clientProfile.projectHireBudget ?? regData.projectHireBudget ?? regData.budgetRange ?? regData.budget ?? null, BUDGET_RANGE_NAME_MAP),
-    websiteUrl: clientProfile.websiteUrl ?? regData.websiteUrl ?? null,
+    education: freelancerProfile.education ?? regData.educationLevel ?? regData.education ?? null,
+    educationLevel: freelancerProfile.education ?? regData.educationLevel ?? regData.education ?? null,
+    websiteUrl: freelancerProfile.websiteUrl ?? clientProfile.websiteUrl ?? regData.websiteUrl ?? freelancerProfile.portfolioUrl ?? regData.portfolioUrl ?? null,
     jobTitle: clientProfile.jobTitle ?? regData.jobTitle ?? null,
     // Investor fields
     firm: investorProfile.firm ?? regData.firm ?? null,
@@ -1131,6 +1156,42 @@ export function sanitizeUserRecord<T extends Record<string, any> | null | undefi
 
     wallet_balance: wallet.balance ?? rest.wallet_balance ?? rest.walletBalance ?? 0,
     wallet: wallet.balance !== undefined ? wallet : { balance: rest.wallet_balance ?? rest.walletBalance ?? 0 },
+
+    approvedTrustCredentials: getApprovedTrustCredentials(clientProfile.verificationJson ?? investorProfile.verificationJson ?? founderProfile.verificationJson ?? freelancerProfile.verificationJson ?? rest.verificationData ?? null),
+    // Organization Trust Credentials (MSME, Startup India, ISO 27001, SOC 2 Type II, MCA)
+    trustCredentials: (() => {
+      const vRaw = clientProfile.verificationJson ?? investorProfile.verificationJson ?? founderProfile.verificationJson ?? freelancerProfile.verificationJson ?? null;
+      let vObj: any = {};
+      if (vRaw) {
+        try { vObj = typeof vRaw === "string" ? JSON.parse(vRaw) : vObj; } catch {}
+      }
+      const isVer = (k1: string, k2?: string) => {
+        const item = vObj[k1] || (k2 ? vObj[k2] : null);
+        if (!item) return false;
+        const s = String(item.status || "").toLowerCase();
+        return s === "verified" || s === "approved";
+      };
+      const getStat = (k1: string, k2?: string) => {
+        const item = vObj[k1] || (k2 ? vObj[k2] : null);
+        return item?.status ? String(item.status).toLowerCase() : "unverified";
+      };
+      return {
+        msme: isVer("msme", "udyam"),
+        startupIndia: isVer("startup_india"),
+        iso27001: isVer("iso_27001"),
+        soc2Type2: isVer("soc2_type2"),
+        mcaRegistered: isVer("mca_registered", "incorporation"),
+        gst: isVer("gst"),
+        statuses: {
+          msme: getStat("msme", "udyam"),
+          startupIndia: getStat("startup_india"),
+          iso27001: getStat("iso_27001"),
+          soc2Type2: getStat("soc2_type2"),
+          mcaRegistered: getStat("mca_registered", "incorporation"),
+          gst: getStat("gst")
+        }
+      };
+    })(),
   };
 
   let plainPassword = null;
@@ -1303,7 +1364,10 @@ const getFreelancerUserPayload = (body: any, isCreate = false) => {
   if (body.phone !== undefined) userData.phone = body.phone ? String(body.phone) : null;
   if (body.country !== undefined) userData.country = body.country ? String(body.country) : null;
   if (body.city !== undefined) userData.city = body.city ? String(body.city) : null;
-  if (body.bio !== undefined || body.description !== undefined) userData.bio = body.bio ?? body.description ?? null;
+  if (body.bio !== undefined || body.description !== undefined) {
+    const rawBio = body.bio ?? body.description ?? null;
+    userData.bio = rawBio ? String(rawBio).slice(0, 1000) : null;
+  }
   if (body.status !== undefined) userData.status = String(body.status);
   if (body.verified !== undefined) userData.verified = Boolean(body.verified);
   if (body.isVerified !== undefined || body.is_verified !== undefined) userData.isVerified = Boolean(body.isVerified ?? body.is_verified);
@@ -1343,7 +1407,10 @@ const getClientUserPayload = (body: any, isCreate = false) => {
   if (body.phone !== undefined) userData.phone = body.phone ? String(body.phone) : null;
   if (body.country !== undefined) userData.country = body.country ? String(body.country) : null;
   if (body.city !== undefined) userData.city = body.city ? String(body.city) : null;
-  if (body.bio !== undefined || body.description !== undefined) userData.bio = body.bio ?? body.description ?? null;
+  if (body.bio !== undefined || body.description !== undefined) {
+    const rawBio = body.bio ?? body.description ?? null;
+    userData.bio = rawBio ? String(rawBio).slice(0, 1000) : null;
+  }
   if (body.status !== undefined) userData.status = String(body.status);
   if (body.verified !== undefined) userData.verified = Boolean(body.verified);
   if (body.isVerified !== undefined || body.is_verified !== undefined) userData.isVerified = Boolean(body.isVerified ?? body.is_verified);
@@ -1385,7 +1452,10 @@ const getInvestorUserPayload = (body: any, isCreate = false) => {
   if (body.phone !== undefined) userData.phone = body.phone ? String(body.phone) : null;
   if (body.country !== undefined) userData.country = body.country ? String(body.country) : null;
   if (body.city !== undefined) userData.city = body.city ? String(body.city) : null;
-  if (body.bio !== undefined || body.description !== undefined) userData.bio = body.bio ?? body.description ?? null;
+  if (body.bio !== undefined || body.description !== undefined) {
+    const rawBio = body.bio ?? body.description ?? null;
+    userData.bio = rawBio ? String(rawBio).slice(0, 1000) : null;
+  }
   if (body.status !== undefined) userData.status = String(body.status);
   if (body.verified !== undefined) userData.verified = Boolean(body.verified);
   if (body.isVerified !== undefined || body.is_verified !== undefined) userData.isVerified = Boolean(body.isVerified ?? body.is_verified);
@@ -1427,7 +1497,10 @@ const getFounderUserPayload = (body: any, isCreate = false) => {
   if (body.phone !== undefined) userData.phone = body.phone ? String(body.phone) : null;
   if (body.country !== undefined) userData.country = body.country ? String(body.country) : null;
   if (body.city !== undefined) userData.city = body.city ? String(body.city) : null;
-  if (body.bio !== undefined || body.description !== undefined) userData.bio = body.bio ?? body.description ?? null;
+  if (body.bio !== undefined || body.description !== undefined) {
+    const rawBio = body.bio ?? body.description ?? null;
+    userData.bio = rawBio ? String(rawBio).slice(0, 1000) : null;
+  }
   if (body.status !== undefined) userData.status = String(body.status);
   if (body.verified !== undefined) userData.verified = Boolean(body.verified);
   if (body.isVerified !== undefined || body.is_verified !== undefined) userData.isVerified = Boolean(body.isVerified ?? body.is_verified);

@@ -82,11 +82,12 @@ export const getUserSocialLinks = async (req: AuthRequest, res: Response): Promi
       if (profile.dribbbleUrl && !existingPlatforms.has('dribbble')) {
         mergedLinks.push({ id: `profile-dribbble-${targetUserId}`, userId: targetUserId, platform: 'DRIBBLE', url: profile.dribbbleUrl });
       }
-      if (profile.portfolioUrl && !existingPlatforms.has('portfolio')) {
-        mergedLinks.push({ id: `profile-portfolio-${targetUserId}`, userId: targetUserId, platform: 'PORTFOLIO', url: profile.portfolioUrl });
+      const webUrl = profile.websiteUrl || profile.portfolioUrl;
+      if (webUrl && !existingPlatforms.has('website')) {
+        mergedLinks.push({ id: `profile-website-${targetUserId}`, userId: targetUserId, platform: 'WEBSITE', url: webUrl });
       }
-      if (profile.websiteUrl && !existingPlatforms.has('website')) {
-        mergedLinks.push({ id: `profile-website-${targetUserId}`, userId: targetUserId, platform: 'WEBSITE', url: profile.websiteUrl });
+      if (profile.portfolioUrl && profile.portfolioUrl !== profile.websiteUrl && !existingPlatforms.has('portfolio')) {
+        mergedLinks.push({ id: `profile-portfolio-${targetUserId}`, userId: targetUserId, platform: 'PORTFOLIO', url: profile.portfolioUrl });
       }
     }
 

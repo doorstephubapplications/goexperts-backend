@@ -1,3 +1,4 @@
+import { getApprovedTrustCredentials } from "../../../common/helpers/verification.js";
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../../../config/env.js';
@@ -1247,6 +1248,20 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
     const indMap = new Map<string, string>((dbInds as any[]).map(r => [r.id, r.name]));
     const hgMap = new Map<string, string>((dbHgs as any[]).map(r => [r.id, r.label]));
 
+    let savedClientIds = new Set<string>();
+    if (userId) {
+      try {
+        const { getJsonSetting } = await import('../../../common/helpers/portal-shared.js');
+        const savedRows = await getJsonSetting(userId, 'savedClients', [] as any[]);
+        if (Array.isArray(savedRows)) {
+          savedRows.forEach((r: any) => {
+            const sid = typeof r === 'string' ? r : (r.clientId || r.id || r.slug);
+            if (sid) savedClientIds.add(sid);
+          });
+        }
+      } catch {}
+    }
+
     const formattedClients = clients.map((c: any) => {
       let formattedInds: any[] = [];
       let formattedHgs: any[] = [];
@@ -1267,6 +1282,7 @@ export const getClients = async (req: Request, res: Response, next: NextFunction
 
       return {
         ...c,
+        isSaved: savedClientIds.has(c.id),
         clientProfile: c.clientProfile ? {
           ...c.clientProfile,
           Industry: formattedInds,
@@ -2314,6 +2330,7 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         registrationData: reg,
         savedData: true,
         isSaved: true,
+        approvedTrustCredentials: getApprovedTrustCredentials(profile?.verificationJson),
       };
 
       const idea = await prisma.startupIdea.findFirst({
@@ -2646,6 +2663,7 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         status: user.status || "active",
         verified: Boolean(user.isVerified || user.verified),
         role: user.role || 'freelancer',
+        approvedTrustCredentials: getApprovedTrustCredentials(user.freelancerProfile?.verificationJson),
         registrationData: reg,
         isSaved: isSaved,
         availability: {
@@ -2853,6 +2871,7 @@ export const getById = (modelName: string) => async (req: Request, res: Response
         country: countryName,
         countryId: cntryId,
         state: user.state || reg.state || '',
+        approvedTrustCredentials: getApprovedTrustCredentials(user.clientProfile?.verificationJson),
         stateId: reg.stateId || user.state || '',
         totalSpend: Number(user.clientProfile?.totalSpend ?? 0),
         projectsPosted,
@@ -3175,6 +3194,112 @@ export const unsaveInvestor = async (req: AuthRequest, res: Response, next: Next
   try {
     const { removeFromWatchlist } = await import('../founder/controllers/watchlist.controller.js');
     return removeFromWatchlist(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const saveClient = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json(errorResponse('Authentication required', 'UNAUTHORIZED'));
+    }
+    const clientId = req.params.id;
+    const { getJsonSetting, setJsonSetting } = await import('../../../common/helpers/portal-shared.js');
+    const rows: any[] = await getJsonSetting(userId, 'savedClients', []);
+
+    // Check if already in savedClients
+    const existingIndex = rows.findIndex((r: any) =>
+      (typeof r === 'string' && r === clientId) ||
+      r.clientId === clientId ||
+      r.id === clientId ||
+      r.slug === clientId
+    );
+
+    if (existingIndex >= 0) {
+      return res.json(successResponse('Client already saved', { isSaved: true, rows }));
+    }
+
+    // Try finding client in DB to enrich metadata
+    let clientUser: any = null;
+    try {
+      clientUser = await prisma.user.findFirst({
+        where: {
+          id: clientId,
+          deletedAt: null,
+        },
+        include: { clientProfile: true },
+      });
+    } catch {}
+
+    const payload = req.body || {};
+    const companyName = payload.companyName || clientUser?.clientProfile?.company || clientUser?.fullName || payload.name || 'Client Organization';
+    const industry = payload.industry || clientUser?.clientProfile?.industry || 'Business & Technology';
+    const location = payload.location || (clientUser ? [clientUser.city, clientUser.country].filter(Boolean).join(', ') : 'India');
+    const slug = payload.slug || clientUser?.id || clientId;
+
+    const entry = {
+      id: `sc-${Date.now()}`,
+      clientId: clientUser?.id || clientId,
+      slug,
+      name: payload.name || clientUser?.fullName || companyName,
+      companyName,
+      tagline: payload.tagline || clientUser?.bio || '',
+      industry,
+      location,
+      logo: payload.logo || companyName.slice(0, 2).toUpperCase(),
+      avatarUrl: clientUser?.avatarUrl || payload.avatarUrl || null,
+      rating: payload.rating || 4.9,
+      openProjects: payload.openProjects || 2,
+      employees: payload.employees || '1-10',
+      savedAt: new Date().toISOString(),
+    };
+
+    const nextRows = [entry, ...rows];
+    await setJsonSetting(userId, 'savedClients', nextRows);
+
+    return res.json(successResponse('Client saved to watchlist', { isSaved: true, entry, rows: nextRows }));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unsaveClient = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json(errorResponse('Authentication required', 'UNAUTHORIZED'));
+    }
+    const clientId = req.params.id;
+    const { getJsonSetting, setJsonSetting } = await import('../../../common/helpers/portal-shared.js');
+    const rows: any[] = await getJsonSetting(userId, 'savedClients', []);
+
+    const nextRows = rows.filter((r: any) => {
+      const match =
+        (typeof r === 'string' && r === clientId) ||
+        r.clientId === clientId ||
+        r.id === clientId ||
+        r.slug === clientId;
+      return !match;
+    });
+
+    await setJsonSetting(userId, 'savedClients', nextRows);
+    return res.json(successResponse('Client removed from saved', { isSaved: false, rows: nextRows }));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSavedClients = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json(errorResponse('Authentication required', 'UNAUTHORIZED'));
+    }
+    const { getJsonSetting } = await import('../../../common/helpers/portal-shared.js');
+    const rows: any[] = await getJsonSetting(userId, 'savedClients', []);
+    return res.json(successResponse('Saved clients retrieved', rows));
   } catch (error) {
     next(error);
   }

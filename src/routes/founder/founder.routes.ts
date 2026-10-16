@@ -59,6 +59,15 @@ import {
 const router = Router();
 
 router.use(authMiddleware as any);
+
+// Portal media upload is needed DURING onboarding for avatars and documents
+router.post("/media/upload", upload.single("file"), uploadFile as any);
+
+// Verification routes must be accessible before onboarding completion so users can upload KYC documents
+router.get("/verification", getMyVerification as any);
+router.patch("/verification", updateMyVerification as any);
+router.delete("/verification", deleteMyVerification as any);
+
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["founder", "investor", "client", "freelancer", "admin", "super_admin"]) as any);
 
@@ -73,9 +82,6 @@ router.get("/profile", getFounderProfile as any);
 router.patch("/profile", updateFounderProfile as any);
 router.put("/profile", updateFounderProfile as any);
 
-router.get("/verification", getMyVerification as any);
-router.patch("/verification", updateMyVerification as any);
-router.delete("/verification", deleteMyVerification as any);
 
 router.get("/startup", getFounderStartup as any);
 router.patch("/startup", updateFounderStartup as any);
@@ -136,7 +142,6 @@ router.post("/subscriptions/purchase", purchaseFounderSubscription as any);
 router.get("/settings", getFounderSettings as any);
 router.patch("/settings", updateFounderSettings as any);
 
-router.post("/media/upload", upload.single("file"), uploadFile as any);
 
 router.get("/reviews", listFounderReviews as any);
 

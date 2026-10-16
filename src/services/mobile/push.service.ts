@@ -109,12 +109,15 @@ export const sendPushNotification = async (userId: string, title: string, body: 
         }
       }
 
+      const imgUrl = data?.imageUrl || data?.appLogoUrl || data?.senderAvatar || data?.sender_avatar;
+      const categoryId = data?.category || data?.eventType || data?.type;
+
       const messages = tokens.map(t => ({
         token: t.token,
         notification: { 
           title, 
           body,
-          ...((data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : {})
+          ...(imgUrl ? { imageUrl: imgUrl } : {})
         },
         android: {
           notification: {
@@ -122,24 +125,25 @@ export const sendPushNotification = async (userId: string, title: string, body: 
             color: notificationColor,
             icon: 'ic_notification', // Custom notification icon if available in android/app/src/main/res/drawable
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-          defaultLightSettings: true,
-          defaultVibrateTimings: true,
-          defaultSound: true,
-          ...((data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : {})
+            defaultLightSettings: true,
+            defaultVibrateTimings: true,
+            defaultSound: true,
+            ...(imgUrl ? { imageUrl: imgUrl } : {})
+          },
         },
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
-            mutableContent: true,
-          }
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+              mutableContent: true,
+              ...(categoryId ? { category: String(categoryId) } : {}),
+            }
+          },
+          fcmOptions: imgUrl ? { imageUrl: imgUrl } : undefined,
         },
-        fcmOptions: (data?.imageUrl || data?.appLogoUrl) ? { imageUrl: data?.imageUrl || data?.appLogoUrl } : undefined,
-      },
-      data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
-    }));
+        data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
+      }));
 
     const response = await getMessaging().sendEach(messages);
     console.log(`Successfully sent ${response.successCount} messages; ${response.failureCount} failed.`);

@@ -115,7 +115,7 @@ model User {
   city                    String?
   latitude                Float?
   longitude               Float?
-  bio                     String?
+  bio                     String?                 @db.Text
   referralCode            String?                 @unique @map("referral_code")
   timezone                String                  @default("UTC")
   createdAt               DateTime                @default(now()) @map("created_at")
@@ -358,6 +358,7 @@ model Project {
   conversations   Conversation[]
   invitations     Invitation[]
   milestones      Milestone[]
+  
   proposals       Proposal[]
   reviews         Review[]
   shortlists      Shortlist[]

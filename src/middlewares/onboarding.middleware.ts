@@ -15,6 +15,22 @@ export const requireOnboarding = (
     return next();
   }
 
+  // Verification / KYC and media upload endpoints must ALWAYS be accessible
+  // even when onboarding is in progress or incomplete, so users can complete identity verification
+  const path = req.path || "";
+  const originalUrl = req.originalUrl || "";
+  const url = req.url || "";
+  if (
+    path.includes("verification") ||
+    originalUrl.includes("verification") ||
+    url.includes("verification") ||
+    path.includes("media/upload") ||
+    originalUrl.includes("media/upload") ||
+    url.includes("media/upload")
+  ) {
+    return next();
+  }
+
   // Portal users must have COMPLETED onboarding to proceed
   if (req.user.onboardingStatus !== "COMPLETED") {
     return res.status(403).json({

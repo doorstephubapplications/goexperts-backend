@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env.js";
@@ -2756,7 +2756,10 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
       return String(val);
     };
 
-    if (bio !== undefined) userUpdate.bio = getStringVal(bio);
+    if (bio !== undefined) {
+      const bioStr = getStringVal(bio);
+      userUpdate.bio = bioStr ? bioStr.slice(0, 1000) : null;
+    }
     if (phone !== undefined) userUpdate.phone = getStringVal(phone);
     const finalCountry = countryId ?? country;
     const finalState = stateId ?? state;
@@ -2787,10 +2790,12 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
     // Upsert role profile if role matches
     try {
       const portUrl = req.body?.portfolioUrl || req.body?.portfolio || req.body?.websiteUrl;
+      const webUrl = req.body?.websiteUrl || portUrl;
       const linkUrl = req.body?.linkedInUrl || req.body?.linkedin;
       const gitUrl = req.body?.githubUrl || req.body?.github;
       const dribUrl = req.body?.dribbbleUrl || req.body?.dribbble;
       const yrsExp = req.body?.yearsOfExperience || req.body?.yearsExperience || req.body?.years;
+      const eduLevel = req.body?.educationLevel || req.body?.education;
 
       if (userRole === "freelancer") {
         await prisma.freelancerProfile.upsert({
@@ -2801,21 +2806,24 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
             skills: joinArray(skills),
             hourlyRate: hourlyRate !== undefined ? parseFloat(hourlyRate) || null : undefined,
             experience: getStringVal(experienceLevel) || undefined,
+            education: getStringVal(eduLevel) || undefined,
             yearsOfExperience: getStringVal(yrsExp) || undefined,
             portfolioUrl: getStringVal(portUrl) || undefined,
+            websiteUrl: getStringVal(webUrl) || undefined,
             linkedInUrl: getStringVal(linkUrl) || undefined,
             githubUrl: getStringVal(gitUrl) || undefined,
             dribbbleUrl: getStringVal(dribUrl) || undefined,
             industry: joinArray(industry),
-
           },
           update: {
             ...(titleHeadline !== undefined && { titleHeadline: getStringVal(titleHeadline) }),
             ...(skills !== undefined && { skills: joinArray(skills) }),
             ...(hourlyRate !== undefined && { hourlyRate: parseFloat(hourlyRate) || null }),
             ...(experienceLevel !== undefined && { experience: getStringVal(experienceLevel) }),
+            ...(eduLevel !== undefined && { education: getStringVal(eduLevel) }),
             ...(yrsExp !== undefined && { yearsOfExperience: getStringVal(yrsExp) }),
             ...(portUrl !== undefined && { portfolioUrl: getStringVal(portUrl) }),
+            ...(webUrl !== undefined && { websiteUrl: getStringVal(webUrl) }),
             ...(linkUrl !== undefined && { linkedInUrl: getStringVal(linkUrl) }),
             ...(gitUrl !== undefined && { githubUrl: getStringVal(gitUrl) }),
             ...(dribUrl !== undefined && { dribbbleUrl: getStringVal(dribUrl) }),
@@ -2823,6 +2831,28 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
             ...(workMode !== undefined && { workMode: joinArray(workMode) }),
           },
         });
+
+        if (eduLevel) {
+          try {
+            const eduCount = await prisma.freelancerEducation.count({ where: { userId } });
+            if (eduCount === 0) {
+              await prisma.freelancerEducation.create({
+                data: {
+                  userId,
+                  qualification: getStringVal(eduLevel) || "",
+                  specialization: getStringVal(titleHeadline) || "",
+                  institution: "",
+                  year: "",
+                  percentage: "",
+                  cert: "",
+                  category: "Degrees",
+                } as any,
+              });
+            }
+          } catch (e) {
+            console.error("Auto-seed freelancerEducation error in onboarding:", e);
+          }
+        }
       } else if (userRole === "client") {
         const compName = req.body?.companyName || req.body?.company;
         const currTeam = req.body?.currentTeam || req.body?.teamSize || req.body?.companySize;

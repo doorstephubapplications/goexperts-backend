@@ -43,6 +43,15 @@ import {
 const router = Router();
 
 router.use(authMiddleware as any);
+
+// Portal media upload is needed DURING onboarding for avatars and documents
+router.post("/media/upload", upload.single("file"), uploadFile as any);
+
+// Verification routes must be accessible before onboarding completion so users can upload KYC documents
+router.get("/verification", getMyVerification as any);
+router.patch("/verification", updateMyVerification as any);
+router.delete("/verification", deleteMyVerification as any);
+
 router.use(requireOnboarding as any);
 
 // ── Shared Portal Routes (accessible to all authenticated portal roles: investor, freelancer, client, founder) ──
@@ -63,9 +72,6 @@ router.get("/profile", investorOnly, getInvestorProfile as any);
 router.patch("/profile", investorOnly, updateInvestorProfile as any);
 router.put("/profile", investorOnly, updateInvestorProfile as any);
 
-router.get("/verification", investorOnly, getMyVerification as any);
-router.patch("/verification", investorOnly, updateMyVerification as any);
-router.delete("/verification", investorOnly, deleteMyVerification as any);
 
 router.get("/meetings", investorOnly, listInvestorMeetings as any);
 router.post("/meetings", investorOnly, createInvestorMeeting as any);
@@ -99,7 +105,6 @@ router.patch("/settings", investorOnly, updateInvestorSettings as any);
 
 router.get("/all-founders", investorOnly, listAllFounders as any);
 
-router.post("/media/upload", investorOnly, upload.single("file"), uploadFile as any);
 
 router.get("/reviews", investorOnly, listInvestorReviews as any);
 

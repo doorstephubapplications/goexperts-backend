@@ -97,6 +97,11 @@ router.get("/notifications", listFreelancerNotifications as any);
 router.patch("/notifications/read-all", markAllFreelancerNotificationsRead as any);
 router.patch("/notifications/:id/read", markFreelancerNotificationRead as any);
 
+// Verification routes must be accessible before onboarding completion so users can upload KYC documents
+router.get("/verification", getMyVerification as any);
+router.patch("/verification", updateMyVerification as any);
+router.delete("/verification", deleteMyVerification as any);
+
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["freelancer", "client", "investor", "founder", "admin", "super_admin"]) as any);
 
@@ -115,10 +120,6 @@ router.put("/profile", updateFreelancerProfile as any);
 router.patch("/profile/cover", updateFreelancerCover as any);
 
 router.post("/notifications", createFreelancerNotification as any);
-
-router.get("/verification", getMyVerification as any);
-router.patch("/verification", updateMyVerification as any);
-router.delete("/verification", deleteMyVerification as any);
 
 router.get("/portfolio", getFreelancerPortfolio as any);
 router.get("/portfolio/:id", getFreelancerPortfolioItem as any);

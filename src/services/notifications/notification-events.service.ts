@@ -200,7 +200,7 @@ export const emitNotification = async (payload: NotificationPayload) => {
     // 3. Asynchronous Multi-Channel Dispatch (Non-blocking: failures NEVER roll back business logic)
     setImmediate(async () => {
       try {
-        const [user, pref] = await Promise.all([
+        const [user, pref, categorySetting] = await Promise.all([
           prisma.user.findUnique({
             where: { id: payload.userId },
             select: { id: true, email: true, fullName: true },
@@ -208,16 +208,37 @@ export const emitNotification = async (payload: NotificationPayload) => {
           prisma.notificationPreference.findUnique({
             where: { userId: payload.userId },
           }),
+          prisma.setting.findUnique({
+            where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+          }),
         ]);
 
         if (!user) return;
 
         const isSecurity = SECURITY_CRITICAL_EVENTS.has(payload.type);
 
+        let categoryConfig: any = null;
+        if (categorySetting?.value) {
+          try {
+            const parsed = JSON.parse(categorySetting.value);
+            categoryConfig = parsed[payload.type];
+          } catch {}
+        }
+
+        // If category is explicitly disabled by Super Admin, suppress external delivery
+        if (categoryConfig && categoryConfig.enabled === false && !isSecurity) {
+          return;
+        }
+
+        const categoryPushEnabled = categoryConfig?.channels?.push ?? true;
+        const categoryEmailEnabled = categoryConfig?.channels?.email ?? true;
+
         // --- EMAIL CHANNEL ---
         const shouldSendEmail =
           isSecurity ||
-          ((pref?.emailEnabled ?? true) && (EMAIL_ELIGIBLE_EVENTS.has(payload.type) || priority === "urgent" || priority === "high"));
+          (categoryEmailEnabled &&
+            (pref?.emailEnabled ?? true) &&
+            (EMAIL_ELIGIBLE_EVENTS.has(payload.type) || priority === "urgent" || priority === "high"));
 
         if (shouldSendEmail && user.email) {
           let emailHtml = "";
@@ -253,15 +274,20 @@ export const emitNotification = async (payload: NotificationPayload) => {
         // --- PUSH CHANNEL ---
         const shouldSendPush =
           isSecurity ||
-          ((pref?.pushEnabled ?? true) && (PUSH_ELIGIBLE_EVENTS.has(payload.type) || priority === "urgent" || priority === "high"));
+          (categoryPushEnabled &&
+            (pref?.pushEnabled ?? true) &&
+            (PUSH_ELIGIBLE_EVENTS.has(payload.type) || priority === "urgent" || priority === "high"));
 
         if (shouldSendPush) {
           const pushPayload = {
             type: payload.type,
+            eventType: payload.type,
+            category: payload.type,
             contextType: payload.contextType,
             contextId: payload.contextId,
             actionUrl,
             notificationId: notification.id,
+            ...(payload.metadata || {}),
           };
 
           const pushSuccess = await sendPushNotification(user.id, payload.title, payload.message, pushPayload);

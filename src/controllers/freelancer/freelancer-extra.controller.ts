@@ -815,10 +815,44 @@ export const getFreelancerEducation = async (req: AuthenticatedRequest, res: Res
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
-    const rows = await prisma.freelancerEducation.findMany({
+    let rows = await prisma.freelancerEducation.findMany({
       where: { userId },
       orderBy: { createdAt: "asc" },
     });
+
+    if (rows.length === 0) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          include: { freelancerProfile: true },
+        });
+        let eduLevel = user?.freelancerProfile?.education;
+        let regData: any = {};
+        try {
+          regData = typeof user?.registrationData === 'string' ? JSON.parse(user.registrationData) : (user?.registrationData || {});
+        } catch {}
+        if (!eduLevel && regData?.educationLevel) {
+          eduLevel = regData.educationLevel;
+        }
+        if (eduLevel) {
+          const created = await prisma.freelancerEducation.create({
+            data: {
+              userId,
+              institution: regData?.institution || regData?.college || "",
+              qualification: String(eduLevel),
+              specialization: user?.freelancerProfile?.titleHeadline || regData?.titleHeadline || regData?.title || "",
+              year: regData?.graduationYear ? String(regData.graduationYear) : (regData?.year ? String(regData.year) : ""),
+              percentage: regData?.percentage || "",
+              cert: "",
+              category: "Degrees",
+            } as any,
+          });
+          rows = [created];
+        }
+      } catch (seedErr) {
+        console.error("Auto-seed freelancerEducation error:", seedErr);
+      }
+    }
 
     // Map the fields for the frontend and response
     const mappedRows = rows.map((r) => ({
@@ -868,6 +902,13 @@ export const putFreelancerEducation = async (req: AuthenticatedRequest, res: Res
       } else {
         return res.status(400).json({ success: false, message: "items array is required" });
       }
+    }
+
+    if (items.length > 0 && items[0]?.qualification) {
+      prisma.freelancerProfile.update({
+        where: { userId },
+        data: { education: String(items[0].qualification) }
+      }).catch(() => {});
     }
 
     await prisma.$transaction([

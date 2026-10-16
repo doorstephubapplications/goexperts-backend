@@ -11,7 +11,8 @@ import {
   getDesignations, getFounderGoals, getAvailabilityOptions, getDepartments, getMasters,
   getPublicFreelancerPortfolio, getPublicFreelancerPortfolioItem,
   getPublicInvestorPortfolio, getPublicInvestorPortfolioItem,
-  getRoleColor
+  getRoleColor,
+  saveClient, unsaveClient, getSavedClients
 } from './public.controller.js';
 import { authenticate, authenticateOptional } from '../../../middlewares/auth.js';
 import { cacheControl, noCache } from '../../../middleware/cache.js';
@@ -108,8 +109,11 @@ router.get('/freelancers/:id/portfolio/:itemId', authenticateOptional, getPublic
 router.post('/freelancers/:id/save', authenticate, saveFreelancer);
 router.delete('/freelancers/:id/save', authenticate, unsaveFreelancer);
 router.get('/clients', authenticateOptional, directoryCache, getClients);
+router.get('/clients/saved', authenticate, getSavedClients);
 router.get('/clients/:id', directoryCache, getById('client'));
 router.get('/clients/:id/faqs', getPublicUserFaqs as any);
+router.post('/clients/:id/save', authenticate, saveClient);
+router.delete('/clients/:id/save', authenticate, unsaveClient);
 router.get('/investors', authenticateOptional, directoryCache, getInvestors);
 router.get('/investors/saved', authenticate, getSavedInvestors);
 router.get('/investors/:id', authenticateOptional, getById('investor'));

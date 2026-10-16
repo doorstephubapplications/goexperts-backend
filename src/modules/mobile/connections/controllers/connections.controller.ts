@@ -3,6 +3,8 @@ import { prisma } from '../../../../config/database.js';
 import { successResponse, errorResponse } from '../../../../core/response.js';
 import { AuthRequest } from '../../../../middlewares/auth.js';
 import { NotificationEngine } from '../../../../services/mobile/notification.engine.js';
+import { withAdvisoryLock } from '../../../../services/concurrency/advisory-lock.service.js';
+import { emitNotification } from '../../../../services/notifications/notification-events.service.js';
 
 export const getConnections = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -113,49 +115,126 @@ export const acceptInvitation = async (req: AuthRequest, res: Response, next: Ne
     if (!invitation || invitation.receiverId !== req.user.id) return res.status(404).json(errorResponse('Invitation not found', 'NOT_FOUND'));
     if (invitation.status !== 'PENDING') return res.status(400).json(errorResponse('Invitation is no longer pending', 'INVALID_STATUS'));
 
-    const updated = await prisma.connectionInvitation.update({ where: { id: invitation.id }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
     const [userOneId, userTwoId] = [invitation.senderId, invitation.receiverId].sort();
-    await prisma.connection.upsert({
-      where: { userOneId_userTwoId: { userOneId, userTwoId } },
-      update: { status: 'ACTIVE' }, create: { userOneId, userTwoId, status: 'ACTIVE' },
+    const lockKey = `conn_accept_${userOneId}_${userTwoId}`;
+
+    const { updated, conversation } = await withAdvisoryLock(lockKey, 10, async () => {
+      const updateResult = await prisma.connectionInvitation.updateMany({
+        where: { id: invitation.id, status: 'PENDING' },
+        data: { status: 'ACCEPTED', acceptedAt: new Date() }
+      });
+      if (updateResult.count === 0) {
+        throw new Error('Invitation is no longer pending');
+      }
+
+      const updatedInv = await prisma.connectionInvitation.findUniqueOrThrow({ where: { id: invitation.id } });
+      await prisma.connection.upsert({
+        where: { userOneId_userTwoId: { userOneId, userTwoId } },
+        update: { status: 'ACTIVE' }, create: { userOneId, userTwoId, status: 'ACTIVE' },
+      });
+
+      await prisma.conversation.updateMany({
+        where: {
+          deletedAt: null,
+          status: 'PENDING',
+          OR: [
+            { userA: invitation.senderId, userB: invitation.receiverId },
+            { userA: invitation.receiverId, userB: invitation.senderId },
+            { userA: userOneId, userB: userTwoId },
+            { userA: userTwoId, userB: userOneId },
+          ],
+        },
+        data: { status: 'active', updatedAt: new Date() },
+      });
+
+      let conv = await prisma.conversation.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            { userA: userOneId, userB: userTwoId },
+            { userA: userTwoId, userB: userOneId },
+            { userA: invitation.senderId, userB: invitation.receiverId },
+            { userA: invitation.receiverId, userB: invitation.senderId },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      if (!conv) {
+        conv = await prisma.conversation.create({
+          data: {
+            name: 'Chat',
+            role: invitation.sender.role,
+            status: 'active',
+            userA: userOneId,
+            userB: userTwoId,
+            msg: invitation.firstMessage || 'Connected on Go Experts',
+            time: new Date().toISOString(),
+          },
+        });
+
+        if (invitation.firstMessage) {
+          await prisma.message.create({
+            data: {
+              conversationId: conv.id,
+              from: invitation.sender.fullName,
+              senderId: invitation.senderId,
+              text: invitation.firstMessage,
+              time: new Date().toISOString(),
+            },
+          });
+        }
+      }
+
+      return { updated: updatedInv, conversation: conv };
     });
 
-    await prisma.conversation.updateMany({
-      where: {
-        deletedAt: null,
-        status: 'PENDING',
-        OR: [
-          { userA: invitation.senderId, userB: invitation.receiverId },
-          { userA: invitation.receiverId, userB: invitation.senderId },
-          { userA: userOneId, userB: userTwoId },
-          { userA: userTwoId, userB: userOneId },
-        ],
-      },
-      data: { status: 'active', updatedAt: new Date() },
-    });
+    // Emit canonical notification (in-app, push, email according to Super Admin settings)
+    try {
+      await emitNotification({
+        userId: invitation.senderId,
+        type: 'CONNECTION_ACCEPTED',
+        title: 'Connection Accepted',
+        message: `${invitation.receiver.fullName} accepted your connection request.`,
+        contextType: 'CONNECTION',
+        contextId: updated.id,
+        actionUrl: '/dashboard/messages',
+        metadata: {
+          connection_id: updated.id,
+          conversation_id: conversation.id,
+          peer_id: req.user.id,
+          peer_name: invitation.receiver.fullName,
+        },
+      });
+    } catch {}
 
-    const conversation = await prisma.conversation.findFirst({
-      where: {
-        deletedAt: null,
-        OR: [
-          { userA: invitation.senderId, userB: invitation.receiverId },
-          { userA: invitation.receiverId, userB: invitation.senderId },
-          { userA: userOneId, userB: userTwoId },
-          { userA: userTwoId, userB: userOneId },
-        ],
-      },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true },
-    });
-    await NotificationEngine.queueNotification({
-      userId: invitation.senderId, type: 'connection_accepted', title: 'Connection Accepted',
-      message: `${invitation.receiver.fullName} accepted your connection request.`, channel: 'all',
-      payload: { connectionId: invitation.id, conversationId: conversation?.id },
-    });
-    const { getIO } = await import('../../../../modules/realtime/socket.js');
-    getIO().to(invitation.senderId).emit('connection_request_accepted', { invitationId: invitation.id, conversationId: conversation?.id });
+    // Send email alert asynchronously
+    try {
+      const { sendConnectionAcceptedEmail } = await import('../../../../services/mobile/email.service.js');
+      await sendConnectionAcceptedEmail(
+        invitation.sender.email,
+        invitation.sender.fullName,
+        invitation.receiver.fullName,
+        `${process.env.PUBLIC_WEB_URL || process.env.FRONTEND_URL || 'https://goexperts.in'}/dashboard/messages`,
+      ).catch(() => {});
+    } catch {}
+
+    try {
+      const { getIO } = await import('../../../../modules/realtime/socket.js');
+      getIO().to(invitation.senderId).emit('connection_request_accepted', {
+        connectionId: userOneId,
+        invitationId: invitation.id,
+        conversationId: conversation?.id,
+      });
+    } catch {}
+
     return res.json(successResponse('Invitation accepted successfully', { ...updated, conversationId: conversation?.id }));
-  } catch (error) { next(error); }
+  } catch (error: any) {
+    if (error?.message === 'Invitation is no longer pending') {
+      return res.status(400).json(errorResponse('Invitation is no longer pending', 'INVALID_STATUS'));
+    }
+    next(error);
+  }
 };
 
 export const rejectInvitation = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -167,23 +246,30 @@ export const rejectInvitation = async (req: AuthRequest, res: Response, next: Ne
       await prisma.connectionInvitation.delete({ where: { id: invitation.id } });
       return res.json(successResponse('Invitation withdrawn successfully', { id: invitation.id }));
     }
-    const updated = await prisma.connectionInvitation.update({ where: { id: invitation.id }, data: { status: 'REJECTED', rejectedAt: new Date() } });
-    await prisma.conversation.deleteMany({ where: { OR: [
-      { userA: invitation.senderId, userB: invitation.receiverId },
-      { userA: invitation.receiverId, userB: invitation.senderId },
-    ], projectId: null } });
+
     const [userOneId, userTwoId] = [invitation.senderId, invitation.receiverId].sort();
-    await prisma.connection.upsert({
-      where: { userOneId_userTwoId: { userOneId, userTwoId } },
-      update: { status: 'BLOCKED' }, create: { userOneId, userTwoId, status: 'BLOCKED' },
+    const lockKey = `conn_inv_${userOneId}_${userTwoId}`;
+
+    const updated = await withAdvisoryLock(lockKey, 10, async () => {
+      const updateResult = await prisma.connectionInvitation.updateMany({
+        where: { id: invitation.id, status: 'PENDING' },
+        data: { status: 'REJECTED', rejectedAt: new Date() }
+      });
+      if (updateResult.count === 0) {
+        throw new Error('Invitation is no longer pending');
+      }
+      return await prisma.connectionInvitation.findUniqueOrThrow({ where: { id: invitation.id } });
     });
-    await NotificationEngine.queueNotification({
-      userId: invitation.senderId, type: 'CONNECTION_REJECTED', title: 'Connection Request Rejected',
-      message: `${req.user.fullName || 'The user'} rejected your connection request.`, channel: 'all',
-      payload: { invitationId: invitation.id },
-    }).catch(() => null);
-    const { getIO } = await import('../../../../modules/realtime/socket.js');
-    getIO().to(invitation.senderId).emit('connection_request_rejected', { invitationId: invitation.id });
+
+    try {
+      const { getIO } = await import('../../../../modules/realtime/socket.js');
+      getIO().to(invitation.senderId).emit('connection_request_rejected', { invitationId: invitation.id });
+    } catch {}
     return res.json(successResponse('Invitation rejected successfully', updated));
-  } catch (error) { next(error); }
+  } catch (error: any) {
+    if (error?.message === 'Invitation is no longer pending') {
+      return res.status(400).json(errorResponse('Invitation is no longer pending', 'INVALID_STATUS'));
+    }
+    next(error);
+  }
 };

@@ -48,6 +48,16 @@ export const NotificationEventType = {
   FOUNDER_INTEREST_REJECTED: "FOUNDER_INTEREST_REJECTED",
   INVESTOR_REQUEST_RECEIVED: "INVESTOR_REQUEST_RECEIVED",
   FOUNDER_REQUEST_RESPONDED: "FOUNDER_REQUEST_RESPONDED",
+
+  // CONNECTIONS & INVITATIONS
+  CONNECTION_REQUEST: "CONNECTION_REQUEST",
+  CONNECTION_ACCEPTED: "CONNECTION_ACCEPTED",
+  INVITATION_PENDING_REMINDER: "INVITATION_PENDING_REMINDER",
+  INVITATION_EXPIRY_REMINDER: "INVITATION_EXPIRY_REMINDER",
+  NEW_CONNECTION_MESSAGE: "NEW_CONNECTION_MESSAGE",
+  UNREAD_MESSAGE_REMINDER: "UNREAD_MESSAGE_REMINDER",
+  PROFILE_COMPLETION_REMINDER: "PROFILE_COMPLETION_REMINDER",
+  KYC_REMINDER: "KYC_REMINDER",
 } as const;
 
 export type NotificationEventType = (typeof NotificationEventType)[keyof typeof NotificationEventType];
@@ -81,6 +91,14 @@ export const EMAIL_ELIGIBLE_EVENTS = new Set<string>([
   NotificationEventType.FOUNDER_INTEREST_ACCEPTED,
   NotificationEventType.INVESTOR_REQUEST_RECEIVED,
   NotificationEventType.FOUNDER_REQUEST_RESPONDED,
+  NotificationEventType.CONNECTION_REQUEST,
+  NotificationEventType.CONNECTION_ACCEPTED,
+  NotificationEventType.INVITATION_PENDING_REMINDER,
+  NotificationEventType.INVITATION_EXPIRY_REMINDER,
+  NotificationEventType.NEW_CONNECTION_MESSAGE,
+  NotificationEventType.UNREAD_MESSAGE_REMINDER,
+  NotificationEventType.PROFILE_COMPLETION_REMINDER,
+  NotificationEventType.KYC_REMINDER,
 ]);
 
 /**
@@ -91,6 +109,14 @@ export const PUSH_ELIGIBLE_EVENTS = new Set<string>([
   NotificationEventType.TASK_ASSIGNED,
   NotificationEventType.TASK_COMMENT_ADDED,
   NotificationEventType.MESSAGE_RECEIVED,
+  NotificationEventType.CONNECTION_REQUEST,
+  NotificationEventType.CONNECTION_ACCEPTED,
+  NotificationEventType.INVITATION_PENDING_REMINDER,
+  NotificationEventType.INVITATION_EXPIRY_REMINDER,
+  NotificationEventType.NEW_CONNECTION_MESSAGE,
+  NotificationEventType.UNREAD_MESSAGE_REMINDER,
+  NotificationEventType.PROFILE_COMPLETION_REMINDER,
+  NotificationEventType.KYC_REMINDER,
 ]);
 
 /**
@@ -131,8 +157,19 @@ export function resolveActionUrl(params: {
   const effectiveProposalId = proposalId || (contextType === "proposal" ? contextId : undefined);
   const effectiveConvId = conversationId || (contextType === "conversation" || contextType === "message" ? contextId : undefined);
 
+  // 0. Connection & Networking
+  if (
+    type === NotificationEventType.CONNECTION_REQUEST ||
+    type === NotificationEventType.CONNECTION_ACCEPTED ||
+    type === NotificationEventType.INVITATION_PENDING_REMINDER ||
+    type === NotificationEventType.INVITATION_EXPIRY_REMINDER ||
+    contextType === "connection"
+  ) {
+    return "/dashboard/network";
+  }
+
   // 1. Messages / Chat
-  if (effectiveConvId || type === NotificationEventType.MESSAGE_RECEIVED) {
+  if (effectiveConvId || type === NotificationEventType.MESSAGE_RECEIVED || type === NotificationEventType.NEW_CONNECTION_MESSAGE) {
     return effectiveConvId ? `/messages?conversationId=${effectiveConvId}` : "/messages";
   }
 

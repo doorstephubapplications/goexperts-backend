@@ -10,7 +10,17 @@ export const adminPushCampaignsRouter = Router();
 // ==========================================
 adminPushCampaignsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { role, status, category, search, page = "1" } = req.query;
+    const {
+      role,
+      status,
+      category,
+      search,
+      page = "1",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      startDate,
+      endDate
+    } = req.query;
     const pageSizeParam = req.query.pageSize || req.query.limit || "10";
 
     const where: any = { deletedAt: null };
@@ -30,6 +40,7 @@ adminPushCampaignsRouter.get("/", async (req: Request, res: Response, next: Next
     if (search && String(search).trim()) {
       const q = String(search).trim();
       where.OR = [
+        { id: { contains: q } },
         { title: { contains: q } },
         { description: { contains: q } },
         { category: { contains: q } },
@@ -37,20 +48,54 @@ adminPushCampaignsRouter.get("/", async (req: Request, res: Response, next: Next
       ];
     }
 
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(String(startDate));
+      if (endDate) where.createdAt.lte = new Date(String(endDate));
+    }
+
     const take = Math.min(Math.max(1, parseInt(String(pageSizeParam), 10) || 10), 200);
     const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
     const skip = (pageNum - 1) * take;
 
-    const [rows, total, statsActive, statsPaused, allCounts] = await Promise.all([
+    // Supported sort columns
+    const allowedSortColumns: Record<string, string> = {
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      title: "title",
+      status: "status",
+      lastSentAt: "lastSentAt",
+      customScheduleAt: "customScheduleAt"
+    };
+    const orderColumn = allowedSortColumns[String(sortBy)] || "createdAt";
+    const orderDirection = String(sortOrder).toLowerCase() === "asc" ? "asc" : "desc";
+
+    const [rows, total, statsActive, statsPaused, statsScheduled, statsSent, statsDraft, allCounts] = await Promise.all([
       prisma.pushCampaign.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: [
+          { [orderColumn]: orderDirection },
+          { id: "desc" }
+        ],
         skip,
         take
       }),
       prisma.pushCampaign.count({ where }),
       prisma.pushCampaign.count({ where: { deletedAt: null, status: "ACTIVE" } }),
       prisma.pushCampaign.count({ where: { deletedAt: null, status: "PAUSED" } }),
+      prisma.pushCampaign.count({
+        where: {
+          deletedAt: null,
+          OR: [{ status: "SCHEDULED" }, { customScheduleAt: { not: null } }]
+        }
+      }),
+      prisma.pushCampaign.count({
+        where: {
+          deletedAt: null,
+          OR: [{ status: "SENT" }, { status: "COMPLETED" }, { lastSentAt: { not: null } }]
+        }
+      }),
+      prisma.pushCampaign.count({ where: { deletedAt: null, status: "DRAFT" } }),
       prisma.pushCampaign.groupBy({
         by: ["targetRole"],
         where: { deletedAt: null },
@@ -70,21 +115,38 @@ adminPushCampaignsRouter.get("/", async (req: Request, res: Response, next: Next
     });
 
     const totalCampaigns = await prisma.pushCampaign.count({ where: { deletedAt: null } });
+    const totalPages = Math.max(1, Math.ceil(total / take));
+
+    const statsObj = {
+      total: totalCampaigns,
+      active: statsActive,
+      paused: statsPaused,
+      scheduled: statsScheduled,
+      sent: statsSent,
+      draft: statsDraft,
+      roleCounts
+    };
 
     res.json({
       success: true,
-      data: rows,
+      data: {
+        items: rows,
+        pagination: {
+          page: pageNum,
+          pageSize: take,
+          totalItems: total,
+          totalPages,
+          hasNextPage: pageNum < totalPages,
+          hasPreviousPage: pageNum > 1
+        },
+        stats: statsObj
+      },
       rows,
       total,
       page: pageNum,
       pageSize: take,
-      totalPages: Math.max(1, Math.ceil(total / take)),
-      stats: {
-        total: totalCampaigns,
-        active: statsActive,
-        paused: statsPaused,
-        roleCounts
-      }
+      totalPages,
+      stats: statsObj
     });
   } catch (err) {
     next(err);
@@ -219,6 +281,174 @@ adminPushCampaignsRouter.put("/layout", async (req: Request, res: Response, next
     res.json({
       success: true,
       message: "Global campaign layout updated successfully. All 120 campaigns now reflect these changes.",
+      data: merged
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 2B. NOTIFICATION CATEGORY SETTINGS (SUPER ADMIN DYNAMIC CONFIG)
+// ==========================================
+export const DEFAULT_NOTIFICATION_CATEGORIES = {
+  CONNECTION_REQUEST: {
+    key: "CONNECTION_REQUEST",
+    label: "Connection Request Alert",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "New Connection Request",
+    bodyTemplate: "{{senderName}} wants to connect with you on Go Experts.",
+    deepLink: "/dashboard/network",
+    quietHours: { enabled: false, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 20 },
+    retryRules: { maxRetries: 3, backoffMinutes: 15 }
+  },
+  CONNECTION_ACCEPTED: {
+    key: "CONNECTION_ACCEPTED",
+    label: "Connection Accepted Alert",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "Connection Accepted",
+    bodyTemplate: "{{recipientName}} accepted your connection request.",
+    deepLink: "/dashboard/network",
+    quietHours: { enabled: false, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 50 },
+    retryRules: { maxRetries: 3, backoffMinutes: 15 }
+  },
+  INVITATION_PENDING_REMINDER: {
+    key: "INVITATION_PENDING_REMINDER",
+    label: "Pending Invitation Reminder",
+    enabled: true,
+    channels: { push: true, inApp: true, email: false },
+    titleTemplate: "Pending Connection Invitation",
+    bodyTemplate: "You have a pending connection request from {{senderName}} awaiting your response.",
+    deepLink: "/dashboard/network",
+    reminderTiming: "48h",
+    quietHours: { enabled: true, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 1 },
+    retryRules: { maxRetries: 2, backoffMinutes: 60 }
+  },
+  INVITATION_EXPIRY_REMINDER: {
+    key: "INVITATION_EXPIRY_REMINDER",
+    label: "Invitation Expiry Warning",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "Invitation Expiring Soon",
+    bodyTemplate: "Your connection invitation with {{senderName}} is expiring soon.",
+    deepLink: "/dashboard/network",
+    reminderTiming: "120h",
+    quietHours: { enabled: true, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 1 },
+    retryRules: { maxRetries: 1, backoffMinutes: 120 }
+  },
+  NEW_CONNECTION_MESSAGE: {
+    key: "NEW_CONNECTION_MESSAGE",
+    label: "New Connection Direct Message",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "New Message from {{senderName}}",
+    bodyTemplate: "{{senderName}}: {{messagePreview}}",
+    deepLink: "/messages",
+    quietHours: { enabled: false, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 100 },
+    retryRules: { maxRetries: 3, backoffMinutes: 10 }
+  },
+  UNREAD_MESSAGE_REMINDER: {
+    key: "UNREAD_MESSAGE_REMINDER",
+    label: "Unread Conversation Reminder",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "You Have Unread Messages",
+    bodyTemplate: "You have {{unreadCount}} unread message(s) waiting on Go Experts.",
+    deepLink: "/messages",
+    reminderTiming: "24h",
+    quietHours: { enabled: true, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 1 },
+    retryRules: { maxRetries: 2, backoffMinutes: 60 }
+  },
+  PROFILE_COMPLETION_REMINDER: {
+    key: "PROFILE_COMPLETION_REMINDER",
+    label: "Profile Completion Reminder",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "Complete Your Professional Profile",
+    bodyTemplate: "Profiles with full experience receive 5x more connection requests and gigs.",
+    deepLink: "/dashboard/profile",
+    reminderTiming: "72h",
+    quietHours: { enabled: true, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 1 },
+    retryRules: { maxRetries: 2, backoffMinutes: 120 }
+  },
+  KYC_REMINDER: {
+    key: "KYC_REMINDER",
+    label: "KYC Verification Reminder",
+    enabled: true,
+    channels: { push: true, inApp: true, email: true },
+    titleTemplate: "Verify Your Identity on Go Experts",
+    bodyTemplate: "Complete your quick verification to unlock full networking and payments.",
+    deepLink: "/dashboard/verification",
+    reminderTiming: "48h",
+    quietHours: { enabled: true, start: "22:00", end: "08:00" },
+    frequencyCap: { maxPerDay: 1 },
+    retryRules: { maxRetries: 3, backoffMinutes: 60 }
+  }
+};
+
+adminPushCampaignsRouter.get("/category-settings", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" }
+    });
+
+    let categories = DEFAULT_NOTIFICATION_CATEGORIES;
+    if (setting?.value) {
+      try {
+        categories = { ...DEFAULT_NOTIFICATION_CATEGORIES, ...JSON.parse(setting.value) };
+      } catch (e) {
+        categories = DEFAULT_NOTIFICATION_CATEGORIES;
+      }
+    }
+
+    res.json({ success: true, data: categories });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminPushCampaignsRouter.put("/category-settings", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const newSettings = req.body;
+    if (!newSettings || typeof newSettings !== "object") {
+      return res.status(400).json({ success: false, message: "Invalid category settings payload" });
+    }
+
+    const currentSetting = await prisma.setting.findUnique({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" }
+    });
+    let existing = DEFAULT_NOTIFICATION_CATEGORIES;
+    if (currentSetting?.value) {
+      try { existing = JSON.parse(currentSetting.value); } catch {}
+    }
+
+    const merged = { ...existing, ...newSettings };
+
+    await prisma.setting.upsert({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+      update: {
+        value: JSON.stringify(merged),
+        category: "notification_categories"
+      },
+      create: {
+        key: "PUSH_NOTIFICATION_CATEGORIES",
+        value: JSON.stringify(merged),
+        category: "notification_categories"
+      }
+    });
+
+    res.json({
+      success: true,
+      message: "Notification category configuration updated successfully.",
       data: merged
     });
   } catch (err) {
@@ -567,6 +797,85 @@ adminPushCampaignsRouter.post("/:id/dispatch", async (req: Request, res: Respons
   try {
     const result = await dispatchCampaign(req.params.id, "MANUAL");
     res.json({ success: true, message: "Campaign dispatched successfully", ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 9B. DUPLICATE CAMPAIGN AS DRAFT
+// ==========================================
+adminPushCampaignsRouter.post("/:id/duplicate", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const source = await prisma.pushCampaign.findFirst({
+      where: { id: req.params.id, deletedAt: null }
+    });
+    if (!source) {
+      return res.status(404).json({ success: false, message: "Campaign not found" });
+    }
+    const duplicate = await prisma.pushCampaign.create({
+      data: {
+        title: `${source.title} (Draft Copy)`,
+        description: source.description,
+        imageUrl: source.imageUrl,
+        targetRole: source.targetRole,
+        category: source.category,
+        offer: source.offer,
+        deepLink: source.deepLink,
+        status: "DRAFT",
+        scheduleSlot: source.scheduleSlot,
+        customScheduleAt: null,
+        sendCount: 0,
+        clickCount: 0
+      }
+    });
+    res.status(201).json({ success: true, message: "Campaign duplicated as draft", data: duplicate });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==========================================
+// 9C. SEND TEST NOTIFICATION
+// ==========================================
+adminPushCampaignsRouter.post("/:id/test", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const campaign = await prisma.pushCampaign.findFirst({
+      where: { id: req.params.id, deletedAt: null }
+    });
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: "Campaign not found" });
+    }
+    const { testEmail, testUserId } = req.body;
+    let targetUser: any = null;
+    if (testUserId) {
+      targetUser = await prisma.user.findUnique({ where: { id: testUserId } });
+    } else if (testEmail) {
+      targetUser = await prisma.user.findFirst({ where: { email: testEmail } });
+    } else if ((req as any).user?.id) {
+      targetUser = await prisma.user.findUnique({ where: { id: (req as any).user.id } });
+    }
+
+    if (targetUser) {
+      try {
+        const { sendPushNotification } = await import("../../services/mobile/push.service.js");
+        await sendPushNotification(
+          targetUser.id,
+          `[TEST] ${campaign.title}`,
+          campaign.description,
+          {
+            campaignId: campaign.id,
+            deepLink: campaign.deepLink || "/dashboard",
+            isTest: "true"
+          }
+        );
+      } catch (e) {}
+    }
+
+    res.json({
+      success: true,
+      message: `Test push sent successfully to ${targetUser?.email || "admin device"}`
+    });
   } catch (err) {
     next(err);
   }

@@ -47,6 +47,15 @@ import { getMyVerification, updateMyVerification, deleteMyVerification } from ".
 const router = Router();
 
 router.use(authMiddleware as any);
+
+// Portal media upload is needed DURING onboarding for avatars and documents
+router.post("/media/upload", upload.single("file"), uploadFile as any);
+
+// Verification routes must be accessible before onboarding completion so users can upload KYC documents
+router.get("/verification", getMyVerification as any);
+router.patch("/verification", updateMyVerification as any);
+router.delete("/verification", deleteMyVerification as any);
+
 router.use(requireOnboarding as any);
 // --- Multi-Role Routes (Client, Investor, Founder) ---
 const multiRole = portalRoleMiddleware(["client", "investor", "founder", "freelancer", "business", "user"]) as any;
@@ -72,9 +81,6 @@ router.get("/profile", getClientProfile as any);
 router.patch("/profile", updateClientProfile as any);
 router.put("/profile", updateClientProfile as any);
 
-router.get("/verification", getMyVerification as any);
-router.patch("/verification", updateMyVerification as any);
-router.delete("/verification", deleteMyVerification as any);
 
 router.get("/pipeline", getClientPipeline as any);
 
@@ -157,7 +163,6 @@ router.delete("/team/:id", multiRole, deleteClientTeamMember as any);
 // router.post("/api-keys", generateClientApiKey as any);
 // router.delete("/api-keys/:id", revokeClientApiKey as any);
 
-router.post("/media/upload", upload.single("file"), uploadFile as any);
 
 // Saved freelancers (bookmark)
 router.get("/freelancers/saved", multiRole, listSavedFreelancers as any);

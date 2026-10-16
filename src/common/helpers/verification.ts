@@ -24,8 +24,13 @@ export const VERIFICATION_KEY_MAP: Record<string, string> = {
     driving: "Driving Licence",
     // Business document keys (shown in UI)
     gst: "GST Certificate",
-    udyam: "Udyam Aadhaar",
-    incorporation: "Incorporation Proof",
+    udyam: "MSME Regd.",
+    msme: "MSME Regd.",
+    startup_india: "Startup India",
+    iso_27001: "ISO 27001",
+    soc2_type2: "SOC 2 Type II",
+    incorporation: "MCA Registered",
+    mca_registered: "MCA Registered",
     business_pan: "Business PAN",
     company: "Company Registration",
     driving_licence: "Driving Licence"
@@ -41,8 +46,13 @@ export const VERIFICATION_KEYS: Array<{ key: string; label: string; required?: b
     { key: "aadhaar", label: "Aadhaar Card", required: false },
     { key: "driving", label: "Driving Licence", required: false },
     { key: "gst", label: "GST Certificate", required: false },
-    { key: "udyam", label: "Udyam Aadhaar", required: false },
-    { key: "incorporation", label: "Incorporation Proof", required: false },
+    { key: "udyam", label: "MSME Regd.", required: false },
+    { key: "msme", label: "MSME Regd.", required: false },
+    { key: "startup_india", label: "Startup India", required: false },
+    { key: "iso_27001", label: "ISO 27001", required: false },
+    { key: "soc2_type2", label: "SOC 2 Type II", required: false },
+    { key: "incorporation", label: "MCA Registered", required: false },
+    { key: "mca_registered", label: "MCA Registered", required: false },
     { key: "business_pan", label: "Business PAN", required: false },
     { key: "company", label: "Company Registration", required: false },
     { key: "driving_licence", label: "Driving Licence", required: false }
@@ -56,7 +66,12 @@ const VALIDATORS: Record<string, { regex: RegExp; message: string }> = {
     udyam: { regex: /^[a-zA-Z0-9-]{10,25}$/, message: "Invalid Udyam format (10-25 characters)" },
     driving: { regex: /^[A-Z0-9-/\s]{10,20}$/i, message: "Invalid Driving Licence format" },
     driving_licence: { regex: /^[A-Z0-9-/\s]{10,20}$/i, message: "Invalid Driving Licence format" },
-    incorporation: { regex: /^[A-Z0-9-\s]{5,25}$/i, message: "Invalid Incorporation Number format" },
+    incorporation: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid MCA/Incorporation Number format" },
+    mca_registered: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid MCA/CIN Registration format" },
+    msme: { regex: /^[a-zA-Z0-9-]{5,30}$/, message: "Invalid MSME registration format" },
+    startup_india: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid Startup India certificate format" },
+    iso_27001: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid ISO 27001 certificate format" },
+    soc2_type2: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid SOC 2 Type II certificate/report format" },
     company: { regex: /^[A-Z0-9-\s]{5,25}$/i, message: "Invalid Company Registration format" },
 };
 
@@ -130,7 +145,7 @@ export function getVerificationStats(user: any) {
     
     // Group keys
     const personalKeys = ["pan", "aadhaar", "driving", "driving_licence"];
-    const businessKeys = ["gst", "udyam", "incorporation", "business_pan", "company"];
+    const businessKeys = ["gst", "udyam", "msme", "startup_india", "iso_27001", "soc2_type2", "incorporation", "mca_registered", "business_pan", "company"];
     
     // Calculate submitted items (verified or pending)
     const personalSubmitted = items.filter(i => personalKeys.includes(i.key) && (i.status === "verified" || i.status === "pending")).length;
@@ -295,4 +310,61 @@ export async function applyVerificationUpdate(userId: string, body: any, isAdmin
         }
     });
     return getVerificationStats(freshUser);
+}
+
+
+export function getApprovedTrustCredentials(raw: any): { key: string; label: string }[] {
+    if (!raw) return [];
+    let vObj: any = {};
+    if (typeof raw === "string") {
+        try {
+            vObj = JSON.parse(raw);
+        } catch {
+            return [];
+        }
+    } else if (typeof raw === "object" && raw !== null) {
+        vObj = raw;
+    } else {
+        return [];
+    }
+
+    const results: { key: string; label: string }[] = [];
+    const seenKeys = new Set<string>();
+
+    const checkAndAdd = (key: string, item: any, fallbackLabel?: string) => {
+        if (!item) return;
+        const st = String(item.status || "").toLowerCase();
+        if (st === "verified" || st === "approved") {
+            const normalizedKey = key.toLowerCase();
+            if (!seenKeys.has(normalizedKey)) {
+                seenKeys.add(normalizedKey);
+                const label = item.title || item.label || VERIFICATION_KEY_MAP[normalizedKey] || fallbackLabel || key.toUpperCase();
+                results.push({ key: normalizedKey, label });
+            }
+        }
+    };
+
+    // 1. Check documentsList or documents array (used by Admin KYC Center)
+    const docsArray = Array.isArray(vObj.documentsList)
+        ? vObj.documentsList
+        : Array.isArray(vObj.documents)
+        ? vObj.documents
+        : [];
+
+    for (const doc of docsArray) {
+        if (doc && (doc.key || doc.id || doc.title)) {
+            const k = String(doc.key || doc.id || doc.title).toLowerCase();
+            checkAndAdd(k, doc, doc.title || doc.label);
+        }
+    }
+
+    // 2. Check top-level keys in vObj (e.g. vObj.pan, vObj.aadhaar, vObj.gst, vObj.msme)
+    for (const [k, v] of Object.entries(vObj)) {
+        if (["documentsList", "documents", "statuses", "missingCount", "kycApproved", "kycSubmitted", "kycStatus"].includes(k)) continue;
+        if (v && typeof v === "object") {
+            checkAndAdd(k, v);
+        }
+    }
+
+    return results;
 }

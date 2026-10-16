@@ -330,8 +330,11 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
           include: { sender: true }
         });
 
-        const title = 'New Connection Request';
-        const body = `${newInvite.sender.fullName} sent you a connection request.`;
+        const senderName = newInvite.sender.fullName || 'A professional';
+        const senderRole = newInvite.sender.role || 'Member';
+        const senderHeadline = (newInvite.sender as any).bio || `${senderRole} on Go Experts`;
+        const title = `${senderName} wants to connect`;
+        const body = initialMessage || `${senderName} wants to connect with you on Go Experts.`;
         
         try {
           await emitNotification({
@@ -340,7 +343,27 @@ export const createOrFindConversation = async (req: AuthenticatedRequest, res: R
             title,
             message: body,
             contextType: 'CONNECTION',
-            contextId: newInvite.id
+            contextId: newInvite.id,
+            actionUrl: '/dashboard/network',
+            metadata: {
+              eventType: 'CONNECTION_REQUEST',
+              category: 'CONNECTION_REQUEST',
+              invitationId: newInvite.id,
+              invitation_id: newInvite.id,
+              senderId: userId,
+              sender_id: userId,
+              senderName,
+              sender_name: senderName,
+              senderRole,
+              sender_role: senderRole,
+              senderHeadline,
+              sender_headline: senderHeadline,
+              senderAvatar: newInvite.sender.avatarUrl || '',
+              sender_avatar: newInvite.sender.avatarUrl || '',
+              imageUrl: newInvite.sender.avatarUrl || '',
+              firstMessage: initialMessage,
+              first_message: initialMessage
+            }
           });
         } catch(err) {}
 
