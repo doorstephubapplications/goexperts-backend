@@ -60,6 +60,7 @@ import adminWithdrawalsRouter from "./admin/withdrawals.routes.js";
 import { adminUsersRouter } from "./admin/admin-users.routes.js";
 import { adminUserConnectionsRouter } from "./admin/admin-user-connections.routes.js";
 import { adminPushCampaignsRouter } from "./admin/admin-push-campaigns.routes.js";
+import { adminCustomPushNotificationsRouter } from "./admin/admin-custom-push-notifications.routes.js";
 import { sendAccountDeletedEmail } from "../services/mobile/email.service.js";
 import { activateFreeTrialOnKycApproval } from "../services/subscription/free-trial.service.js";
 import subscriptionRoutes from "./subscription/subscription.routes.js";
@@ -357,6 +358,8 @@ router.use("/admin/push-campaigns", authMiddleware as any, roleMiddleware(["admi
 router.use("/v1/admin/push-campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
 router.use("/admin/push/campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
 router.use("/v1/admin/push/campaigns", authMiddleware as any, roleMiddleware(["admin"]) as any, adminPushCampaignsRouter);
+router.use("/admin/custom-push-notifications", authMiddleware as any, roleMiddleware(["admin"]) as any, adminCustomPushNotificationsRouter);
+router.use("/v1/admin/custom-push-notifications", authMiddleware as any, roleMiddleware(["admin"]) as any, adminCustomPushNotificationsRouter);
 router.use("/admin/dashboard", authMiddleware as any, roleMiddleware(["admin"]) as any, adminDashboardRouter);
 router.use("/admin/dashboard-old", authMiddleware as any, roleMiddleware(["admin"]) as any, dashboardRoutes);
 router.use("/admin/dashboard", authMiddleware as any, roleMiddleware(["admin"]) as any, dashboardInsightsRouter);
