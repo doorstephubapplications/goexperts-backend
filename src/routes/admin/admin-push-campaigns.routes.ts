@@ -416,6 +416,170 @@ adminPushCampaignsRouter.get("/category-settings", async (req: Request, res: Res
   }
 });
 
+adminPushCampaignsRouter.post("/category-settings", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const {
+      key,
+      label,
+      description,
+      enabled = true,
+      channels,
+      titleTemplate,
+      bodyTemplate,
+      deepLink,
+      reminderTiming,
+      quietHours,
+      frequencyCap,
+    } = req.body;
+
+    if (!key || !label) {
+      return res.status(400).json({ success: false, message: "Category key and label are required." });
+    }
+
+    const cleanKey = String(key).trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+
+    const currentSetting = await prisma.setting.findUnique({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+    });
+    let existing = DEFAULT_NOTIFICATION_CATEGORIES;
+    if (currentSetting?.value) {
+      try { existing = JSON.parse(currentSetting.value); } catch {}
+    }
+
+    if (existing[cleanKey]) {
+      return res.status(400).json({ success: false, message: `Category '${cleanKey}' already exists.` });
+    }
+
+    const newCategory = {
+      key: cleanKey,
+      label: String(label).trim(),
+      description: description ? String(description).trim() : "",
+      enabled: enabled !== false,
+      channels: channels || { push: true, inApp: true, email: false },
+      titleTemplate: titleTemplate || `${String(label).trim()} Alert`,
+      bodyTemplate: bodyTemplate || "You have a new update on Go Experts.",
+      deepLink: deepLink || "/dashboard",
+      reminderTiming: reminderTiming || "24h",
+      quietHours: quietHours || { enabled: false, start: "22:00", end: "08:00" },
+      frequencyCap: frequencyCap || { maxPerDay: 5 },
+      isCustom: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = { ...existing, [cleanKey]: newCategory };
+
+    await prisma.setting.upsert({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+      update: {
+        value: JSON.stringify(updated),
+        category: "notification_categories",
+      },
+      create: {
+        key: "PUSH_NOTIFICATION_CATEGORIES",
+        value: JSON.stringify(updated),
+        category: "notification_categories",
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Category '${newCategory.label}' created successfully.`,
+      data: newCategory,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminPushCampaignsRouter.put("/category-settings/:key", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key } = req.params;
+    const catData = req.body;
+
+    const currentSetting = await prisma.setting.findUnique({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+    });
+    let existing = DEFAULT_NOTIFICATION_CATEGORIES;
+    if (currentSetting?.value) {
+      try { existing = JSON.parse(currentSetting.value); } catch {}
+    }
+
+    if (!existing[key]) {
+      return res.status(404).json({ success: false, message: `Category '${key}' not found.` });
+    }
+
+    existing[key] = {
+      ...existing[key],
+      ...catData,
+      key, // preserve original key
+      updatedAt: new Date().toISOString(),
+    };
+
+    await prisma.setting.upsert({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+      update: {
+        value: JSON.stringify(existing),
+        category: "notification_categories",
+      },
+      create: {
+        key: "PUSH_NOTIFICATION_CATEGORIES",
+        value: JSON.stringify(existing),
+        category: "notification_categories",
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Category '${existing[key].label || key}' updated successfully.`,
+      data: existing[key],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminPushCampaignsRouter.delete("/category-settings/:key", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key } = req.params;
+
+    const currentSetting = await prisma.setting.findUnique({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+    });
+    let existing = DEFAULT_NOTIFICATION_CATEGORIES;
+    if (currentSetting?.value) {
+      try { existing = JSON.parse(currentSetting.value); } catch {}
+    }
+
+    if (!existing[key]) {
+      return res.status(404).json({ success: false, message: `Category '${key}' not found.` });
+    }
+
+    const removedLabel = existing[key].label || key;
+    delete existing[key];
+
+    await prisma.setting.upsert({
+      where: { key: "PUSH_NOTIFICATION_CATEGORIES" },
+      update: {
+        value: JSON.stringify(existing),
+        category: "notification_categories",
+      },
+      create: {
+        key: "PUSH_NOTIFICATION_CATEGORIES",
+        value: JSON.stringify(existing),
+        category: "notification_categories",
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Category '${removedLabel}' deleted successfully.`,
+      data: { key },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 adminPushCampaignsRouter.put("/category-settings", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const newSettings = req.body;
