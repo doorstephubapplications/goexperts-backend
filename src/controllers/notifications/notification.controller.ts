@@ -55,9 +55,12 @@ export const listNotifications = async (req: any, res: Response, next: NextFunct
 
     if (search && String(search).trim()) {
       const q = String(search).trim();
+      const qUpper = q.toUpperCase();
       where.OR = [
         { title: { contains: q } },
         { message: { contains: q } },
+        { type: { contains: q } },
+        { type: { contains: qUpper } },
         { user: { fullName: { contains: q } } },
         { user: { email: { contains: q } } },
       ];
