@@ -2600,8 +2600,8 @@ model ClientTeamMember {
 
 model ConnectionInvitation {
   id           String    @id @default(uuid())
-  senderId     String    @map("sender_id")
-  receiverId   String    @map("receiver_id")
+  senderId     String?   @map("sender_id")
+  receiverId   String?   @map("receiver_id")
   firstMessage String?   @map("first_message") @db.Text
   status       String    @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -2609,8 +2609,8 @@ model ConnectionInvitation {
   acceptedAt   DateTime? @map("accepted_at")
   rejectedAt   DateTime? @map("rejected_at")
 
-  sender   User @relation("SentConnectionInvitations", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User @relation("ReceivedConnectionInvitations", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender   User? @relation("SentConnectionInvitations", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User? @relation("ReceivedConnectionInvitations", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@unique([senderId, receiverId])
   @@map("connection_invitations")
@@ -2618,14 +2618,14 @@ model ConnectionInvitation {
 
 model Connection {
   id        String   @id @default(uuid())
-  userOneId String   @map("user_one_id")
-  userTwoId String   @map("user_two_id")
+  userOneId String?  @map("user_one_id")
+  userTwoId String?  @map("user_two_id")
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  userOne User @relation("UserConnectionsOne", fields: [userOneId], references: [id], onDelete: Cascade)
-  userTwo User @relation("UserConnectionsTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+  userOne User? @relation("UserConnectionsOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwo User? @relation("UserConnectionsTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
   @@unique([userOneId, userTwoId])
   @@map("connections")

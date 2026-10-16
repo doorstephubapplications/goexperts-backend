@@ -58,6 +58,20 @@ adminUserConnectionsRouter.get("/summary", async (req: Request, res: Response, n
   }
 });
 
+// Helper for formatting potentially orphaned user relations
+const formatUser = (user: any, fallbackId?: string | null) => {
+  if (user) return user;
+  return {
+    id: fallbackId || "unknown",
+    fullName: "Deleted User",
+    email: "—",
+    role: "UNKNOWN",
+    avatarUrl: null,
+    status: "INACTIVE",
+    createdAt: null
+  };
+};
+
 // =============================================================================
 // 2. GET /api/admin/user-connections
 // Server-side search, filtering, sorting, and pagination
@@ -191,8 +205,8 @@ adminUserConnectionsRouter.get("/", async (req: Request, res: Response, next: Ne
         recordId: `CN-${c.id.slice(0, 8).toUpperCase()}`,
         recordType: "CONNECTION" as const,
         status: c.status,
-        sender: c.userOne,
-        recipient: c.userTwo,
+        sender: formatUser(c.userOne, c.userOneId),
+        recipient: formatUser(c.userTwo, c.userTwoId),
         messagePreview: null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
@@ -233,8 +247,8 @@ adminUserConnectionsRouter.get("/", async (req: Request, res: Response, next: Ne
         recordId: `INV-${inv.id.slice(0, 8).toUpperCase()}`,
         recordType: "INVITATION" as const,
         status: inv.status,
-        sender: inv.sender,
-        recipient: inv.receiver,
+        sender: formatUser(inv.sender, inv.senderId),
+        recipient: formatUser(inv.receiver, inv.receiverId),
         messagePreview: inv.firstMessage,
         createdAt: inv.createdAt,
         updatedAt: inv.updatedAt,
@@ -294,8 +308,8 @@ adminUserConnectionsRouter.get("/", async (req: Request, res: Response, next: Ne
       recordId: `CN-${c.id.slice(0, 8).toUpperCase()}`,
       recordType: "CONNECTION" as const,
       status: c.status,
-      sender: c.userOne,
-      recipient: c.userTwo,
+      sender: formatUser(c.userOne, c.userOneId),
+      recipient: formatUser(c.userTwo, c.userTwoId),
       messagePreview: null,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
@@ -308,8 +322,8 @@ adminUserConnectionsRouter.get("/", async (req: Request, res: Response, next: Ne
       recordId: `INV-${inv.id.slice(0, 8).toUpperCase()}`,
       recordType: "INVITATION" as const,
       status: inv.status,
-      sender: inv.sender,
-      recipient: inv.receiver,
+      sender: formatUser(inv.sender, inv.senderId),
+      recipient: formatUser(inv.receiver, inv.receiverId),
       messagePreview: inv.firstMessage,
       createdAt: inv.createdAt,
       updatedAt: inv.updatedAt,
@@ -391,26 +405,31 @@ adminUserConnectionsRouter.get("/:recordType/:id", async (req: Request, res: Res
       }
 
       // Check linked conversation
-      const conversation = await prisma.conversation.findFirst({
-        where: {
-          OR: [
-            { userA: conn.userOneId, userB: conn.userTwoId },
-            { userA: conn.userTwoId, userB: conn.userOneId }
-          ]
-        },
-        select: { id: true, status: true, updatedAt: true }
-      });
+      let conversation = null;
+      if (conn.userOneId && conn.userTwoId) {
+        conversation = await prisma.conversation.findFirst({
+          where: {
+            OR: [
+              { userA: conn.userOneId, userB: conn.userTwoId },
+              { userA: conn.userTwoId, userB: conn.userOneId }
+            ]
+          },
+          select: { id: true, status: true, updatedAt: true }
+        });
+      }
 
       // Check historical invitation
-      const [u1, u2] = [conn.userOneId, conn.userTwoId].sort();
-      const invitation = await prisma.connectionInvitation.findFirst({
-        where: {
-          OR: [
-            { senderId: conn.userOneId, receiverId: conn.userTwoId },
-            { senderId: conn.userTwoId, receiverId: conn.userOneId }
-          ]
-        }
-      });
+      let invitation = null;
+      if (conn.userOneId && conn.userTwoId) {
+        invitation = await prisma.connectionInvitation.findFirst({
+          where: {
+            OR: [
+              { senderId: conn.userOneId, receiverId: conn.userTwoId },
+              { senderId: conn.userTwoId, receiverId: conn.userOneId }
+            ]
+          }
+        });
+      }
 
       return res.json({
         success: true,
@@ -421,8 +440,8 @@ adminUserConnectionsRouter.get("/:recordType/:id", async (req: Request, res: Res
           status: conn.status,
           createdAt: conn.createdAt,
           updatedAt: conn.updatedAt,
-          sender: conn.userOne,
-          recipient: conn.userTwo,
+          sender: formatUser(conn.userOne, conn.userOneId),
+          recipient: formatUser(conn.userTwo, conn.userTwoId),
           invitation: invitation ? {
             id: invitation.id,
             recordId: `INV-${invitation.id.slice(0, 8).toUpperCase()}`,
@@ -475,20 +494,26 @@ adminUserConnectionsRouter.get("/:recordType/:id", async (req: Request, res: Res
     }
 
     // Check canonical connection if accepted
-    const [u1, u2] = [inv.senderId, inv.receiverId].sort();
-    const canonicalConnection = await prisma.connection.findUnique({
-      where: { userOneId_userTwoId: { userOneId: u1, userTwoId: u2 } }
-    });
+    let canonicalConnection = null;
+    if (inv.senderId && inv.receiverId) {
+      const [u1, u2] = [inv.senderId, inv.receiverId].sort();
+      canonicalConnection = await prisma.connection.findUnique({
+        where: { userOneId_userTwoId: { userOneId: u1, userTwoId: u2 } }
+      });
+    }
 
-    const conversation = await prisma.conversation.findFirst({
-      where: {
-        OR: [
-          { userA: inv.senderId, userB: inv.receiverId },
-          { userA: inv.receiverId, userB: inv.senderId }
-        ]
-      },
-      select: { id: true, status: true, updatedAt: true }
-    });
+    let conversation = null;
+    if (inv.senderId && inv.receiverId) {
+      conversation = await prisma.conversation.findFirst({
+        where: {
+          OR: [
+            { userA: inv.senderId, userB: inv.receiverId },
+            { userA: inv.receiverId, userB: inv.senderId }
+          ]
+        },
+        select: { id: true, status: true, updatedAt: true }
+      });
+    }
 
     return res.json({
       success: true,
@@ -502,8 +527,8 @@ adminUserConnectionsRouter.get("/:recordType/:id", async (req: Request, res: Res
         updatedAt: inv.updatedAt,
         acceptedAt: inv.acceptedAt,
         rejectedAt: inv.rejectedAt,
-        sender: inv.sender,
-        recipient: inv.receiver,
+        sender: formatUser(inv.sender, inv.senderId),
+        recipient: formatUser(inv.receiver, inv.receiverId),
         canonicalConnection: canonicalConnection ? {
           id: canonicalConnection.id,
           recordId: `CN-${canonicalConnection.id.slice(0, 8).toUpperCase()}`,
@@ -559,8 +584,8 @@ adminUserConnectionsRouter.post("/selection/resolve", async (req: Request, res: 
         recordId: `CN-${c.id.slice(0, 8).toUpperCase()}`,
         recordType: "CONNECTION" as const,
         status: c.status,
-        sender: c.userOne,
-        recipient: c.userTwo,
+        sender: formatUser(c.userOne, c.userOneId),
+        recipient: formatUser(c.userTwo, c.userTwoId),
         createdAt: c.createdAt
       })),
       ...invitations.map(i => ({
@@ -568,8 +593,8 @@ adminUserConnectionsRouter.post("/selection/resolve", async (req: Request, res: 
         recordId: `INV-${i.id.slice(0, 8).toUpperCase()}`,
         recordType: "INVITATION" as const,
         status: i.status,
-        sender: i.sender,
-        recipient: i.receiver,
+        sender: formatUser(i.sender, i.senderId),
+        recipient: formatUser(i.receiver, i.receiverId),
         createdAt: i.createdAt
       }))
     ];
