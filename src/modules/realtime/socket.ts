@@ -35,7 +35,10 @@ function extractToken(socket: Socket): string | null {
 export function initSocket(httpServer: HttpServer): Server {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGIN || env.FRONTEND_URL || "*",
+      origin: (requestOrigin, callback) => {
+        // Dynamically reflect requesting origin to allow admin, website, and local dev with credentials
+        callback(null, requestOrigin || true);
+      },
       methods: ["GET", "POST"],
       credentials: true,
     },
