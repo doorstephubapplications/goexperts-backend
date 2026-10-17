@@ -2,17 +2,17 @@ import { prisma } from "../../config/database.js";
 import { toTenDigitPhone } from "../../common/helpers/phone.js";
 import { logActivityEvent } from "../../services/activity/activity.service.js";
 import { decryptPassword } from "../../utils/crypto.util.js";
-function money(n, currency = "USD") {
+function money(n, currency = "INR") {
     const value = Number.isFinite(n) ? n : 0;
     try {
-        return new Intl.NumberFormat("en-US", {
+        return new Intl.NumberFormat("en-IN", {
             style: "currency",
-            currency: currency === "INR" ? "INR" : "USD",
+            currency: currency === "USD" ? "USD" : "INR",
             maximumFractionDigits: 0,
         }).format(value);
     }
     catch {
-        return `$${Math.round(value).toLocaleString("en-US")}`;
+        return `\u20B9${Math.round(value).toLocaleString("en-IN")}`;
     }
 }
 function pct(part, total) {
@@ -501,7 +501,7 @@ export const getFreelancerDashboard = async (req, res, next) => {
         }
         catch (e) { }
         const balance = Number(user.wallet?.balance ?? 0);
-        const currency = user.wallet?.currency || "USD";
+        const currency = user.wallet?.currency || "INR";
         const totalEarnings = Number(walletCredits._sum.amount ?? 0);
         const tasksDueToday = tasksAssigned.filter((t) => isDueToday(t.dueDate));
         const highPriorityToday = tasksDueToday.filter((t) => ["high", "urgent"].includes(String(t.priority || "").toLowerCase())).length;
@@ -1050,7 +1050,7 @@ export const getFreelancerProfile = async (req, res, next) => {
                 country: user.country || "",
                 location,
                 availability: profile?.availability || (user.status === "active" ? "Available for work" : "Unavailable"),
-                currency: profile?.currency || "USD",
+                currency: profile?.currency || "INR",
                 monthlyRate: profile?.monthlyRetainer ?? null,
                 workingHours: profile?.workingHours || "",
                 responseTime: profile?.responseTime || "",
