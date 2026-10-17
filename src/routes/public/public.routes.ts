@@ -1548,11 +1548,20 @@ router.get("/projects", authenticateOptional, async (req: any, res: Response, ne
       search: req.query.search,
     });
     const category = typeof req.query.category === "string" ? req.query.category : undefined;
+    const categoryId = typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
+    const creatorRole = typeof req.query.creatorRole === "string" ? req.query.creatorRole : (typeof req.query.role === "string" ? req.query.role : undefined);
+    const minBudget = req.query.minBudget ? Number(req.query.minBudget) : undefined;
+    const maxBudget = req.query.maxBudget ? Number(req.query.maxBudget) : undefined;
+
     let { rows, total } = await listPublicProjects({
       page: body.page,
       pageSize: body.pageSize,
       search: body.search,
       category,
+      categoryId,
+      creatorRole,
+      minBudget,
+      maxBudget,
       excludeClientId: req.user?.id,
     });
 
@@ -1598,12 +1607,22 @@ router.post("/projects", authenticateOptional, async (req: any, res: Response, n
         ? req.body.categoryId
         : undefined;
 
+    const creatorRole =
+      typeof req.body?.creatorRole === "string"
+        ? req.body.creatorRole
+        : (typeof req.body?.role === "string" ? req.body.role : undefined);
+    const minBudget = req.body?.minBudget ? Number(req.body.minBudget) : undefined;
+    const maxBudget = req.body?.maxBudget ? Number(req.body.maxBudget) : undefined;
+
     let { rows, total } = await listPublicProjects({
       page: body.page,
       pageSize: body.pageSize,
       search: body.search,
       category,
       categoryId,
+      creatorRole,
+      minBudget,
+      maxBudget,
       excludeClientId: req.user?.id,
       excludeRole: req.query.excludeRole || req.body.excludeRole,
     });

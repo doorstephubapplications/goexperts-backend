@@ -19,6 +19,9 @@ export async function listPublicProjects(options?: {
   categoryId?: string;
   excludeClientId?: string;
   excludeRole?: string;
+  creatorRole?: string;
+  minBudget?: number;
+  maxBudget?: number;
 }) {
   try {
     const page = options?.page ?? 1;
@@ -43,6 +46,37 @@ export async function listPublicProjects(options?: {
       client: { in: activeClientIds },
     };
 
+    if (options?.excludeClientId) {
+      where.AND = where.AND || [];
+      where.AND.push({
+        client: { not: options.excludeClientId },
+      });
+      where.AND.push({
+        OR: [
+          { freelancer: null },
+          { freelancer: { not: options.excludeClientId } },
+        ],
+      });
+    }
+
+    if (options?.creatorRole) {
+      const targetRole = String(options.creatorRole).trim().toLowerCase();
+      const roleUsers = await prisma.user.findMany({
+        where: { role: targetRole, status: "active", deletedAt: null },
+        select: { id: true },
+      }).catch(() => []);
+      const roleUserIds = roleUsers.map((u) => u.id);
+
+      where.AND = where.AND || [];
+      where.AND.push({
+        OR: [
+          { creatorRole: targetRole },
+          { client: { in: roleUserIds } },
+          { freelancer: { in: roleUserIds } },
+        ],
+      });
+    }
+
     if (options?.excludeRole) {
       const excluded = String(options.excludeRole).trim().toLowerCase();
       // In Prisma/SQL, "not" excludes nulls. We want to include old projects where creatorRole is null.
@@ -53,6 +87,13 @@ export async function listPublicProjects(options?: {
           { creatorRole: null }
         ]
       });
+    }
+
+    if (options?.minBudget !== undefined && !isNaN(options.minBudget)) {
+      where.budget = { ...(where.budget || {}), gte: options.minBudget };
+    }
+    if (options?.maxBudget !== undefined && !isNaN(options.maxBudget)) {
+      where.budget = { ...(where.budget || {}), lte: options.maxBudget };
     }
 
     if (categoryName) where.category = categoryName;
