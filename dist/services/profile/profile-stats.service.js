@@ -199,7 +199,14 @@ export async function resolveProfileStats(userId, role) {
                 },
             });
             const totalCompletedProjects = Math.max(completedContractsCount, completedProjectsCount);
-            // 3. On-Time Delivery: derived from tasks or contracts if dates exist, otherwise unavailable
+            // 4. Connections count
+            const connectionsCount = await prisma.connection.count({
+                where: {
+                    OR: [{ userOneId: userId }, { userTwoId: userId }],
+                    status: 'ACTIVE',
+                },
+            });
+            // 5. On-Time Delivery: derived from tasks or contracts if dates exist, otherwise unavailable
             return {
                 role: 'freelancer',
                 metrics: {
@@ -227,6 +234,12 @@ export async function resolveProfileStats(userId, role) {
                         value: null,
                         available: false,
                         icon: 'clock',
+                    },
+                    connections: {
+                        label: 'Connections',
+                        value: connectionsCount,
+                        available: true,
+                        icon: 'users',
                     },
                 },
             };

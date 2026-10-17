@@ -119,6 +119,7 @@ router.use("/v1/tasks", tasksRoutes);
 
 // Shared Messages routes (real-time chat API for all roles)
 router.use("/messages", messagesRoutes);
+router.use("/v1/messages", messagesRoutes);
 router.use("/connections", connectionsRoutes);
 router.use("/network", connectionsRoutes);
 router.use("/v1/connections", connectionsRoutes);

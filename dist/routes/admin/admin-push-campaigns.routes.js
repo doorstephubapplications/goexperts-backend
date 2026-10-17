@@ -1,24 +1,40 @@
 import { Router } from "express";
 import { prisma } from "../../config/database.js";
-import { dispatchCampaign, executeScheduledSlot } from "../../services/notifications/push-campaign-engine.service.js";
+import { dispatchCampaign, executeScheduledSlot, calculateEligibleAudience, DEFAULT_WEEKLY_SCHEDULES } from "../../services/notifications/push-campaign-engine.service.js";
 import { seedPushCampaigns } from "../../services/notifications/seed-push-campaigns.js";
+import { getFestivalOccasions, createFestivalOccasion, updateFestivalOccasion, deleteFestivalOccasion, seedFestivalCalendar, findActiveOccasionsForDate } from "../../services/notifications/festival-campaign.service.js";
+import { normalizeTargetRole, normalizeCampaignType, validateCampaignPayload, buildNotificationPreview } from "../../services/notifications/push-campaign-validator.js";
 export const adminPushCampaignsRouter = Router();
 // ==========================================
 // 1. GET ALL CAMPAIGNS (WITH STATS & FILTERS)
 // ==========================================
 adminPushCampaignsRouter.get("/", async (req, res, next) => {
     try {
-        const { role, status, category, search, page = "1", sortBy = "createdAt", sortOrder = "desc", startDate, endDate } = req.query;
+        const { role, status, category, campaignType, type, search, page = "1", sortBy = "createdAt", sortOrder = "desc", startDate, endDate } = req.query;
         const pageSizeParam = req.query.pageSize || req.query.limit || "10";
         const where = { deletedAt: null };
         if (role && role !== "ALL") {
-            where.targetRole = String(role).toUpperCase();
+            const normalized = normalizeTargetRole(String(role));
+            if (normalized !== "ALL") {
+                where.targetRole = normalized;
+            }
         }
         if (status && status !== "ALL") {
-            where.status = String(status).toUpperCase();
+            const s = String(status).toUpperCase();
+            where.status = s === "INACTIVE" ? "PAUSED" : s;
         }
         if (category && category !== "ALL") {
             where.category = String(category);
+        }
+        const resolvedType = campaignType || type;
+        if (resolvedType && resolvedType !== "ALL") {
+            const cleanType = normalizeCampaignType(String(resolvedType));
+            if (cleanType === "FESTIVAL") {
+                where.category = { contains: "Festival" };
+            }
+            else if (cleanType === "ANNOUNCEMENT") {
+                where.category = { contains: "Announcement" };
+            }
         }
         if (search && String(search).trim()) {
             const q = String(search).trim();
@@ -94,6 +110,11 @@ adminPushCampaignsRouter.get("/", async (req, res, next) => {
         });
         const totalCampaigns = await prisma.pushCampaign.count({ where: { deletedAt: null } });
         const totalPages = Math.max(1, Math.ceil(total / take));
+        const enrichedRows = rows.map((r) => ({
+            ...r,
+            name: r.name || r.title,
+            campaignType: r.campaignType || (r.category === "Festival / Observance" ? "FESTIVAL" : r.category === "Announcement" ? "ANNOUNCEMENT" : "WEEKLY_SCHEDULED")
+        }));
         const statsObj = {
             total: totalCampaigns,
             active: statsActive,
@@ -106,7 +127,7 @@ adminPushCampaignsRouter.get("/", async (req, res, next) => {
         res.json({
             success: true,
             data: {
-                items: rows,
+                items: enrichedRows,
                 pagination: {
                     page: pageNum,
                     pageSize: take,
@@ -117,7 +138,7 @@ adminPushCampaignsRouter.get("/", async (req, res, next) => {
                 },
                 stats: statsObj
             },
-            rows,
+            rows: enrichedRows,
             total,
             page: pageNum,
             pageSize: take,
@@ -130,13 +151,171 @@ adminPushCampaignsRouter.get("/", async (req, res, next) => {
     }
 });
 // ==========================================
-// 2. SCHEDULE SETTINGS (3x DAILY DISPATCH ENGINE)
+// 1B. AUDIENCE CALCULATION ENDPOINT
+// ==========================================
+adminPushCampaignsRouter.get("/audience/calculate", async (req, res, next) => {
+    try {
+        const { role } = req.query;
+        const audience = await calculateEligibleAudience(role);
+        res.json({ success: true, data: audience });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+// ==========================================
+// 1C. NOTIFICATION PREVIEW ENDPOINT
+// ==========================================
+adminPushCampaignsRouter.post("/preview", async (req, res, next) => {
+    try {
+        const { title, description, message, imageUrl, deepLink, targetRole, role, category, offer } = req.body;
+        const preview = buildNotificationPreview({
+            title: title || "Notification Title Preview",
+            description: description || message || "Notification message content preview...",
+            imageUrl,
+            deepLink,
+            targetRole: targetRole || role,
+            category,
+            offer
+        });
+        res.json({ success: true, data: preview });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+// ==========================================
+// 1D. FESTIVAL & OBSERVANCE CAMPAIGN CALENDAR
+// ==========================================
+adminPushCampaignsRouter.get("/festivals", async (req, res, next) => {
+    try {
+        const { category, search } = req.query;
+        let list = await getFestivalOccasions();
+        if (category && category !== "ALL") {
+            list = list.filter((o) => o.category === String(category));
+        }
+        if (search && String(search).trim()) {
+            const q = String(search).trim().toLowerCase();
+            list = list.filter((o) => o.name.toLowerCase().includes(q) || o.title.toLowerCase().includes(q));
+        }
+        const todayActive = await findActiveOccasionsForDate();
+        const todayIds = new Set(todayActive.map((o) => o.id));
+        const enriched = list.map((occ) => ({
+            ...occ,
+            isToday: todayIds.has(occ.id)
+        }));
+        res.json({ success: true, data: enriched, total: enriched.length });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+adminPushCampaignsRouter.post("/festivals", async (req, res, next) => {
+    try {
+        const created = await createFestivalOccasion(req.body);
+        res.status(201).json({ success: true, message: "Festival occasion created successfully", data: created });
+    }
+    catch (err) {
+        res.status(400).json({ success: false, message: err.message || "Failed to create festival occasion" });
+    }
+});
+adminPushCampaignsRouter.post("/festivals/seed", async (req, res, next) => {
+    try {
+        const { overwrite = false } = req.body;
+        const result = await seedFestivalCalendar(Boolean(overwrite));
+        res.json({ success: true, message: `Festival calendar seeded with ${result.count} approved occasions.`, data: result });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+adminPushCampaignsRouter.get("/festivals/:id", async (req, res, next) => {
+    try {
+        const list = await getFestivalOccasions();
+        const item = list.find((o) => o.id === req.params.id);
+        if (!item) {
+            return res.status(404).json({ success: false, message: "Festival occasion not found" });
+        }
+        res.json({ success: true, data: item });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+adminPushCampaignsRouter.put("/festivals/:id", async (req, res, next) => {
+    try {
+        const updated = await updateFestivalOccasion(req.params.id, req.body);
+        res.json({ success: true, message: "Festival occasion updated successfully", data: updated });
+    }
+    catch (err) {
+        res.status(400).json({ success: false, message: err.message || "Failed to update festival occasion" });
+    }
+});
+adminPushCampaignsRouter.delete("/festivals/:id", async (req, res, next) => {
+    try {
+        const deleted = await deleteFestivalOccasion(req.params.id);
+        if (!deleted) {
+            return res.status(404).json({ success: false, message: "Festival occasion not found" });
+        }
+        res.json({ success: true, message: "Festival occasion deleted successfully" });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+adminPushCampaignsRouter.post("/festivals/:id/trigger", async (req, res, next) => {
+    try {
+        const list = await getFestivalOccasions();
+        const item = list.find((o) => o.id === req.params.id);
+        if (!item) {
+            return res.status(404).json({ success: false, message: "Festival occasion not found" });
+        }
+        const { dispatchDirectCampaign } = await import("../../services/notifications/push-campaign-engine.service.js");
+        const result = await dispatchDirectCampaign({
+            campaignName: `[Manual Trigger] ${item.name}`,
+            title: item.title,
+            description: item.description,
+            imageUrl: item.imageUrl,
+            targetRole: item.targetRole,
+            category: "Festival / Observance",
+            offer: item.offer || null,
+            deepLink: item.deepLink || "/dashboard",
+            slotName: `MANUAL_FESTIVAL_${item.id}`,
+            isFestival: true
+        });
+        res.json({ success: true, message: `Festival campaign '${item.name}' dispatched successfully`, result });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: err.message || "Failed to dispatch festival occasion" });
+    }
+});
+// ==========================================
+// 2. SCHEDULE SETTINGS (AUTOMATED WEEKLY ENGINE)
 // ==========================================
 adminPushCampaignsRouter.get("/schedules", async (req, res, next) => {
     try {
-        const schedules = await prisma.pushScheduleSetting.findMany({
+        let schedules = await prisma.pushScheduleSetting.findMany({
             orderBy: { slotKey: "asc" }
         });
+        if (schedules.length === 0) {
+            // Seed default weekly schedules if empty in DB
+            const seeded = [];
+            for (const s of DEFAULT_WEEKLY_SCHEDULES) {
+                const item = await prisma.pushScheduleSetting.upsert({
+                    where: { slotKey: s.slotKey },
+                    update: {},
+                    create: {
+                        slotKey: s.slotKey,
+                        label: s.label,
+                        time: s.time,
+                        isEnabled: s.isEnabled,
+                        targetRole: s.targetRole
+                    }
+                }).catch(() => s);
+                seeded.push(item);
+            }
+            schedules = seeded;
+        }
         res.json({ success: true, data: schedules });
     }
     catch (err) {
@@ -163,7 +342,7 @@ adminPushCampaignsRouter.put("/schedules", async (req, res, next) => {
                 },
                 create: {
                     slotKey: item.slotKey,
-                    time: item.time || "09:30",
+                    time: item.time || "09:00",
                     label: item.label || "Daily Dispatch",
                     isEnabled: item.isEnabled !== false,
                     targetRole: item.targetRole || "ALL"
@@ -180,7 +359,7 @@ adminPushCampaignsRouter.put("/schedules", async (req, res, next) => {
 adminPushCampaignsRouter.post("/schedules/:slotKey/trigger", async (req, res, next) => {
     try {
         const { slotKey } = req.params;
-        const result = await executeScheduledSlot(slotKey);
+        const result = await executeScheduledSlot(slotKey, true); // force dispatch
         res.json({ success: true, message: `Slot ${slotKey} triggered successfully`, result });
     }
     catch (err) {
@@ -805,7 +984,15 @@ adminPushCampaignsRouter.get("/:id", async (req, res, next) => {
         if (!campaign) {
             return res.status(404).json({ success: false, message: "Campaign not found" });
         }
-        res.json({ success: true, data: campaign });
+        // Attach calculated eligible audience for this campaign's target role
+        const audience = await calculateEligibleAudience(campaign.targetRole).catch(() => null);
+        const responseData = {
+            ...campaign,
+            name: campaign.name || campaign.title,
+            campaignType: campaign.campaignType || (campaign.category === "Festival / Observance" ? "FESTIVAL" : campaign.category === "Announcement" ? "ANNOUNCEMENT" : "WEEKLY_SCHEDULED"),
+            eligibleAudience: audience
+        };
+        res.json({ success: true, data: responseData });
     }
     catch (err) {
         next(err);
@@ -816,25 +1003,35 @@ adminPushCampaignsRouter.get("/:id", async (req, res, next) => {
 // ==========================================
 adminPushCampaignsRouter.post("/", async (req, res, next) => {
     try {
-        const { title, description, imageUrl, targetRole, category, offer, deepLink, status = "ACTIVE", scheduleSlot = "SLOT_1", customScheduleAt } = req.body;
-        if (!title || !description || !targetRole) {
-            return res.status(400).json({ success: false, message: "title, description, and targetRole are required" });
+        const validation = validateCampaignPayload(req.body);
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: validation.errors[0],
+                errors: validation.errors
+            });
         }
+        const { name, title, description, imageUrl, targetRole, category, offer, deepLink, status, scheduleSlot, customScheduleAt } = validation.sanitized;
         const campaign = await prisma.pushCampaign.create({
             data: {
                 title,
                 description,
                 imageUrl: imageUrl || null,
-                targetRole: String(targetRole).toUpperCase(),
+                targetRole,
                 category: category || "General",
                 offer: offer || null,
                 deepLink: deepLink || "/dashboard",
-                status: String(status).toUpperCase(),
+                status,
                 scheduleSlot,
                 customScheduleAt: customScheduleAt ? new Date(customScheduleAt) : null
             }
         });
-        res.status(201).json({ success: true, message: "Campaign created successfully", data: campaign });
+        const responseData = {
+            ...campaign,
+            name,
+            campaignType: validation.sanitized.campaignType
+        };
+        res.status(201).json({ success: true, message: "Campaign created successfully", data: responseData });
     }
     catch (err) {
         next(err);
@@ -890,29 +1087,43 @@ adminPushCampaignsRouter.delete("/categories/:name", async (req, res, next) => {
 // ==========================================
 adminPushCampaignsRouter.put("/:id", async (req, res, next) => {
     try {
-        const { title, description, imageUrl, targetRole, category, offer, deepLink, status, scheduleSlot, customScheduleAt } = req.body;
         const existing = await prisma.pushCampaign.findFirst({
             where: { id: req.params.id, deletedAt: null }
         });
         if (!existing) {
             return res.status(404).json({ success: false, message: "Campaign not found" });
         }
+        const merged = { ...existing, ...req.body };
+        const validation = validateCampaignPayload(merged);
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: validation.errors[0],
+                errors: validation.errors
+            });
+        }
+        const { name, title, description, imageUrl, targetRole, category, offer, deepLink, status, scheduleSlot, customScheduleAt } = validation.sanitized;
         const updated = await prisma.pushCampaign.update({
             where: { id: req.params.id },
             data: {
-                ...(title && { title }),
-                ...(description && { description }),
-                ...(imageUrl !== undefined && { imageUrl }),
-                ...(targetRole && { targetRole: String(targetRole).toUpperCase() }),
-                ...(category && { category }),
-                ...(offer !== undefined && { offer }),
-                ...(deepLink !== undefined && { deepLink }),
-                ...(status && { status: String(status).toUpperCase() }),
-                ...(scheduleSlot && { scheduleSlot }),
-                ...(customScheduleAt !== undefined && { customScheduleAt: customScheduleAt ? new Date(customScheduleAt) : null })
+                title,
+                description,
+                imageUrl: imageUrl !== undefined ? imageUrl : existing.imageUrl,
+                targetRole,
+                category,
+                offer,
+                deepLink,
+                status,
+                scheduleSlot,
+                customScheduleAt: customScheduleAt ? new Date(customScheduleAt) : null
             }
         });
-        res.json({ success: true, message: "Campaign updated successfully", data: updated });
+        const responseData = {
+            ...updated,
+            name,
+            campaignType: validation.sanitized.campaignType
+        };
+        res.json({ success: true, message: "Campaign updated successfully", data: responseData });
     }
     catch (err) {
         next(err);
@@ -930,14 +1141,22 @@ adminPushCampaignsRouter.patch("/:id/status", async (req, res, next) => {
         if (!existing) {
             return res.status(404).json({ success: false, message: "Campaign not found" });
         }
-        const newStatus = status
-            ? String(status).toUpperCase()
-            : existing.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+        let newStatus = "ACTIVE";
+        if (status) {
+            const s = String(status).toUpperCase();
+            newStatus = s === "INACTIVE" || s === "PAUSED" ? "PAUSED" : "ACTIVE";
+        }
+        else {
+            newStatus = existing.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+        }
         const updated = await prisma.pushCampaign.update({
             where: { id: req.params.id },
             data: { status: newStatus }
         });
-        res.json({ success: true, message: `Campaign status changed to ${newStatus}`, data: updated });
+        const message = newStatus === "ACTIVE"
+            ? "Campaign activated successfully. It will participate in upcoming future scheduled occurrences (historical missed slots are not sent)."
+            : "Campaign deactivated. It has been excluded from future scheduled sends (past delivery history preserved).";
+        res.json({ success: true, message, data: updated });
     }
     catch (err) {
         next(err);

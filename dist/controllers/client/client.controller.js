@@ -1817,9 +1817,11 @@ export const addClientTeamMember = async (req, res, next) => {
                     fullName: name,
                     password: hashedPassword,
                     role: targetRole,
-                    status: isPreVerified ? "active" : "pending",
-                    isVerified: isPreVerified,
-                    verified: isPreVerified,
+                    status: "active",
+                    isVerified: true,
+                    verified: true,
+                    onboardingStatus: "COMPLETED",
+                    currentStep: "completed",
                 }
             });
         }
@@ -1828,7 +1830,10 @@ export const addClientTeamMember = async (req, res, next) => {
                 where: { id: existingUser.id },
                 data: {
                     ...(body.password ? { password: hashedPassword } : {}),
-                    ...(isPreVerified ? { status: "active", isVerified: true, verified: true } : {}),
+                    status: "active",
+                    isVerified: true,
+                    verified: true,
+                    onboardingStatus: "COMPLETED",
                     ...(!permittedDashboards.includes(existingUser.role) ? { role: targetRole } : {}),
                 }
             });
@@ -2594,6 +2599,8 @@ export const updateClientTeamMember = async (req, res, next) => {
                         status: "active",
                         isVerified: true,
                         verified: true,
+                        onboardingStatus: "COMPLETED",
+                        currentStep: "completed",
                     }
                 });
             }
@@ -2601,7 +2608,10 @@ export const updateClientTeamMember = async (req, res, next) => {
                 await prisma.user.update({
                     where: { id: userAcc.id },
                     data: {
-                        ...(isActivating ? { status: "active", isVerified: true, verified: true } : {}),
+                        status: "active",
+                        isVerified: true,
+                        verified: true,
+                        onboardingStatus: "COMPLETED",
                         ...(permittedDashboards && !permittedDashboards.includes(userAcc.role) ? { role: targetRole } : {})
                     }
                 });

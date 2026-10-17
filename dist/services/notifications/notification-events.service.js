@@ -246,6 +246,7 @@ export const emitNotification = async (payload) => {
                         contextId: payload.contextId,
                         actionUrl,
                         notificationId: notification.id,
+                        isCustomPush: true,
                         ...(payload.metadata || {}),
                     };
                     const pushSuccess = await sendPushNotification(user.id, payload.title, payload.message, pushPayload);

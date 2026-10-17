@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database.js";
 import { canCreateConversation } from "../../common/helpers/conversation-permissions.js";
 import { emitNotification } from "../../services/notifications/notification-events.service.js";
+import { getIo } from "../../socket/index.js";
 function requireUser(req, res) {
     if (!req.user?.id) {
         res.status(401).json({ success: false, message: "Unauthorized" });
@@ -13,12 +14,19 @@ export const listConversations = async (req, res, next) => {
         const userId = requireUser(req, res);
         if (!userId)
             return;
-        const { contextType, page = "1", pageSize = "100" } = req.query;
-        const pageNum = parseInt(page, 10) || 1;
-        const limit = parseInt(pageSize, 10) || 100;
-        const skip = (pageNum - 1) * limit;
+        const { contextType, page = "1", pageSize = "10", search = "", role = "ALL", participantRole, dateFrom, dateTo, status = "all", sortBy = "recent_desc" } = req.query;
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 10));
+        // 1. Fetch user's conversation states (for archiving, pinned, muted)
+        const states = await prisma.conversationState.findMany({
+            where: { userId }
+        });
+        const stateMap = new Map(states.map(s => [s.conversationId, s]));
+        const archivedConvIds = states.filter(s => s.isArchived).map(s => s.conversationId);
+        // 2. Base where clause
         const whereClause = {
             OR: [{ userA: userId }, { userB: userId }],
+            deletedAt: null,
         };
         // Admins can see all conversations
         if (req.user?.role?.includes("admin")) {
@@ -27,54 +35,188 @@ export const listConversations = async (req, res, next) => {
         if (contextType) {
             whereClause.contextType = String(contextType);
         }
-        const totalCount = await prisma.conversation.count({ where: whereClause });
+        // "Delete for Me" filter: exclude archived conversations by default unless status === 'archived'
+        if (status === 'archived') {
+            whereClause.id = { in: archivedConvIds };
+        }
+        else if (archivedConvIds.length > 0) {
+            whereClause.id = { notIn: archivedConvIds };
+        }
+        // Date range filter on updatedAt
+        if (dateFrom || dateTo) {
+            whereClause.updatedAt = {};
+            if (dateFrom) {
+                const dFrom = new Date(dateFrom);
+                dFrom.setHours(0, 0, 0, 0);
+                whereClause.updatedAt.gte = dFrom;
+            }
+            if (dateTo) {
+                const dTo = new Date(dateTo);
+                dTo.setHours(23, 59, 59, 999);
+                whereClause.updatedAt.lte = dTo;
+            }
+        }
+        // Status filter
+        if (status === 'unread') {
+            whereClause.unread = { gt: 0 };
+        }
+        else if (status === 'read') {
+            whereClause.unread = 0;
+        }
+        // Determine orderBy
+        let orderBy = { updatedAt: "desc" };
+        if (sortBy === "recent_asc") {
+            orderBy = { updatedAt: "asc" };
+        }
+        else if (sortBy === "name_asc") {
+            orderBy = { name: "asc" };
+        }
+        else if (sortBy === "name_desc") {
+            orderBy = { name: "desc" };
+        }
+        else if (sortBy === "unread") {
+            orderBy = [{ unread: "desc" }, { updatedAt: "desc" }];
+        }
+        // Fetch conversations
         const convs = await prisma.conversation.findMany({
             where: whereClause,
             include: {
                 project: { select: { id: true, title: true } },
             },
-            orderBy: { updatedAt: "desc" },
-            skip,
-            take: limit,
+            orderBy,
         });
-        const states = await prisma.conversationState.findMany({ where: { userId, conversationId: { in: convs.map(c => c.id) } } });
-        const stateMap = states.reduce((acc, s) => { acc[s.conversationId] = s; return acc; }, {});
-        const formatted = await Promise.all(convs.map(async (c) => {
-            const state = stateMap[c.id] || { isPinned: false, isMuted: false, isArchived: false };
+        // Batch fetch other users info
+        const otherUserIds = Array.from(new Set(convs.map(c => c.userA === userId ? c.userB : c.userA).filter(Boolean)));
+        const [otherUsers, myBlocks, theirBlocks, connectionInvites] = await Promise.all([
+            prisma.user.findMany({
+                where: { id: { in: otherUserIds } },
+                select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                    avatarUrl: true,
+                    role: true,
+                    city: true,
+                    country: true,
+                    lastLoginAt: true,
+                    freelancerProfile: { select: { titleHeadline: true, experience: true } },
+                    clientProfile: { select: { company: true, industry: true } },
+                    founderProfile: { select: { startupName: true, industry: true, founderRole: true } },
+                    investorProfile: { select: { firm: true, investorType: true } }
+                }
+            }),
+            prisma.blockedUser.findMany({
+                where: { blockerId: userId, blockedId: { in: otherUserIds } }
+            }),
+            prisma.blockedUser.findMany({
+                where: { blockerId: { in: otherUserIds }, blockedId: userId }
+            }),
+            prisma.connectionInvitation.findMany({
+                where: {
+                    OR: [
+                        { senderId: userId, receiverId: { in: otherUserIds } },
+                        { senderId: { in: otherUserIds }, receiverId: userId }
+                    ]
+                },
+                orderBy: { createdAt: 'desc' }
+            }).catch(() => [])
+        ]);
+        const otherUserMap = new Map(otherUsers.map(u => [u.id, u]));
+        const myBlockSet = new Set(myBlocks.map(b => b.blockedId));
+        const theirBlockSet = new Set(theirBlocks.map(b => b.blockerId));
+        const inviteMap = new Map();
+        for (const inv of connectionInvites) {
+            const pairKey1 = `${inv.senderId}_${inv.receiverId}`;
+            const pairKey2 = `${inv.receiverId}_${inv.senderId}`;
+            if (!inviteMap.has(pairKey1))
+                inviteMap.set(pairKey1, inv);
+            if (!inviteMap.has(pairKey2))
+                inviteMap.set(pairKey2, inv);
+        }
+        const io = getIo();
+        // Map and filter conversations
+        const activeRoleFilter = (participantRole || role || "ALL").toUpperCase();
+        const searchLower = search.trim().toLowerCase();
+        let formattedList = convs.map((c) => {
+            const state = stateMap.get(c.id) || { isPinned: false, isMuted: false, isArchived: false };
             const otherId = c.userA === userId ? c.userB : c.userA;
-            let otherUser = { fullName: "Unknown User", avatarUrl: null, headline: "User", isBlockedByMe: false, isBlockedByThem: false };
-            if (otherId) {
-                const [u, blockedByMe, blockedByThem, connectionInvitation] = await Promise.all([
-                    prisma.user.findUnique({ where: { id: otherId } }),
-                    prisma.blockedUser.findFirst({ where: { blockerId: userId, blockedId: otherId } }),
-                    prisma.blockedUser.findFirst({ where: { blockerId: otherId, blockedId: userId } }),
-                    prisma.connectionInvitation.findFirst({
-                        where: {
-                            OR: [
-                                { senderId: userId, receiverId: otherId },
-                                { senderId: otherId, receiverId: userId }
-                            ]
-                        },
-                        orderBy: { createdAt: 'desc' }
-                    }).catch(() => null)
-                ]);
-                if (u) {
-                    otherUser = {
-                        id: u.id,
-                        role: u.role,
-                        fullName: u.fullName || u.email || "Unknown",
-                        avatarUrl: u.avatarUrl,
-                        headline: u.role || "User",
-                        isBlockedByMe: !!blockedByMe,
-                        isBlockedByThem: !!blockedByThem,
-                        connectionStatus: connectionInvitation?.status || "NONE",
-                        connectionInvitationId: connectionInvitation?.id || null,
-                        iamSender: connectionInvitation?.senderId === userId
-                    };
+            const u = otherId ? otherUserMap.get(otherId) : null;
+            const isBlockedByMe = otherId ? myBlockSet.has(otherId) : false;
+            const isBlockedByThem = otherId ? theirBlockSet.has(otherId) : false;
+            const invitation = otherId ? inviteMap.get(`${userId}_${otherId}`) : null;
+            // Real-time online presence check from active socket connections
+            const isOnline = otherId && io ? ((io.sockets.adapter.rooms.get(otherId)?.size ?? 0) > 0) : !!c.online;
+            // Extract descriptor & location
+            let descriptor = u?.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1)) : "User";
+            let location = [u?.city, u?.country].filter(Boolean).join(", ") || "Remote";
+            let businessOrFirmName = null;
+            if (u?.freelancerProfile) {
+                if (u.freelancerProfile.titleHeadline)
+                    descriptor = `Freelancer • ${u.freelancerProfile.titleHeadline}`;
+                else
+                    descriptor = "Freelancer";
+            }
+            else if (u?.clientProfile) {
+                if (u.clientProfile.company) {
+                    businessOrFirmName = u.clientProfile.company;
+                    descriptor = `Client • ${u.clientProfile.company}`;
+                }
+                else if (u.clientProfile.industry) {
+                    descriptor = `Client • ${u.clientProfile.industry}`;
+                }
+                else {
+                    descriptor = "Client";
                 }
             }
-            let convTitle = (c.name && c.name !== "Conversation") ? c.name : otherUser.fullName;
-            // if (c.contextType === "PROJECT" && c.project) convTitle = c.project.title; // Keep client name instead
+            else if (u?.founderProfile) {
+                if (u.founderProfile.startupName) {
+                    businessOrFirmName = u.founderProfile.startupName;
+                    descriptor = `Founder • ${u.founderProfile.startupName}`;
+                }
+                else {
+                    descriptor = "Founder";
+                }
+            }
+            else if (u?.investorProfile) {
+                if (u.investorProfile.firm) {
+                    businessOrFirmName = u.investorProfile.firm;
+                    descriptor = `Investor • ${u.investorProfile.firm}`;
+                }
+                else {
+                    descriptor = "Investor";
+                }
+            }
+            let profileUrl = "/dashboard/profile";
+            const rLower = (u?.role || "").toLowerCase();
+            if (rLower === "client" || rLower === "business")
+                profileUrl = `/clients/${u?.id || otherId}`;
+            else if (rLower === "freelancer")
+                profileUrl = `/freelancers/${u?.id || otherId}`;
+            else if (rLower === "founder")
+                profileUrl = `/founders/${u?.id || otherId}`;
+            else if (rLower === "investor")
+                profileUrl = `/investors/${u?.id || otherId}`;
+            const displayName = u?.fullName?.trim() || businessOrFirmName || (u?.email ? u.email.split("@")[0] : (c.name && c.name !== "Conversation" ? c.name : "Professional"));
+            const participant = {
+                id: u?.id || otherId,
+                displayName,
+                fullName: displayName,
+                role: u?.role || "user",
+                avatarUrl: u?.avatarUrl || null,
+                professionalHeadline: descriptor,
+                businessOrFirmName,
+                location,
+                publicProfileUrl: profileUrl,
+                onlineStatus: isOnline ? "ONLINE" : "OFFLINE",
+                isOnline,
+                lastSeenAt: u?.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : null,
+                isBlockedByMe,
+                isBlockedByThem,
+                connectionStatus: invitation?.status || "NONE",
+                connectionInvitationId: invitation?.id || null,
+                iamSender: invitation?.senderId === userId
+            };
+            let convTitle = participant.displayName;
             if (c.contextType === "SUPPORT")
                 convTitle = `Support: ${c.name}`;
             return {
@@ -86,26 +228,78 @@ export const listConversations = async (req, res, next) => {
                 startupIdeaId: c.startupIdeaId,
                 supportTicketId: c.supportTicketId,
                 project: c.project,
-                role: otherUser.headline,
-                avatar: otherUser.avatarUrl,
+                role: participant.professionalHeadline,
+                avatar: participant.avatarUrl,
                 preview: c.msg || "No messages yet",
                 lastMessageAt: c.updatedAt,
                 unread: c.unread,
-                online: c.online,
+                online: isOnline,
                 status: c.status,
-                otherUser: otherUser,
+                participant,
+                otherUser: participant,
                 isPinned: state.isPinned,
                 isMuted: state.isMuted,
                 isArchived: state.isArchived,
             };
-        }));
+        });
+        // Filter by role chip if specified
+        if (activeRoleFilter && activeRoleFilter !== "ALL") {
+            formattedList = formattedList.filter(item => {
+                const uRole = (item.otherUser?.role || "").toUpperCase();
+                if (activeRoleFilter === "FREELANCERS" || activeRoleFilter === "FREELANCER") {
+                    return uRole.includes("FREELANCER");
+                }
+                if (activeRoleFilter === "CLIENTS" || activeRoleFilter === "CLIENT") {
+                    return uRole.includes("CLIENT") || uRole.includes("BUSINESS");
+                }
+                if (activeRoleFilter === "STARTUPS" || activeRoleFilter === "FOUNDERS" || activeRoleFilter === "FOUNDER") {
+                    return uRole.includes("FOUNDER") || uRole.includes("STARTUP");
+                }
+                if (activeRoleFilter === "INVESTORS" || activeRoleFilter === "INVESTOR") {
+                    return uRole.includes("INVESTOR");
+                }
+                return true;
+            });
+        }
+        // Additional status filters: online, offline, blocked
+        if (status === "online") {
+            formattedList = formattedList.filter(item => item.online);
+        }
+        else if (status === "offline") {
+            formattedList = formattedList.filter(item => !item.online);
+        }
+        else if (status === "blocked") {
+            formattedList = formattedList.filter(item => item.otherUser?.isBlockedByMe);
+        }
+        // Search filter across name, role descriptor, preview
+        if (searchLower) {
+            formattedList = formattedList.filter(item => {
+                const name = (item.name || "").toLowerCase();
+                const role = (item.role || "").toLowerCase();
+                const preview = (item.preview || "").toLowerCase();
+                const otherName = (item.otherUser?.fullName || "").toLowerCase();
+                return name.includes(searchLower) || role.includes(searchLower) || preview.includes(searchLower) || otherName.includes(searchLower);
+            });
+        }
+        const totalCount = formattedList.length;
+        const totalPages = Math.ceil(totalCount / limit) || 1;
+        const startIndex = (pageNum - 1) * limit;
+        const paginatedList = formattedList.slice(startIndex, startIndex + limit);
         res.json({
             success: true,
-            rows: formatted,
+            rows: paginatedList,
+            items: paginatedList,
             total: totalCount,
             page: pageNum,
             pageSize: limit,
-            totalPages: Math.ceil(totalCount / limit)
+            totalPages,
+            appliedFilters: {
+                role: activeRoleFilter,
+                search: searchLower,
+                status,
+                dateFrom,
+                dateTo
+            }
         });
     }
     catch (err) {
@@ -138,21 +332,143 @@ export const getConversationMessages = async (req, res, next) => {
         const totalCount = await prisma.message.count({ where: { conversationId: id } });
         const messages = await prisma.message.findMany({
             where: { conversationId: id },
+            include: {
+                reactions: true
+            },
             orderBy: { createdAt: "asc" },
             skip,
             take: limit,
         });
-        const formatted = messages.map(m => ({
-            id: m.id,
-            clientMessageId: m.clientMessageId,
-            senderId: m.senderId,
-            from: m.senderId === userId ? "me" : (m.from === "System" ? "system" : "them"),
-            text: m.text,
-            time: m.time,
-            createdAt: m.createdAt,
-            read: !!m.readAt,
-            attachmentUrl: m.attachmentUrl,
-        }));
+        const formatted = messages.map(m => {
+            const isDeletedForMe = m.reactions?.some((r) => r.userId === userId && r.reaction === "DELETED_FOR_ME");
+            if (isDeletedForMe)
+                return null;
+            const isStarred = m.reactions?.some((r) => r.userId === userId && r.reaction === "STAR");
+            const isPinned = m.reactions?.some((r) => r.reaction === "PIN");
+            return {
+                id: m.id,
+                clientMessageId: m.clientMessageId,
+                senderId: m.senderId,
+                from: m.senderId === userId ? "me" : (m.from === "System" ? "system" : "them"),
+                text: m.text,
+                time: m.time,
+                createdAt: m.createdAt,
+                read: !!m.readAt,
+                readAt: m.readAt,
+                deliveryStatus: m.deliveryStatus,
+                attachmentUrl: m.attachmentUrl,
+                isStarred: !!isStarred,
+                isPinned: !!isPinned,
+                isDeletedForEveryone: !!m.deletedAt
+            };
+        }).filter(Boolean);
+        // Resolve the other participant accurately
+        const otherId = conv.userA === userId ? conv.userB : conv.userA;
+        let participant = {
+            id: otherId,
+            displayName: "Professional",
+            role: "User",
+            avatarUrl: null,
+            professionalHeadline: "Marketplace Member",
+            businessOrFirmName: null,
+            publicProfileUrl: "/dashboard/profile",
+            onlineStatus: "OFFLINE",
+            lastSeenAt: null
+        };
+        if (otherId) {
+            const [u, blockedByMe, blockedByThem] = await Promise.all([
+                prisma.user.findUnique({
+                    where: { id: otherId },
+                    select: {
+                        id: true,
+                        fullName: true,
+                        email: true,
+                        avatarUrl: true,
+                        role: true,
+                        city: true,
+                        country: true,
+                        lastLoginAt: true,
+                        freelancerProfile: { select: { titleHeadline: true, experience: true } },
+                        clientProfile: { select: { company: true, industry: true } },
+                        founderProfile: { select: { startupName: true, industry: true, founderRole: true } },
+                        investorProfile: { select: { firm: true, investorType: true } }
+                    }
+                }),
+                prisma.blockedUser.findFirst({ where: { blockerId: userId, blockedId: otherId } }),
+                prisma.blockedUser.findFirst({ where: { blockerId: otherId, blockedId: userId } })
+            ]);
+            if (u) {
+                let descriptor = u.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1)) : "User";
+                let businessOrFirmName = null;
+                let location = [u.city, u.country].filter(Boolean).join(", ") || "Remote";
+                if (u.freelancerProfile) {
+                    if (u.freelancerProfile.titleHeadline)
+                        descriptor = `Freelancer • ${u.freelancerProfile.titleHeadline}`;
+                    else
+                        descriptor = "Freelancer";
+                }
+                else if (u.clientProfile) {
+                    if (u.clientProfile.company) {
+                        businessOrFirmName = u.clientProfile.company;
+                        descriptor = `Client • ${u.clientProfile.company}`;
+                    }
+                    else if (u.clientProfile.industry) {
+                        descriptor = `Client • ${u.clientProfile.industry}`;
+                    }
+                    else {
+                        descriptor = "Client";
+                    }
+                }
+                else if (u.founderProfile) {
+                    if (u.founderProfile.startupName) {
+                        businessOrFirmName = u.founderProfile.startupName;
+                        descriptor = `Founder • ${u.founderProfile.startupName}`;
+                    }
+                    else {
+                        descriptor = "Founder";
+                    }
+                }
+                else if (u.investorProfile) {
+                    if (u.investorProfile.firm) {
+                        businessOrFirmName = u.investorProfile.firm;
+                        descriptor = `Investor • ${u.investorProfile.firm}`;
+                    }
+                    else {
+                        descriptor = "Investor";
+                    }
+                }
+                const io = getIo();
+                const isOnline = io ? ((io.sockets.adapter.rooms.get(otherId)?.size ?? 0) > 0) : false;
+                let profileUrl = "/dashboard/profile";
+                const rLower = (u.role || "").toLowerCase();
+                if (rLower === "client" || rLower === "business")
+                    profileUrl = `/clients/${u.id}`;
+                else if (rLower === "freelancer")
+                    profileUrl = `/freelancers/${u.id}`;
+                else if (rLower === "founder")
+                    profileUrl = `/founders/${u.id}`;
+                else if (rLower === "investor")
+                    profileUrl = `/investors/${u.id}`;
+                participant = {
+                    id: u.id,
+                    displayName: u.fullName?.trim() || businessOrFirmName || (u.email ? u.email.split("@")[0] : "Professional"),
+                    role: u.role || "user",
+                    avatarUrl: u.avatarUrl,
+                    professionalHeadline: descriptor,
+                    businessOrFirmName,
+                    location,
+                    publicProfileUrl: profileUrl,
+                    onlineStatus: isOnline ? "ONLINE" : "OFFLINE",
+                    isOnline,
+                    lastSeenAt: u.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : null,
+                    isBlockedByMe: !!blockedByMe,
+                    isBlockedByThem: !!blockedByThem
+                };
+            }
+        }
+        const userState = await prisma.conversationState.findUnique({
+            where: { userId_conversationId: { userId, conversationId: id } }
+        });
         if (conv.userA === userId || conv.userB === userId) {
             await prisma.conversation.update({
                 where: { id },
@@ -168,11 +484,19 @@ export const getConversationMessages = async (req, res, next) => {
             totalPages: Math.ceil(totalCount / limit),
             conversation: {
                 id: conv.id,
+                name: participant.displayName,
+                avatar: participant.avatarUrl,
+                role: participant.professionalHeadline,
                 contextType: conv.contextType,
                 projectId: conv.projectId,
                 project: conv.project,
                 startupIdeaId: conv.startupIdeaId,
-                status: conv.status
+                status: conv.status,
+                participant,
+                otherUser: participant,
+                isMuted: !!userState?.isMuted,
+                isPinned: !!userState?.isPinned,
+                isArchived: !!userState?.isArchived
             }
         });
     }
@@ -594,6 +918,617 @@ export const rejectConnection = async (req, res, next) => {
             data: { status: "REJECTED", rejectedAt: new Date() }
         });
         res.json({ success: true, message: "Connection rejected" });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const deleteConversation = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        const conv = await prisma.conversation.findUnique({ where: { id } });
+        if (!conv)
+            return res.status(404).json({ success: false, message: "Conversation not found" });
+        if (conv.userA !== userId && conv.userB !== userId && !req.user?.role?.includes("admin")) {
+            return res.status(403).json({ success: false, message: "Access denied" });
+        }
+        // Set isArchived = true for this user ("Delete for Me" semantics)
+        await prisma.conversationState.upsert({
+            where: { userId_conversationId: { userId, conversationId: id } },
+            update: { isArchived: true },
+            create: { userId, conversationId: id, isArchived: true }
+        });
+        res.json({ success: true, message: "Conversation deleted for you" });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const bulkDeleteConversations = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { conversationIds } = req.body;
+        if (!Array.isArray(conversationIds) || conversationIds.length === 0) {
+            return res.status(400).json({ success: false, message: "conversationIds array is required" });
+        }
+        // Verify ownership of the conversations
+        const validConvs = await prisma.conversation.findMany({
+            where: {
+                id: { in: conversationIds },
+                OR: [{ userA: userId }, { userB: userId }]
+            },
+            select: { id: true }
+        });
+        const validIds = validConvs.map(c => c.id);
+        // Apply isArchived = true for each verified conversation
+        await Promise.all(validIds.map(convId => prisma.conversationState.upsert({
+            where: { userId_conversationId: { userId, conversationId: convId } },
+            update: { isArchived: true },
+            create: { userId, conversationId: convId, isArchived: true }
+        })));
+        res.json({
+            success: true,
+            message: `${validIds.length} conversations deleted for you`,
+            deletedCount: validIds.length,
+            deletedIds: validIds
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const getConversationAttachments = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        const conv = await prisma.conversation.findUnique({ where: { id } });
+        if (!conv)
+            return res.status(404).json({ success: false, message: "Conversation not found" });
+        if (conv.userA !== userId && conv.userB !== userId && !req.user?.role?.includes("admin")) {
+            return res.status(403).json({ success: false, message: "Access denied" });
+        }
+        const rawMessages = await prisma.message.findMany({
+            where: {
+                conversationId: id,
+                attachmentUrl: { not: null },
+            },
+            orderBy: { createdAt: "desc" },
+        });
+        const messagesWithAttachments = rawMessages.filter((m) => m.attachmentUrl && m.attachmentUrl.trim().length > 0);
+        const imageExts = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp"];
+        const formatted = messagesWithAttachments.map(m => {
+            const url = m.attachmentUrl || "";
+            const filename = (m.text && m.text.includes(".") && !m.text.includes(" "))
+                ? m.text
+                : (url.split("/").pop()?.split("?")[0] || "attachment");
+            const cleanUrl = url.split("?")[0].toLowerCase();
+            const ext = filename.lastIndexOf(".") !== -1 ? filename.substring(filename.lastIndexOf(".")).toLowerCase() : "";
+            const isImage = imageExts.some(e => cleanUrl.endsWith(e) || ext === e) || url.startsWith("data:image/");
+            return {
+                id: m.id,
+                url,
+                filename,
+                extension: ext.replace(".", "").toUpperCase() || (isImage ? "IMAGE" : "FILE"),
+                isImage,
+                createdAt: m.createdAt,
+                time: m.time,
+                senderId: m.senderId,
+                size: "Image"
+            };
+        });
+        const images = formatted.filter(f => f.isImage);
+        const documents = formatted.filter(f => !f.isImage);
+        res.json({
+            success: true,
+            all: formatted,
+            images,
+            documents,
+            totalCount: formatted.length
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const sendConversationMessage = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id: conversationId } = req.params;
+        const { text, attachmentUrl, clientMessageId, replyToId } = req.body;
+        if (!text && !attachmentUrl) {
+            return res.status(400).json({ success: false, message: "Message text or attachment is required" });
+        }
+        const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
+        if (!conv)
+            return res.status(404).json({ success: false, message: "Conversation not found" });
+        if (conv.userA !== userId && conv.userB !== userId && !req.user?.role?.includes("admin")) {
+            return res.status(403).json({ success: false, message: "Access denied" });
+        }
+        const recipientId = conv.userA === userId ? conv.userB : conv.userA;
+        // Check if blocked
+        if (recipientId) {
+            const isBlocked = await prisma.blockedUser.findFirst({
+                where: {
+                    OR: [
+                        { blockerId: userId, blockedId: recipientId },
+                        { blockerId: recipientId, blockedId: userId }
+                    ]
+                }
+            });
+            if (isBlocked) {
+                return res.status(403).json({ success: false, message: "Cannot send message. User is blocked." });
+            }
+        }
+        // Idempotency check
+        if (clientMessageId) {
+            const existing = await prisma.message.findFirst({
+                where: { clientMessageId, conversationId, senderId: userId }
+            });
+            if (existing) {
+                return res.json({ success: true, message: existing });
+            }
+        }
+        const message = await prisma.message.create({
+            data: {
+                clientMessageId,
+                conversationId,
+                senderId: userId,
+                from: userId,
+                text: text || "Sent an attachment",
+                attachmentUrl: attachmentUrl || null,
+                replyToId: replyToId || null,
+                time: new Date().toISOString(),
+            },
+            include: { replyTo: true }
+        });
+        await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { msg: text || "Attachment", updatedAt: new Date(), unread: { increment: 1 } }
+        });
+        // Unarchive for both participants on new message
+        if (recipientId) {
+            await prisma.conversationState.updateMany({
+                where: { conversationId, isArchived: true },
+                data: { isArchived: false }
+            });
+        }
+        // Broadcast real-time socket event
+        const io = getIo();
+        if (io) {
+            const payload = {
+                id: message.id,
+                clientMessageId: message.clientMessageId,
+                conversationId,
+                from: 'them',
+                senderId: userId,
+                text: message.text,
+                attachmentUrl: message.attachmentUrl,
+                replyToId: message.replyToId,
+                replyTo: message.replyTo,
+                time: message.time,
+                createdAt: message.createdAt,
+                read: false,
+                deliveryStatus: message.deliveryStatus,
+            };
+            io.to(`conversation:${conversationId}`).emit('message:new', payload);
+            if (recipientId) {
+                io.to(recipientId).emit('message:new', payload);
+            }
+        }
+        res.status(201).json({ success: true, message });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const getBlockStatus = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const targetId = req.params.id;
+        const [blockedByMe, blockedByThem] = await Promise.all([
+            prisma.blockedUser.findFirst({ where: { blockerId: userId, blockedId: targetId } }),
+            prisma.blockedUser.findFirst({ where: { blockerId: targetId, blockedId: userId } })
+        ]);
+        res.json({
+            success: true,
+            isBlockedByMe: !!blockedByMe,
+            isBlockedByThem: !!blockedByThem,
+            isBlocked: !!blockedByMe || !!blockedByThem
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const muteConversation = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        const { duration = "always" } = req.body;
+        const conv = await prisma.conversation.findUnique({ where: { id } });
+        if (!conv)
+            return res.status(404).json({ success: false, message: "Conversation not found" });
+        if (conv.userA !== userId && conv.userB !== userId && !req.user?.role?.includes("admin")) {
+            return res.status(403).json({ success: false, message: "Access denied" });
+        }
+        let mutedUntil = null;
+        const now = new Date();
+        if (duration === "8_hours") {
+            mutedUntil = new Date(now.getTime() + 8 * 3600 * 1000);
+        }
+        else if (duration === "1_week") {
+            mutedUntil = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
+        }
+        await prisma.conversationState.upsert({
+            where: { userId_conversationId: { userId, conversationId: id } },
+            update: { isMuted: true },
+            create: { userId, conversationId: id, isMuted: true }
+        });
+        try {
+            const pref = await prisma.notificationPreference.findUnique({ where: { userId } });
+            let currentPrefs = {};
+            try {
+                if (pref?.preferences)
+                    currentPrefs = JSON.parse(pref.preferences);
+            }
+            catch (e) { }
+            if (!currentPrefs.mutedConversations)
+                currentPrefs.mutedConversations = {};
+            currentPrefs.mutedConversations[id] = {
+                mutedUntil: mutedUntil ? mutedUntil.toISOString() : null,
+                duration,
+                updatedAt: now.toISOString()
+            };
+            await prisma.notificationPreference.upsert({
+                where: { userId },
+                update: { preferences: JSON.stringify(currentPrefs) },
+                create: { userId, preferences: JSON.stringify(currentPrefs) }
+            });
+        }
+        catch (e) { }
+        res.json({
+            success: true,
+            message: "Conversation muted successfully",
+            isMuted: true,
+            mutedUntil,
+            duration
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const unmuteConversation = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        await prisma.conversationState.upsert({
+            where: { userId_conversationId: { userId, conversationId: id } },
+            update: { isMuted: false },
+            create: { userId, conversationId: id, isMuted: false }
+        });
+        try {
+            const pref = await prisma.notificationPreference.findUnique({ where: { userId } });
+            if (pref?.preferences) {
+                const currentPrefs = JSON.parse(pref.preferences);
+                if (currentPrefs.mutedConversations && currentPrefs.mutedConversations[id]) {
+                    delete currentPrefs.mutedConversations[id];
+                    await prisma.notificationPreference.update({
+                        where: { userId },
+                        data: { preferences: JSON.stringify(currentPrefs) }
+                    });
+                }
+            }
+        }
+        catch (e) { }
+        res.json({ success: true, message: "Conversation unmuted", isMuted: false });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const bulkDeleteMessages = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { messageIds, deleteForEveryone = false } = req.body;
+        if (!Array.isArray(messageIds) || messageIds.length === 0) {
+            return res.status(400).json({ success: false, message: "messageIds array is required" });
+        }
+        const messages = await prisma.message.findMany({
+            where: { id: { in: messageIds } },
+            include: { conversation: true }
+        });
+        const deletedIds = [];
+        const io = getIo();
+        for (const msg of messages) {
+            if (msg.conversation.userA !== userId && msg.conversation.userB !== userId && !req.user?.role?.includes("admin")) {
+                continue;
+            }
+            if (deleteForEveryone) {
+                if (msg.senderId === userId || req.user?.role?.includes("admin")) {
+                    await prisma.message.update({
+                        where: { id: msg.id },
+                        data: {
+                            deletedAt: new Date(),
+                            text: "This message was deleted",
+                            attachmentUrl: null
+                        }
+                    });
+                    deletedIds.push(msg.id);
+                    if (io) {
+                        io.to(`conversation:${msg.conversationId}`).emit("message:deleted", {
+                            messageId: msg.id,
+                            conversationId: msg.conversationId,
+                            deletedForEveryone: true
+                        });
+                    }
+                }
+            }
+            else {
+                await prisma.messageReaction.upsert({
+                    where: {
+                        messageId_userId_reaction: {
+                            messageId: msg.id,
+                            userId,
+                            reaction: "DELETED_FOR_ME"
+                        }
+                    },
+                    update: {},
+                    create: {
+                        messageId: msg.id,
+                        userId,
+                        reaction: "DELETED_FOR_ME"
+                    }
+                });
+                deletedIds.push(msg.id);
+            }
+        }
+        res.json({
+            success: true,
+            message: `${deletedIds.length} messages deleted`,
+            deletedIds,
+            deleteForEveryone
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const forwardMessages = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { messageIds, targetConversationIds } = req.body;
+        if (!Array.isArray(messageIds) || messageIds.length === 0 || !Array.isArray(targetConversationIds) || targetConversationIds.length === 0) {
+            return res.status(400).json({ success: false, message: "messageIds and targetConversationIds arrays are required" });
+        }
+        const sourceMessages = await prisma.message.findMany({
+            where: { id: { in: messageIds } },
+            orderBy: { createdAt: "asc" }
+        });
+        const targetConversations = await prisma.conversation.findMany({
+            where: {
+                id: { in: targetConversationIds },
+                OR: [{ userA: userId }, { userB: userId }]
+            }
+        });
+        const io = getIo();
+        let totalForwarded = 0;
+        for (const conv of targetConversations) {
+            const recipientId = conv.userA === userId ? conv.userB : conv.userA;
+            if (recipientId) {
+                const isBlocked = await prisma.blockedUser.findFirst({
+                    where: {
+                        OR: [
+                            { blockerId: userId, blockedId: recipientId },
+                            { blockerId: recipientId, blockedId: userId }
+                        ]
+                    }
+                });
+                if (isBlocked)
+                    continue;
+            }
+            for (const src of sourceMessages) {
+                const newMsg = await prisma.message.create({
+                    data: {
+                        conversationId: conv.id,
+                        senderId: userId,
+                        from: userId,
+                        text: src.text,
+                        attachmentUrl: src.attachmentUrl,
+                        time: new Date().toISOString(),
+                    }
+                });
+                await prisma.conversation.update({
+                    where: { id: conv.id },
+                    data: {
+                        msg: src.text || "Forwarded an attachment",
+                        updatedAt: new Date(),
+                        unread: { increment: 1 }
+                    }
+                });
+                if (recipientId) {
+                    await prisma.conversationState.updateMany({
+                        where: { conversationId: conv.id, isArchived: true },
+                        data: { isArchived: false }
+                    });
+                }
+                if (io) {
+                    const payload = {
+                        id: newMsg.id,
+                        conversationId: conv.id,
+                        from: "them",
+                        senderId: userId,
+                        text: newMsg.text,
+                        attachmentUrl: newMsg.attachmentUrl,
+                        time: newMsg.time,
+                        createdAt: newMsg.createdAt,
+                        read: false,
+                        deliveryStatus: newMsg.deliveryStatus
+                    };
+                    io.to(`conversation:${conv.id}`).emit("message:new", payload);
+                    if (recipientId)
+                        io.to(recipientId).emit("message:new", payload);
+                }
+                totalForwarded++;
+            }
+        }
+        res.json({
+            success: true,
+            message: "Successfully forwarded messages",
+            forwardedCount: totalForwarded
+        });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const starMessage = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        await prisma.messageReaction.upsert({
+            where: {
+                messageId_userId_reaction: {
+                    messageId: id,
+                    userId,
+                    reaction: "STAR"
+                }
+            },
+            update: {},
+            create: {
+                messageId: id,
+                userId,
+                reaction: "STAR"
+            }
+        });
+        res.json({ success: true, message: "Message starred", isStarred: true });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const unstarMessage = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        await prisma.messageReaction.deleteMany({
+            where: {
+                messageId: id,
+                userId,
+                reaction: "STAR"
+            }
+        });
+        res.json({ success: true, message: "Message unstarred", isStarred: false });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const pinMessage = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        await prisma.messageReaction.upsert({
+            where: {
+                messageId_userId_reaction: {
+                    messageId: id,
+                    userId,
+                    reaction: "PIN"
+                }
+            },
+            update: {},
+            create: {
+                messageId: id,
+                userId,
+                reaction: "PIN"
+            }
+        });
+        res.json({ success: true, message: "Message pinned", isPinned: true });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const unpinMessage = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        await prisma.messageReaction.deleteMany({
+            where: {
+                messageId: id,
+                reaction: "PIN"
+            }
+        });
+        res.json({ success: true, message: "Message unpinned", isPinned: false });
+    }
+    catch (err) {
+        next(err);
+    }
+};
+export const getMessageInfo = async (req, res, next) => {
+    try {
+        const userId = requireUser(req, res);
+        if (!userId)
+            return;
+        const { id } = req.params;
+        const message = await prisma.message.findUnique({
+            where: { id },
+            include: {
+                conversation: true
+            }
+        });
+        if (!message)
+            return res.status(404).json({ success: false, message: "Message not found" });
+        if (message.conversation.userA !== userId && message.conversation.userB !== userId && !req.user?.role?.includes("admin")) {
+            return res.status(403).json({ success: false, message: "Access denied" });
+        }
+        const sender = message.senderId ? await prisma.user.findUnique({
+            where: { id: message.senderId },
+            select: { id: true, fullName: true, email: true, avatarUrl: true, role: true }
+        }) : null;
+        res.json({
+            success: true,
+            info: {
+                id: message.id,
+                text: message.text,
+                senderId: message.senderId,
+                senderName: sender?.fullName || sender?.email || "Unknown",
+                senderAvatar: sender?.avatarUrl || null,
+                senderRole: sender?.role || "user",
+                createdAt: message.createdAt,
+                readAt: message.readAt,
+                deliveryStatus: message.deliveryStatus,
+                attachmentUrl: message.attachmentUrl,
+                clientMessageId: message.clientMessageId
+            }
+        });
     }
     catch (err) {
         next(err);

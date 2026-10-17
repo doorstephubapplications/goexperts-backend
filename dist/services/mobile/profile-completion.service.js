@@ -262,12 +262,12 @@ function evaluateFreelancer(user, fp) {
 // ===========================================================================
 // 2. CLIENT / BUSINESS EVALUATION (6 Steps, 100 Points Total)
 // ===========================================================================
-function evaluateClient(user, cp) {
+function evaluateClient(user, cp, extraData = {}) {
     const fields = {
         fullName: hasText(user.fullName),
         email: hasText(user.email),
         phone: hasText(user.phone),
-        company: hasText(cp?.company) || hasText(user.fullName),
+        company: hasText(cp?.company) || hasText(user.company) || hasText(user.fullName),
         industry: hasText(cp?.industry) || hasText(user.industry),
         companySize: hasText(cp?.companySize),
         country: hasText(user.country) || hasText(cp?.country) || hasText(user.countryName),
@@ -278,14 +278,17 @@ function evaluateClient(user, cp) {
         projectHireBudget: hasText(cp?.projectHireBudget) || hasNumber(cp?.projectHireBudget),
         avatar: hasText(user.avatarUrl) || hasText(user.avatar) || hasText(cp?.logo),
         coverImage: hasText(user.coverImageUrl) || hasText(user.coverUrl) || hasText(cp?.coverUrl),
+        hasServices: Boolean(extraData?.servicesCount > 0) || (Array.isArray(cp?.services) && cp.services.length > 0),
+        hasSocialLinks: Boolean(extraData?.socialLinksCount > 0) || hasText(cp?.websiteUrl) || hasText(user.websiteUrl),
+        hasFaqs: Boolean(extraData?.faqsCount > 0) || (Array.isArray(cp?.faqs) && cp.faqs.length > 0),
     };
     const steps = [
         {
             id: 'step_company_identity',
             key: 'company_identity',
-            title: 'Company Identity',
-            description: 'Company name, official logo, and cover branding',
-            points: 20,
+            title: 'Company Identity & Branding',
+            description: 'Company name, logo, and brand presence',
+            points: 15,
             earnedPoints: 0,
             status: 'INCOMPLETE',
             required: true,
@@ -297,87 +300,99 @@ function evaluateClient(user, cp) {
         {
             id: 'step_industry_scale',
             key: 'industry_scale',
-            title: 'Industry & Organization Scale',
-            description: 'Industry domain and team/company headcount',
-            points: 20,
+            title: 'Industry & Business Scale',
+            description: 'Industry sector and organization size',
+            points: 10,
             earnedPoints: 0,
             status: 'INCOMPLETE',
             required: true,
             missingFields: [],
-            editRoute: '/business/profile?tab=company',
+            editRoute: '/business/profile?tab=company&field=industry',
             tab: 'company',
             focusField: 'industry',
         },
         {
-            id: 'step_hq_location',
-            key: 'hq_location',
-            title: 'Headquarters & Location',
-            description: 'Country, city, and primary company website',
+            id: 'step_services_offerings',
+            key: 'services_offerings',
+            title: 'Company Services & Offerings',
+            description: 'Add your specialized services and client solutions',
             points: 15,
             earnedPoints: 0,
             status: 'INCOMPLETE',
             required: true,
             missingFields: [],
-            editRoute: '/business/profile?tab=location',
-            tab: 'location',
-            focusField: 'country',
+            editRoute: '/business/profile?tab=services',
+            tab: 'services',
+            focusField: 'services',
         },
         {
-            id: 'step_mission_overview',
-            key: 'mission_overview',
-            title: 'Mission & Company Overview',
-            description: 'Company mission overview and authorized contact name',
-            points: 20,
+            id: 'step_social_channels',
+            key: 'social_channels',
+            title: 'Social & Professional Profiles',
+            description: 'Connect LinkedIn, corporate website, or social profiles',
+            points: 15,
             earnedPoints: 0,
             status: 'INCOMPLETE',
             required: true,
             missingFields: [],
-            editRoute: '/business/profile?tab=personal',
-            tab: 'personal',
-            focusField: 'bio',
+            editRoute: '/business/profile?tab=social',
+            tab: 'social',
+            focusField: 'websiteUrl',
         },
         {
-            id: 'step_hiring_budget',
-            key: 'hiring_budget',
-            title: 'Hiring Goals & Budget',
-            description: 'Primary hiring objectives and expected project budget',
+            id: 'step_profile_faqs',
+            key: 'profile_faqs',
+            title: 'Profile FAQs',
+            description: 'Add frequently asked questions for clients & partners',
             points: 15,
             earnedPoints: 0,
             status: 'INCOMPLETE',
-            required: false,
+            required: true,
             missingFields: [],
-            editRoute: '/business/profile?tab=hiring',
+            editRoute: '/business/profile?tab=faqs',
+            tab: 'faqs',
+            focusField: 'faqs',
+        },
+        {
+            id: 'step_hiring_scope',
+            key: 'hiring_scope',
+            title: 'Hiring Scope & Budget',
+            description: 'Primary talent needs and expected project budget',
+            points: 15,
+            earnedPoints: 0,
+            status: 'INCOMPLETE',
+            required: true,
+            missingFields: [],
+            editRoute: '/business/profile?tab=hiring&field=hiringGoal',
             tab: 'hiring',
             focusField: 'hiringGoal',
         },
         {
-            id: 'step_verification_trust',
-            key: 'verification_trust',
-            title: 'Verification & Trust Profile',
-            description: 'Contact verification and official business credentials',
-            points: 10,
+            id: 'step_location_contact',
+            key: 'location_contact',
+            title: 'Location & Verified Contact',
+            description: 'Operating city, country, and contact phone number',
+            points: 15,
             earnedPoints: 0,
             status: 'INCOMPLETE',
-            required: false,
+            required: true,
             missingFields: [],
-            editRoute: '/business/verification',
-            tab: 'settings',
-            focusField: 'verification',
+            editRoute: '/business/profile?tab=location&field=city',
+            tab: 'location',
+            focusField: 'city',
         },
     ];
     // 1. Company Identity
     const compMissing = [];
     if (!fields.company)
         compMissing.push({ key: 'company', label: 'Company Name' });
-    if (!fields.avatar)
-        compMissing.push({ key: 'avatar', label: 'Company Logo' });
     steps[0].missingFields = compMissing;
     if (compMissing.length === 0) {
-        steps[0].earnedPoints = steps[0].points;
+        steps[0].earnedPoints = 15;
         steps[0].status = 'COMPLETED';
     }
     else if (fields.company) {
-        steps[0].earnedPoints = Math.round(steps[0].points * 0.5);
+        steps[0].earnedPoints = 8;
         steps[0].status = 'IN_PROGRESS';
     }
     // 2. Industry & Scale
@@ -388,65 +403,69 @@ function evaluateClient(user, cp) {
         indMissing.push({ key: 'companySize', label: 'Company Size' });
     steps[1].missingFields = indMissing;
     if (indMissing.length === 0) {
-        steps[1].earnedPoints = steps[1].points;
+        steps[1].earnedPoints = 10;
         steps[1].status = 'COMPLETED';
     }
     else if (fields.industry || fields.companySize) {
-        steps[1].earnedPoints = Math.round(steps[1].points * 0.5);
+        steps[1].earnedPoints = 5;
         steps[1].status = 'IN_PROGRESS';
     }
-    // 3. Location & Website
-    const locMissing = [];
-    if (!fields.country || !fields.city)
-        locMissing.push({ key: 'location', label: 'Country & City' });
-    if (!fields.websiteUrl)
-        locMissing.push({ key: 'websiteUrl', label: 'Website URL' });
-    steps[2].missingFields = locMissing;
-    if (locMissing.length === 0) {
-        steps[2].earnedPoints = steps[2].points;
+    // 3. Services & Offerings
+    const svcMissing = [];
+    if (!fields.hasServices)
+        svcMissing.push({ key: 'services', label: 'At least 1 Service or Solution' });
+    steps[2].missingFields = svcMissing;
+    if (svcMissing.length === 0) {
+        steps[2].earnedPoints = 15;
         steps[2].status = 'COMPLETED';
     }
-    else if (fields.country || fields.websiteUrl) {
-        steps[2].earnedPoints = Math.round(steps[2].points * 0.5);
-        steps[2].status = 'IN_PROGRESS';
-    }
-    // 4. Mission & Overview
-    const bioMissing = [];
-    if (!fields.fullName)
-        bioMissing.push({ key: 'fullName', label: 'Authorized Contact Name' });
-    if (!fields.bio)
-        bioMissing.push({ key: 'bio', label: 'Company Overview / Bio' });
-    steps[3].missingFields = bioMissing;
-    if (bioMissing.length === 0) {
-        steps[3].earnedPoints = steps[3].points;
+    // 4. Social Links
+    const socMissing = [];
+    if (!fields.hasSocialLinks)
+        socMissing.push({ key: 'socialLinks', label: 'Website or Social Profile Link' });
+    steps[3].missingFields = socMissing;
+    if (socMissing.length === 0) {
+        steps[3].earnedPoints = 15;
         steps[3].status = 'COMPLETED';
     }
-    else if (fields.fullName || fields.bio) {
-        steps[3].earnedPoints = Math.round(steps[3].points * 0.5);
-        steps[3].status = 'IN_PROGRESS';
+    // 5. Profile FAQs
+    const faqMissing = [];
+    if (!fields.hasFaqs)
+        faqMissing.push({ key: 'faqs', label: 'At least 1 Profile FAQ' });
+    steps[4].missingFields = faqMissing;
+    if (faqMissing.length === 0) {
+        steps[4].earnedPoints = 15;
+        steps[4].status = 'COMPLETED';
     }
-    // 5. Hiring Goals & Budget
+    // 6. Hiring Scope & Budget
     const hireMissing = [];
     if (!fields.hiringGoal)
         hireMissing.push({ key: 'hiringGoal', label: 'Hiring Goals' });
     if (!fields.projectHireBudget)
-        hireMissing.push({ key: 'projectHireBudget', label: 'Project Hire Budget' });
-    steps[4].missingFields = hireMissing;
+        hireMissing.push({ key: 'projectHireBudget', label: 'Project Budget' });
+    steps[5].missingFields = hireMissing;
     if (hireMissing.length === 0) {
-        steps[4].earnedPoints = steps[4].points;
-        steps[4].status = 'COMPLETED';
-    }
-    else if (fields.hiringGoal || fields.projectHireBudget) {
-        steps[4].earnedPoints = Math.round(steps[4].points * 0.5);
-        steps[4].status = 'IN_PROGRESS';
-    }
-    // 6. Verification
-    if (fields.phone || user.isVerified) {
-        steps[5].earnedPoints = steps[5].points;
+        steps[5].earnedPoints = 15;
         steps[5].status = 'COMPLETED';
     }
-    else {
-        steps[5].missingFields = [{ key: 'phone', label: 'Verified Phone / Email' }];
+    else if (fields.hiringGoal || fields.projectHireBudget) {
+        steps[5].earnedPoints = 8;
+        steps[5].status = 'IN_PROGRESS';
+    }
+    // 7. Location & Contact
+    const locMissing = [];
+    if (!fields.country || !fields.city)
+        locMissing.push({ key: 'location', label: 'Operating City & Country' });
+    if (!fields.phone)
+        locMissing.push({ key: 'phone', label: 'Contact Phone Number' });
+    steps[6].missingFields = locMissing;
+    if (locMissing.length === 0) {
+        steps[6].earnedPoints = 15;
+        steps[6].status = 'COMPLETED';
+    }
+    else if (fields.country || fields.phone) {
+        steps[6].earnedPoints = 8;
+        steps[6].status = 'IN_PROGRESS';
     }
     const score = Math.min(100, steps.reduce((sum, s) => sum + s.earnedPoints, 0));
     const legacySections = {
@@ -929,6 +948,32 @@ export const resolveProfileCompletion = async (userId, requestedRole) => {
     };
     if (!user)
         return fallback;
+    // Resolve counts for services, social links, and faqs
+    const [servicesCount, socialLinksCount, faqsCount] = await Promise.all([
+        prisma.freelancerService.count({ where: { userId } }).catch(() => 0),
+        prisma.socialLink.count({ where: { userId } }).catch(() => 0),
+        (async () => {
+            try {
+                const rows = await prisma.$queryRawUnsafe("SELECT count(*) as cnt FROM `user_profile_faqs` WHERE `user_id` = ?", userId);
+                if (rows && rows[0]?.cnt)
+                    return Number(rows[0].cnt);
+            }
+            catch { }
+            const settingRow = await prisma.setting.findUnique({
+                where: { key: `user_faqs:${userId}` },
+            }).catch(() => null);
+            if (settingRow?.value) {
+                try {
+                    const parsed = JSON.parse(settingRow.value);
+                    if (Array.isArray(parsed))
+                        return parsed.length;
+                }
+                catch { }
+            }
+            return 0;
+        })().catch(() => 0),
+    ]);
+    const extraCounts = { servicesCount, socialLinksCount, faqsCount };
     const activeRole = (requestedRole || user.role || 'freelancer').toLowerCase();
     let evaluation;
     switch (activeRole) {
@@ -937,7 +982,7 @@ export const resolveProfileCompletion = async (userId, requestedRole) => {
             break;
         case 'client':
         case 'business':
-            evaluation = evaluateClient(user, user.clientProfile);
+            evaluation = evaluateClient(user, user.clientProfile, extraCounts);
             break;
         case 'investor':
             evaluation = evaluateInvestor(user, user.investorProfile);

@@ -99,6 +99,7 @@ router.use("/tasks", tasksRoutes);
 router.use("/v1/tasks", tasksRoutes);
 // Shared Messages routes (real-time chat API for all roles)
 router.use("/messages", messagesRoutes);
+router.use("/v1/messages", messagesRoutes);
 router.use("/connections", connectionsRoutes);
 router.use("/network", connectionsRoutes);
 router.use("/v1/connections", connectionsRoutes);
@@ -110,9 +111,15 @@ router.use("/v1/activity", activityRoutes);
 router.use("/support", supportRoutes);
 // Portal (role-scoped)
 router.use("/freelancer", freelancerRoutes);
+router.use("/v1/freelancer", freelancerRoutes);
 router.use("/client", clientRoutes);
+router.use("/v1/client", clientRoutes);
+router.use("/business", clientRoutes);
+router.use("/v1/business", clientRoutes);
 router.use("/investor", investorRoutes);
+router.use("/v1/investor", investorRoutes);
 router.use("/founder", founderRoutes);
+router.use("/v1/founder", founderRoutes);
 router.use("/referrals", referralRoutes);
 // User Profile Custom FAQs (all roles)
 import { getMyProfileFaqs, saveMyProfileFaqs, getPublicUserFaqs } from "../controllers/user-faqs.controller.js";
