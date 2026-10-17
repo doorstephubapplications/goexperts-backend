@@ -72,6 +72,30 @@ export const removeDeviceToken = async (token?: string, deviceId?: string, userI
   }
 };
 
+// Cached Global Push Layout (admin-updated branding & presentation settings)
+let cachedGlobalPushLayout: any = null;
+let lastGlobalLayoutFetch = 0;
+
+async function getGlobalPushLayout(): Promise<any> {
+  const now = Date.now();
+  if (cachedGlobalPushLayout && now - lastGlobalLayoutFetch < 30000) {
+    return cachedGlobalPushLayout;
+  }
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { key: "PUSH_CAMPAIGN_GLOBAL_LAYOUT" },
+    });
+    if (setting?.value) {
+      cachedGlobalPushLayout = JSON.parse(setting.value);
+      lastGlobalLayoutFetch = now;
+      return cachedGlobalPushLayout;
+    }
+  } catch (err) {
+    // silently fallback to null
+  }
+  return null;
+}
+
 export const sendPushNotification = async (userId: string, title: string, body: string, data?: any): Promise<boolean> => {
   if (getApps().length === 0) {
     if (process.env.NODE_ENV === 'production') {
@@ -90,9 +114,28 @@ export const sendPushNotification = async (userId: string, title: string, body: 
     }
 
       const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-      let notificationColor = '#38B2AC'; // Default Go Experts Red
-      
-      if (dbUser?.role) {
+      const globalLayout = await getGlobalPushLayout();
+
+      const isAdOrCustomPush = Boolean(
+        data?.campaignId ||
+        data?.isCampaign ||
+        data?.isCustomPush ||
+        data?.category === "General" ||
+        data?.category === "Promotional" ||
+        data?.eventType === "PROMOTIONAL"
+      );
+
+      // Notification color priority:
+      // 1. Explicit color passed in data.brandColor
+      // 2. Admin's global layout brandColor for campaigns and custom push
+      // 3. Dynamic role color from industry_colors
+      // 4. Default #38B2AC
+      let notificationColor = '#38B2AC';
+      if (data?.brandColor) {
+        notificationColor = String(data.brandColor);
+      } else if (isAdOrCustomPush && globalLayout?.brandColor) {
+        notificationColor = String(globalLayout.brandColor);
+      } else if (dbUser?.role) {
         try {
           const setting = await prisma.setting.findUnique({ where: { key: "settings:industry_colors" } });
           const colors = setting?.value ? JSON.parse(setting.value) : SETTINGS_DEFAULTS.industry_colors;
@@ -109,8 +152,17 @@ export const sendPushNotification = async (userId: string, title: string, body: 
         }
       }
 
-      const imgUrl = data?.imageUrl || data?.appLogoUrl || data?.senderAvatar || data?.sender_avatar;
+      // Media resolution:
+      // If ad campaign or custom push and no specific image provided, use admin's global logo or default banner
+      const imgUrl =
+        data?.imageUrl ||
+        data?.appLogoUrl ||
+        (isAdOrCustomPush ? (globalLayout?.appLogoUrl || globalLayout?.defaultBannerUrl) : null) ||
+        data?.senderAvatar ||
+        data?.sender_avatar;
+
       const categoryId = data?.category || data?.eventType || data?.type;
+      const isSoundEnabled = data?.soundEnabled !== false && (!isAdOrCustomPush || globalLayout?.soundEnabled !== false);
 
       const messages = tokens.map(t => ({
         token: t.token,
@@ -121,28 +173,36 @@ export const sendPushNotification = async (userId: string, title: string, body: 
         },
         android: {
           notification: {
-            sound: 'default',
+            sound: isSoundEnabled ? 'default' : undefined,
             color: notificationColor,
             icon: 'ic_notification', // Custom notification icon if available in android/app/src/main/res/drawable
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
             defaultLightSettings: true,
             defaultVibrateTimings: true,
-            defaultSound: true,
+            defaultSound: isSoundEnabled,
             ...(imgUrl ? { imageUrl: imgUrl } : {})
           },
         },
         apns: {
           payload: {
             aps: {
-              sound: 'default',
-              badge: 1,
+              sound: isSoundEnabled ? 'default' : undefined,
+              badge: data?.badgeCount ? Number(data.badgeCount) : (isAdOrCustomPush && globalLayout?.badgeCount ? Number(globalLayout.badgeCount) : 1),
               mutableContent: true,
               ...(categoryId ? { category: String(categoryId) } : {}),
             }
           },
           fcmOptions: imgUrl ? { imageUrl: imgUrl } : undefined,
         },
-        data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
+        data: data ? Object.fromEntries(
+          Object.entries({
+            ...data,
+            appName: data.appName || (isAdOrCustomPush ? globalLayout?.appName : undefined),
+            brandColor: notificationColor,
+          })
+          .filter(([_, v]) => v !== undefined && v !== null)
+          .map(([k, v]) => [k, String(v)])
+        ) : {}
       }));
 
     const response = await getMessaging().sendEach(messages);

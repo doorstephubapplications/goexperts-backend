@@ -287,6 +287,7 @@ export const emitNotification = async (payload: NotificationPayload) => {
             contextId: payload.contextId,
             actionUrl,
             notificationId: notification.id,
+            isCustomPush: true,
             ...(payload.metadata || {}),
           };
 

@@ -1920,9 +1920,11 @@ export const addClientTeamMember = async (req: AuthenticatedRequest, res: Respon
           fullName: name,
           password: hashedPassword,
           role: targetRole,
-          status: isPreVerified ? "active" : "pending",
-          isVerified: isPreVerified,
-          verified: isPreVerified,
+          status: "active",
+          isVerified: true,
+          verified: true,
+          onboardingStatus: "COMPLETED",
+          currentStep: "completed",
         }
       });
     } else {
@@ -1930,7 +1932,10 @@ export const addClientTeamMember = async (req: AuthenticatedRequest, res: Respon
         where: { id: existingUser.id },
         data: {
           ...(body.password ? { password: hashedPassword } : {}),
-          ...(isPreVerified ? { status: "active", isVerified: true, verified: true } : {}),
+          status: "active",
+          isVerified: true,
+          verified: true,
+          onboardingStatus: "COMPLETED",
           ...(!permittedDashboards.includes(existingUser.role) ? { role: targetRole } : {}),
         }
       });
@@ -2720,13 +2725,18 @@ export const updateClientTeamMember = async (req: AuthenticatedRequest, res: Res
             status: "active",
             isVerified: true,
             verified: true,
+            onboardingStatus: "COMPLETED",
+            currentStep: "completed",
           }
         });
       } else if (userAcc) {
         await prisma.user.update({
           where: { id: userAcc.id },
           data: {
-            ...(isActivating ? { status: "active", isVerified: true, verified: true } : {}),
+            status: "active",
+            isVerified: true,
+            verified: true,
+            onboardingStatus: "COMPLETED",
             ...(permittedDashboards && !permittedDashboards.includes(userAcc.role) ? { role: targetRole } : {})
           }
         });

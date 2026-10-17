@@ -181,10 +181,17 @@ export async function resolveUserTeamMembership(userId: string, email: string) {
       return null;
     }
 
-    if (!membership.userId && userId) {
-      await (prisma as any).clientTeamMember.update({
-        where: { id: membership.id },
-        data: { userId }
+    if (userId) {
+      if (!membership.userId) {
+        await (prisma as any).clientTeamMember.update({
+          where: { id: membership.id },
+          data: { userId }
+        }).catch(() => {});
+      }
+      // Ensure team member user account is active, verified, and onboarding marked as COMPLETED
+      await prisma.user.updateMany({
+        where: { id: userId, onboardingStatus: { not: "COMPLETED" } },
+        data: { onboardingStatus: "COMPLETED", status: "active", isVerified: true, verified: true }
       }).catch(() => {});
     }
 
@@ -542,6 +549,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         founder: Boolean(user.founderProfile),
         investor: Boolean(user.investorProfile),
       },
+      modulePermissions: teamInfo ? teamInfo.modulePermissions : null,
       teamMembership: teamInfo ? {
         id: teamInfo.membership.id,
         clientId: teamInfo.membership.clientId,
@@ -553,7 +561,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         modulePermissions: teamInfo.modulePermissions,
       } : null,
       status: effectiveStatus,
-      onboardingStatus: user.onboardingStatus ?? 'COMPLETED',
+      onboardingStatus: teamInfo ? 'COMPLETED' : (user.onboardingStatus ?? 'COMPLETED'),
       currentStep: user.currentStep,
       country: user.country,
       state: user.state,
