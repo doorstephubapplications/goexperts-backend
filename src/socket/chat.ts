@@ -38,7 +38,7 @@ export const handleChatEvents = (io: Server, socket: Socket) => {
   });
 
   socket.on('message:send', async ({ conversationId, text, attachmentUrl, clientMessageId, replyToId }, callback) => {
-    if (!conversationId || !text) return;
+    if (!conversationId || (!text && !attachmentUrl)) return;
     try {
       if (!checkRateLimit(userId, 'msg:send', 10, 5000)) {
          return typeof callback === 'function' && callback({ success: false, error: 'RATE_LIMIT_EXCEEDED' });
@@ -59,8 +59,8 @@ export const handleChatEvents = (io: Server, socket: Socket) => {
 
       // Attachment basic validation
       if (attachmentUrl) {
-         const validExtensions = ['.jpg', '.jpeg', '.png', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
-         const isValid = validExtensions.some(ext => attachmentUrl.toLowerCase().endsWith(ext));
+         const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
+         const isValid = validExtensions.some(ext => attachmentUrl.toLowerCase().split('?')[0].endsWith(ext)) || attachmentUrl.startsWith('/uploads/');
          if (!isValid) return typeof callback === 'function' && callback({ success: false, error: 'INVALID_ATTACHMENT' });
       }
 
@@ -78,7 +78,7 @@ export const handleChatEvents = (io: Server, socket: Socket) => {
           conversationId,
           senderId: userId,
           from: userId,
-          text,
+          text: text || (attachmentUrl ? "" : "Sent an attachment"),
           attachmentUrl: attachmentUrl || null,
           replyToId: replyToId || null,
           time: new Date().toISOString(),
@@ -88,7 +88,7 @@ export const handleChatEvents = (io: Server, socket: Socket) => {
 
       await prisma.conversation.update({
         where: { id: conversationId },
-        data: { msg: text, updatedAt: new Date(), unread: { increment: 1 } },
+        data: { msg: text || (attachmentUrl ? "Photo" : "Message"), updatedAt: new Date(), unread: { increment: 1 } },
       });
 
       // Handle unarchiving for recipient
