@@ -41,6 +41,20 @@ server.listen(port, async () => {
     } else {
       console.log(`🗄️ Database Connected: ${dbUrl}`);
     }
+    // Self-healing: ensure users.bio and founder_profiles.founder_bio columns are TEXT to prevent P2000 errors on bios > 191 chars
+    try {
+      await prisma.$executeRawUnsafe("ALTER TABLE `users` MODIFY COLUMN `bio` TEXT NULL;");
+      console.log(`✅ Ensured users.bio column is TEXT.`);
+    } catch (bioAlterErr: any) {
+      // Ignore if already TEXT or insufficient DDL permissions
+    }
+
+    try {
+      await prisma.$executeRawUnsafe("ALTER TABLE `founder_profiles` MODIFY COLUMN `founder_bio` TEXT NULL;");
+      console.log(`✅ Ensured founder_profiles.founder_bio column is TEXT.`);
+    } catch (founderBioErr: any) {
+      // Ignore if already TEXT
+    }
   } catch (dbErr: any) {
     console.error(`⚠️ Database Connection Warning:`, dbErr?.message || dbErr);
     console.error(`👉 Background queue worker and scheduler are paused until database connection is restored.`);

@@ -2769,10 +2769,38 @@ export const saveOnboardingDraft = async (req: AuthenticatedRequest, res: Respon
     if (finalState !== undefined) userUpdate.state = getStringVal(finalState);
     if (finalCity !== undefined) userUpdate.city = getStringVal(finalCity);
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: userUpdate,
-    });
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: userUpdate,
+      });
+    } catch (userUpdateErr: any) {
+      if (
+        userUpdateErr?.code === "P2000" ||
+        userUpdateErr?.message?.includes("Column: bio") ||
+        userUpdateErr?.message?.includes("too long")
+      ) {
+        console.warn("Detected bio column length constraint error. Executing self-healing ALTER TABLE...");
+        try {
+          await prisma.$executeRawUnsafe("ALTER TABLE `users` MODIFY COLUMN `bio` TEXT NULL;");
+          await prisma.user.update({
+            where: { id: userId },
+            data: userUpdate,
+          });
+        } catch (retryErr: any) {
+          console.warn("Self-healing alter failed, truncating bio to 191 chars for fallback:", retryErr?.message);
+          if (userUpdate.bio) {
+            userUpdate.bio = userUpdate.bio.slice(0, 191);
+          }
+          await prisma.user.update({
+            where: { id: userId },
+            data: userUpdate,
+          });
+        }
+      } else {
+        throw userUpdateErr;
+      }
+    }
 
     const userRole = (user.role || "").toLowerCase();
 
