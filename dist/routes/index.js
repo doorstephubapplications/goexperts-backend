@@ -84,6 +84,13 @@ import socialLinksRoutes from "./mobile/social-links.routes.js";
 // User & Platform Social Links (Website & Mobile unified endpoints)
 router.use("/social-links", socialLinksRoutes);
 router.use("/v1/social-links", socialLinksRoutes);
+import profileCompletionRoutes from "./profile/profile-completion.routes.js";
+import { getProfileStats } from "../controllers/profile/profile-stats.controller.js";
+// Profile Completion Score & Lifecycle Tracking Engine
+router.use("/profile-completion", profileCompletionRoutes);
+router.use("/v1/profile-completion", profileCompletionRoutes);
+router.get("/profile/stats/me", authMiddleware, getProfileStats);
+router.get("/v1/profile/stats/me", authMiddleware, getProfileStats);
 import activityRoutes from "./activity/activity.routes.js";
 import supportRoutes from "./support/support.routes.js";
 import connectionsRoutes from "./connections/connections.routes.js";

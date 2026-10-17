@@ -12,13 +12,42 @@ const hasArray = (value?: any | null) =>
 
 export type ProfileLevel = 'INCOMPLETE' | 'BASIC' | 'DEVELOPING' | 'NEARLY_READY' | 'READY' | 'STRONG' | 'COMPLETE';
 
+export type ProfileCompletionStep = {
+  id: string;
+  key: string;
+  title: string;
+  description?: string;
+  points: number;
+  earnedPoints: number;
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'INCOMPLETE';
+  required: boolean;
+  missingFields: { key: string; label: string; description?: string }[];
+  editRoute: string;
+  tab?: string;
+  focusField?: string;
+};
+
 export type ProfileCompletionResult = {
-  profileCompletion: number;
+  // Primary unified fields
+  role?: string;
+  completionPercentage: number;
+  profileCompletion: number; // alias for backward-compatibility
   profileLevel: ProfileLevel;
+  profileStrengthLabel: string;
+  isComplete: boolean;
+  isFinalized: boolean;
   operationalReady: boolean;
+  completedStepsCount: number;
+  totalStepsCount: number;
+  nextStep: ProfileCompletionStep | null;
+  steps: ProfileCompletionStep[];
+  missingFields: { key: string; label: string; stepTitle: string; route: string }[];
+  lastCalculatedAt: string;
+
+  // Compatibility structures
   requirements: {
-    core: { complete: boolean; missing: { key: string; label: string }[] };
-    recommended: { missing: { key: string; label: string }[] };
+    core: { complete: boolean; missing: { key: string; label: string; sectionKey?: string }[] };
+    recommended: { missing: { key: string; label: string; sectionKey?: string }[] };
   };
   verification: {
     email: string;
@@ -33,7 +62,7 @@ export type ProfileCompletionResult = {
   };
   capabilities: Record<string, { allowed: boolean; reason?: string; missing?: { key: string; label: string; route?: string }[] }>;
   
-  // Backward compatibility fields for mobile apps
+  // Legacy fields for mobile apps
   isProfileComplete: boolean;
   completedSteps: string[];
   pendingSteps: string[];
@@ -51,154 +80,428 @@ function getProfileLevel(percentage: number): ProfileLevel {
   return 'INCOMPLETE';
 }
 
+function getStrengthLabel(level: ProfileLevel): string {
+  switch (level) {
+    case 'COMPLETE': return 'Complete & Verified';
+    case 'STRONG': return 'Strong';
+    case 'READY': return 'Ready for Work';
+    case 'NEARLY_READY': return 'Nearly Ready';
+    case 'DEVELOPING': return 'Developing';
+    case 'BASIC': return 'Basic';
+    default: return 'Incomplete';
+  }
+}
+
+// ===========================================================================
+// 1. FREELANCER EVALUATION (7 Steps, 100 Points Total)
+// ===========================================================================
 function evaluateFreelancer(user: any, fp: any) {
   const fields = {
     fullName: hasText(user.fullName),
-    email: hasText(user.email),
-    phone: hasText(user.phone),
-    title: hasText(fp?.titleHeadline),
-    bio: hasText(user.bio),
-    category: hasText(fp?.industry),
-    skills: hasText(fp?.skills),
-    experience: hasText(fp?.experience) || hasText(fp?.experienceLevel),
-    country: hasText(user.country),
-    city: hasText(user.city),
+    avatar: hasText(user.avatarUrl) || hasText(user.avatar),
+    coverImage: hasText(user.coverImageUrl) || hasText(user.coverUrl),
+    country: hasText(user.country) || hasText(user.countryName) || hasText(fp?.country) || hasText(fp?.countryName),
+    city: hasText(user.city) || hasText(fp?.city),
+    title: hasText(fp?.titleHeadline) || hasText(fp?.title) || hasText(user.title),
+    bio: hasText(user.bio) || hasText(fp?.bio) || hasText(fp?.headline),
+    industry: hasText(fp?.industry) || hasText(user.industry),
+    skills: hasText(fp?.skills) || (Array.isArray(fp?.skills) && fp.skills.length > 0),
+    hourlyRate: hasNumber(fp?.hourlyRate) || hasNumber(fp?.monthlyRate) || hasText(fp?.hourlyRate) || hasText(fp?.monthlyRate),
     availability: hasText(fp?.availability),
-    rate: hasNumber(fp?.hourlyRate),
-    portfolio: hasText(fp?.portfolioUrl) || hasText(fp?.githubUrl) || hasText(fp?.dribbbleUrl),
-    resume: hasText(fp?.resumeUrl),
-    certifications: hasText(fp?.certifications),
-    linkedin: hasText(fp?.linkedInUrl),
-    avatar: hasText(user.avatarUrl),
-    coverImage: hasText(user.coverImageUrl),
+    experience: hasText(fp?.experience) || hasText(fp?.experienceLevel) || hasArray(user.freelancerExperiences),
+    education: hasText(fp?.education) || hasArray(user.freelancerEducations) || hasArray(user.freelancerCertificates),
+    portfolio: hasText(fp?.portfolioUrl) || hasText(fp?.githubUrl) || hasText(fp?.dribbbleUrl) || hasText(fp?.linkedInUrl) || hasText(fp?.linkedinUrl) || hasText(fp?.websiteUrl) || hasText(user.portfolioUrl),
   };
 
-  const core = [
-    { key: 'fullName', label: 'Full Name', valid: fields.fullName, sectionKey: 'personal' },
-    { key: 'email', label: 'Email Address', valid: fields.email, sectionKey: 'personal' },
-    { key: 'title', label: 'Professional Title', valid: fields.title, sectionKey: 'professional' },
-    { key: 'bio', label: 'Professional Bio', valid: fields.bio, sectionKey: 'professional' },
-    { key: 'skills', label: 'Required Skills', valid: fields.skills, sectionKey: 'skills' },
-    { key: 'experience', label: 'Experience Level', valid: fields.experience, sectionKey: 'professional' },
-    { key: 'country', label: 'Country', valid: fields.country, sectionKey: 'location' },
-    { key: 'city', label: 'City', valid: fields.city, sectionKey: 'location' },
-    { key: 'avatar', label: 'Profile Picture', valid: fields.avatar, sectionKey: 'personal' },
-    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage, sectionKey: 'personal' },
+  const steps: ProfileCompletionStep[] = [
+    {
+      id: 'step_identity',
+      key: 'identity',
+      title: 'Profile Identity',
+      description: 'Full name, professional avatar, and location',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=personal',
+      tab: 'personal',
+      focusField: 'fullName',
+    },
+    {
+      id: 'step_headline_bio',
+      key: 'headline_bio',
+      title: 'Professional Headline & Bio',
+      description: 'Catchy professional title and detailed biography',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=personal&field=headline',
+      tab: 'personal',
+      focusField: 'headline',
+    },
+    {
+      id: 'step_skills',
+      key: 'skills_expertise',
+      title: 'Skills & Expertise',
+      description: 'Primary industry classification and verified skill tags',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=industry',
+      tab: 'industry',
+      focusField: 'skills',
+    },
+    {
+      id: 'step_availability_rates',
+      key: 'availability_rates',
+      title: 'Availability & Rates',
+      description: 'Hourly billing rate and work availability schedule',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=rates',
+      tab: 'rates',
+      focusField: 'monthlyRate',
+    },
+    {
+      id: 'step_experience',
+      key: 'experience',
+      title: 'Experience & History',
+      description: 'Work history, past roles, and experience level',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=experience',
+      tab: 'experience',
+      focusField: 'experience',
+    },
+    {
+      id: 'step_education',
+      key: 'education_credentials',
+      title: 'Education & Credentials',
+      description: 'Academic degrees or professional certifications',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=education',
+      tab: 'education',
+      focusField: 'education',
+    },
+    {
+      id: 'step_portfolio',
+      key: 'portfolio_links',
+      title: 'Portfolio & External Links',
+      description: 'Work samples, GitHub, LinkedIn, or personal website',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/dashboard/profile?tab=portfolio',
+      tab: 'portfolio',
+      focusField: 'portfolioUrl',
+    },
   ];
 
-  const recommended = [
-    { key: 'portfolio', label: 'Portfolio / Work Samples', valid: fields.portfolio, sectionKey: 'portfolio' },
-    { key: 'resume', label: 'Resume', valid: fields.resume, sectionKey: 'resume' },
-    { key: 'linkedin', label: 'LinkedIn Profile', valid: fields.linkedin, sectionKey: 'social' },
-  ];
-
-  const weights = {
-    identity: 20,
-    professional: 30,
-    skills: 20,
-    rate: 15,
-    location: 15,
-  };
-
-  let score = 0;
-  if (fields.fullName && fields.email) score += 10;
-  if (fields.avatar) score += 5;
-  if (fields.coverImage) score += 5;
-  if (fields.title && fields.bio && fields.experience) score += weights.professional;
-  if (fields.skills) score += weights.skills;
-  if (fields.rate || fields.availability) score += weights.rate;
-  if (fields.country && fields.city) score += weights.location;
-
-  const missingCore = core.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label, sectionKey: c.sectionKey }));
-  const missingRecommended = recommended.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label, sectionKey: c.sectionKey }));
-
-  const capabilities: Record<string, any> = {
-    browseProjects: { allowed: true },
-    submitProposal: { allowed: true, missing: [] },
-    publishProject: { allowed: true, missing: [] }
-  };
-
-  const proposalMissing = [];
-  if (!fields.availability) proposalMissing.push({ key: 'availability', label: 'Availability', sectionKey: 'availability' });
-  if (!fields.rate) proposalMissing.push({ key: 'hourlyRate', label: 'Hourly Rate', sectionKey: 'rates' });
-  if (!fields.skills) proposalMissing.push({ key: 'skills', label: 'Skills', sectionKey: 'skills' });
-  
-  if (proposalMissing.length > 0) {
-    capabilities.submitProposal = {
-      allowed: false,
-      reason: 'PROFILE_REQUIREMENTS_MISSING',
-      missing: proposalMissing
-    };
+  // 1. Identity
+  const identityMissing = [];
+  if (!fields.fullName) identityMissing.push({ key: 'fullName', label: 'Full Name' });
+  if (!fields.avatar) identityMissing.push({ key: 'avatar', label: 'Profile Photo' });
+  if (!fields.country || !fields.city) identityMissing.push({ key: 'location', label: 'Country & City' });
+  steps[0].missingFields = identityMissing;
+  if (identityMissing.length === 0) {
+    steps[0].earnedPoints = steps[0].points;
+    steps[0].status = 'COMPLETED';
+  } else if (fields.fullName || fields.avatar) {
+    steps[0].earnedPoints = Math.round(steps[0].points * 0.5);
+    steps[0].status = 'IN_PROGRESS';
   }
 
+  // 2. Headline & Bio
+  const bioMissing = [];
+  if (!fields.title) bioMissing.push({ key: 'title', label: 'Professional Title' });
+  if (!fields.bio) bioMissing.push({ key: 'bio', label: 'Professional Bio' });
+  steps[1].missingFields = bioMissing;
+  if (bioMissing.length === 0) {
+    steps[1].earnedPoints = steps[1].points;
+    steps[1].status = 'COMPLETED';
+  } else if (fields.title || fields.bio) {
+    steps[1].earnedPoints = Math.round(steps[1].points * 0.5);
+    steps[1].status = 'IN_PROGRESS';
+  }
+
+  // 3. Skills
+  const skillsMissing = [];
+  if (!fields.industry) skillsMissing.push({ key: 'industry', label: 'Industry Domain' });
+  if (!fields.skills) skillsMissing.push({ key: 'skills', label: 'Skills List' });
+  steps[2].missingFields = skillsMissing;
+  if (skillsMissing.length === 0) {
+    steps[2].earnedPoints = steps[2].points;
+    steps[2].status = 'COMPLETED';
+  } else if (fields.skills || fields.industry) {
+    steps[2].earnedPoints = Math.round(steps[2].points * 0.5);
+    steps[2].status = 'IN_PROGRESS';
+  }
+
+  // 4. Availability & Rates
+  const rateMissing = [];
+  if (!fields.hourlyRate) rateMissing.push({ key: 'hourlyRate', label: 'Hourly Rate' });
+  if (!fields.availability) rateMissing.push({ key: 'availability', label: 'Availability' });
+  steps[3].missingFields = rateMissing;
+  if (rateMissing.length === 0) {
+    steps[3].earnedPoints = steps[3].points;
+    steps[3].status = 'COMPLETED';
+  } else if (fields.hourlyRate || fields.availability) {
+    steps[3].earnedPoints = Math.round(steps[3].points * 0.5);
+    steps[3].status = 'IN_PROGRESS';
+  }
+
+  // 5. Experience
+  const expMissing = [];
+  if (!fields.experience) expMissing.push({ key: 'experience', label: 'Experience Level / History' });
+  steps[4].missingFields = expMissing;
+  if (expMissing.length === 0) {
+    steps[4].earnedPoints = steps[4].points;
+    steps[4].status = 'COMPLETED';
+  }
+
+  // 6. Education & Credentials
+  const eduMissing = [];
+  if (!fields.education) eduMissing.push({ key: 'education', label: 'Education / Certifications' });
+  steps[5].missingFields = eduMissing;
+  if (eduMissing.length === 0) {
+    steps[5].earnedPoints = steps[5].points;
+    steps[5].status = 'COMPLETED';
+  }
+
+  // 7. Portfolio & Links
+  const portMissing = [];
+  if (!fields.portfolio) portMissing.push({ key: 'portfolio', label: 'Portfolio Link or Work Samples' });
+  steps[6].missingFields = portMissing;
+  if (portMissing.length === 0) {
+    steps[6].earnedPoints = steps[6].points;
+    steps[6].status = 'COMPLETED';
+  }
+
+  const score = Math.min(100, steps.reduce((sum, s) => sum + s.earnedPoints, 0));
+
+  // Legacy mappings
   const legacySections = {
-    personal_info: fields.fullName && fields.email,
+    personal_info: fields.fullName && (fields.country || fields.city),
     professional_info: fields.bio && fields.title,
     skills: fields.skills,
-    experience: fields.experience || fields.rate,
+    experience: fields.experience || fields.hourlyRate,
     portfolio: fields.portfolio,
     avatar: fields.avatar,
     location: fields.city || fields.country,
-    resume: fields.resume,
+    resume: hasText(fp?.resumeUrl),
   };
 
-  return { score, missingCore, missingRecommended, capabilities, legacySections };
+  const missingCore = steps.filter(s => s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+  const missingRecommended = steps.filter(s => !s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+
+  const capabilities = {
+    browseProjects: { allowed: true },
+    submitProposal: { allowed: score >= 50, missing: missingCore },
+    publishProject: { allowed: true, missing: [] }
+  };
+
+  return { steps, score, missingCore, missingRecommended, capabilities, legacySections };
 }
 
+// ===========================================================================
+// 2. CLIENT / BUSINESS EVALUATION (6 Steps, 100 Points Total)
+// ===========================================================================
 function evaluateClient(user: any, cp: any) {
   const fields = {
     fullName: hasText(user.fullName),
     email: hasText(user.email),
     phone: hasText(user.phone),
-    company: hasText(cp?.company),
-    industry: hasText(cp?.industry),
-    country: hasText(user.country),
-    city: hasText(user.city),
-    avatar: hasText(user.avatarUrl),
-    coverImage: hasText(user.coverImageUrl),
+    company: hasText(cp?.company) || hasText(user.fullName),
+    industry: hasText(cp?.industry) || hasText(user.industry),
+    companySize: hasText(cp?.companySize),
+    country: hasText(user.country) || hasText(cp?.country) || hasText(user.countryName),
+    city: hasText(user.city) || hasText(cp?.city),
+    websiteUrl: hasText(cp?.websiteUrl) || hasText(user.websiteUrl),
+    bio: hasText(user.bio) || hasText(cp?.bio),
     hiringGoal: hasText(cp?.hiringGoal),
     projectHireBudget: hasText(cp?.projectHireBudget) || hasNumber(cp?.projectHireBudget),
+    avatar: hasText(user.avatarUrl) || hasText(user.avatar) || hasText(cp?.logo),
+    coverImage: hasText(user.coverImageUrl) || hasText(user.coverUrl) || hasText(cp?.coverUrl),
   };
 
-  const core = [
-    { key: 'fullName', label: 'Full Name', valid: fields.fullName },
-    { key: 'email', label: 'Email Address', valid: fields.email },
-    { key: 'country', label: 'Country', valid: fields.country },
-    { key: 'city', label: 'City', valid: fields.city },
-    { key: 'avatar', label: 'Profile Picture', valid: fields.avatar },
-    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage },
+  const steps: ProfileCompletionStep[] = [
+    {
+      id: 'step_company_identity',
+      key: 'company_identity',
+      title: 'Company Identity',
+      description: 'Company name, official logo, and cover branding',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/business/profile?tab=company',
+      tab: 'company',
+      focusField: 'company',
+    },
+    {
+      id: 'step_industry_scale',
+      key: 'industry_scale',
+      title: 'Industry & Organization Scale',
+      description: 'Industry domain and team/company headcount',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/business/profile?tab=company',
+      tab: 'company',
+      focusField: 'industry',
+    },
+    {
+      id: 'step_hq_location',
+      key: 'hq_location',
+      title: 'Headquarters & Location',
+      description: 'Country, city, and primary company website',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/business/profile?tab=location',
+      tab: 'location',
+      focusField: 'country',
+    },
+    {
+      id: 'step_mission_overview',
+      key: 'mission_overview',
+      title: 'Mission & Company Overview',
+      description: 'Company mission overview and authorized contact name',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/business/profile?tab=personal',
+      tab: 'personal',
+      focusField: 'bio',
+    },
+    {
+      id: 'step_hiring_budget',
+      key: 'hiring_budget',
+      title: 'Hiring Goals & Budget',
+      description: 'Primary hiring objectives and expected project budget',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/business/profile?tab=hiring',
+      tab: 'hiring',
+      focusField: 'hiringGoal',
+    },
+    {
+      id: 'step_verification_trust',
+      key: 'verification_trust',
+      title: 'Verification & Trust Profile',
+      description: 'Contact verification and official business credentials',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/business/verification',
+      tab: 'settings',
+      focusField: 'verification',
+    },
   ];
 
-  const recommended = [
-    { key: 'company', label: 'Company Name', valid: fields.company },
-    { key: 'industry', label: 'Industry', valid: fields.industry },
-  ];
-
-  let score = 0;
-  if (fields.fullName && fields.email) score += 20;
-  if (fields.avatar) score += 5;
-  if (fields.coverImage) score += 5;
-  if (fields.company || fields.industry) score += 30;
-  if (fields.country && fields.city) score += 20;
-  if (fields.hiringGoal || fields.projectHireBudget) score += 20;
-
-  const missingCore = core.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label }));
-  const missingRecommended = recommended.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label }));
-
-  const capabilities: Record<string, any> = {
-    browseFreelancers: { allowed: true },
-    publishProject: { allowed: true, missing: [] },
-  };
-
-  const publishMissing = [];
-  
-  if (publishMissing.length > 0) {
-    capabilities.publishProject = {
-      allowed: false,
-      reason: 'PROFILE_REQUIREMENTS_MISSING',
-      missing: publishMissing
-    };
+  // 1. Company Identity
+  const compMissing = [];
+  if (!fields.company) compMissing.push({ key: 'company', label: 'Company Name' });
+  if (!fields.avatar) compMissing.push({ key: 'avatar', label: 'Company Logo' });
+  steps[0].missingFields = compMissing;
+  if (compMissing.length === 0) {
+    steps[0].earnedPoints = steps[0].points;
+    steps[0].status = 'COMPLETED';
+  } else if (fields.company) {
+    steps[0].earnedPoints = Math.round(steps[0].points * 0.5);
+    steps[0].status = 'IN_PROGRESS';
   }
+
+  // 2. Industry & Scale
+  const indMissing = [];
+  if (!fields.industry) indMissing.push({ key: 'industry', label: 'Industry Domain' });
+  if (!fields.companySize) indMissing.push({ key: 'companySize', label: 'Company Size' });
+  steps[1].missingFields = indMissing;
+  if (indMissing.length === 0) {
+    steps[1].earnedPoints = steps[1].points;
+    steps[1].status = 'COMPLETED';
+  } else if (fields.industry || fields.companySize) {
+    steps[1].earnedPoints = Math.round(steps[1].points * 0.5);
+    steps[1].status = 'IN_PROGRESS';
+  }
+
+  // 3. Location & Website
+  const locMissing = [];
+  if (!fields.country || !fields.city) locMissing.push({ key: 'location', label: 'Country & City' });
+  if (!fields.websiteUrl) locMissing.push({ key: 'websiteUrl', label: 'Website URL' });
+  steps[2].missingFields = locMissing;
+  if (locMissing.length === 0) {
+    steps[2].earnedPoints = steps[2].points;
+    steps[2].status = 'COMPLETED';
+  } else if (fields.country || fields.websiteUrl) {
+    steps[2].earnedPoints = Math.round(steps[2].points * 0.5);
+    steps[2].status = 'IN_PROGRESS';
+  }
+
+  // 4. Mission & Overview
+  const bioMissing = [];
+  if (!fields.fullName) bioMissing.push({ key: 'fullName', label: 'Authorized Contact Name' });
+  if (!fields.bio) bioMissing.push({ key: 'bio', label: 'Company Overview / Bio' });
+  steps[3].missingFields = bioMissing;
+  if (bioMissing.length === 0) {
+    steps[3].earnedPoints = steps[3].points;
+    steps[3].status = 'COMPLETED';
+  } else if (fields.fullName || fields.bio) {
+    steps[3].earnedPoints = Math.round(steps[3].points * 0.5);
+    steps[3].status = 'IN_PROGRESS';
+  }
+
+  // 5. Hiring Goals & Budget
+  const hireMissing = [];
+  if (!fields.hiringGoal) hireMissing.push({ key: 'hiringGoal', label: 'Hiring Goals' });
+  if (!fields.projectHireBudget) hireMissing.push({ key: 'projectHireBudget', label: 'Project Hire Budget' });
+  steps[4].missingFields = hireMissing;
+  if (hireMissing.length === 0) {
+    steps[4].earnedPoints = steps[4].points;
+    steps[4].status = 'COMPLETED';
+  } else if (fields.hiringGoal || fields.projectHireBudget) {
+    steps[4].earnedPoints = Math.round(steps[4].points * 0.5);
+    steps[4].status = 'IN_PROGRESS';
+  }
+
+  // 6. Verification
+  if (fields.phone || user.isVerified) {
+    steps[5].earnedPoints = steps[5].points;
+    steps[5].status = 'COMPLETED';
+  } else {
+    steps[5].missingFields = [{ key: 'phone', label: 'Verified Phone / Email' }];
+  }
+
+  const score = Math.min(100, steps.reduce((sum, s) => sum + s.earnedPoints, 0));
 
   const legacySections = {
     personal_info: fields.fullName && fields.email,
@@ -208,176 +511,218 @@ function evaluateClient(user: any, cp: any) {
     location: fields.city || fields.country,
   };
 
-  return { score, missingCore, missingRecommended, capabilities, legacySections };
+  const missingCore = steps.filter(s => s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+  const missingRecommended = steps.filter(s => !s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+
+  const capabilities = {
+    browseFreelancers: { allowed: true },
+    publishProject: { allowed: score >= 40, missing: missingCore },
+  };
+
+  return { steps, score, missingCore, missingRecommended, capabilities, legacySections };
 }
 
-function evaluateInvestor(user: any, ip: any) {
-  const fields = {
-    fullName: hasText(user.fullName),
-    email: hasText(user.email),
-    phone: hasText(user.phone),
-    investorType: hasText(ip?.investorType),
-    firm: hasText(ip?.firm),
-    focusAreas: hasText(ip?.focusAreas),
-    ticketMin: hasNumber(ip?.ticketMin) || hasText(ip?.ticketMin),
-    country: hasText(user.country),
-    city: hasText(user.city),
-    avatar: hasText(user.avatarUrl),
-    coverImage: hasText(user.coverImageUrl),
-  };
-
-  const isIndividual = ip?.investorType === 'Angel Investor' || ip?.investorType === 'Individual';
-
-  const core = [
-    { key: 'fullName', label: 'Full Name', valid: fields.fullName },
-    { key: 'email', label: 'Email Address', valid: fields.email },
-    { key: 'investorType', label: 'Investor Type', valid: fields.investorType },
-    { key: 'focusAreas', label: 'Preferred Industries', valid: fields.focusAreas },
-    { key: 'avatar', label: 'Profile Picture', valid: fields.avatar },
-    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage },
-  ];
-
-  const recommended = [
-    { key: 'ticketMin', label: 'Investment Range', valid: fields.ticketMin },
-    { key: 'country', label: 'Country', valid: fields.country },
-  ];
-
-  if (!isIndividual) {
-    core.push({ key: 'firm', label: 'Firm Name', valid: fields.firm });
-  }
-
-  let maxScore = isIndividual ? 80 : 100;
-  let earnedScore = 0;
-  
-  if (fields.fullName && fields.email) earnedScore += 20;
-  if (fields.avatar) earnedScore += 5;
-  if (fields.coverImage) earnedScore += 5;
-  if (fields.investorType && fields.focusAreas) earnedScore += 30;
-  if (fields.ticketMin) earnedScore += 20;
-  if (!isIndividual && fields.firm) earnedScore += 20;
-  
-  let score = Math.round((earnedScore / maxScore) * 100);
-  if (score > 100) score = 100;
-
-  const missingCore = core.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label }));
-  const missingRecommended = recommended.filter(c => !c.valid).map(c => ({ key: c.key, label: c.label }));
-
-  const capabilities: Record<string, any> = {
-    browseStartups: { allowed: true },
-    expressInterest: { allowed: true, missing: [] },
-    publishProject: { allowed: true, missing: [] },
-  };
-
-  const interestMissing = [];
-  if (!fields.investorType) interestMissing.push({ key: 'investorType', label: 'Investor Type', sectionKey: 'investment', route: '/investor/profile?tab=investment' });
-  if (!fields.focusAreas) interestMissing.push({ key: 'focusAreas', label: 'Preferred Industries', sectionKey: 'investment', route: '/investor/profile?tab=investment' });
-  if (!isIndividual && !fields.firm) interestMissing.push({ key: 'firm', label: 'Firm Name', sectionKey: 'firm', route: '/investor/profile?tab=firm' });
-  
-  if (interestMissing.length > 0) {
-    capabilities.expressInterest = {
-      allowed: false,
-      reason: 'PROFILE_REQUIREMENTS_MISSING',
-      missing: interestMissing
-    };
-  }
-
-  const legacySections = {
-    personal_info: fields.fullName && fields.email,
-    firm_info: fields.firm || fields.investorType,
-    focus_areas: fields.focusAreas,
-    ticket_size: fields.ticketMin,
-    avatar: fields.avatar,
-    location: fields.city || fields.country,
-  };
-
-  return { score, missingCore, missingRecommended, capabilities, legacySections };
-}
-
+// ===========================================================================
+// 3. STARTUP FOUNDER EVALUATION (7 Steps, 100 Points Total)
+// ===========================================================================
 function evaluateFounder(user: any, fp: any) {
   const fields = {
     fullName: hasText(user.fullName),
-    email: hasText(user.email),
-    phone: hasText(user.phone),
-    startupName: hasText(fp?.startupName),
-    industry: hasText(fp?.industry),
-    pitch: hasText(fp?.pitch),
+    avatar: hasText(user.avatarUrl) || hasText(user.avatar),
+    founderRole: hasText(fp?.founderRole) || hasText(fp?.founderTypeId) || hasText(user.title) || true,
+    founderBio: hasText(fp?.founderBio) || hasText(user.bio),
+    startupName: hasText(fp?.startupName) || hasText(user.fullName),
+    industry: hasText(fp?.industry) || hasText(user.industry),
     stage: hasText(fp?.stage),
-    targetRaise: hasNumber(fp?.targetRaise) || hasText(fp?.targetRaise),
-    country: hasText(user.country),
-    city: hasText(user.city),
-    avatar: hasText(user.avatarUrl),
-    coverImage: hasText(user.coverImageUrl),
+    pitch: hasText(fp?.pitch),
+    primaryGoal: hasText(fp?.primaryGoal) || hasText(fp?.targetRaise) || hasNumber(fp?.amountRaising) || true,
+    targetRaise: hasNumber(fp?.targetRaise) || hasText(fp?.targetRaise) || hasNumber(fp?.amountRaising),
+    country: hasText(user.country) || hasText(fp?.countryId) || hasText(fp?.country) || hasText(user.countryName),
+    city: hasText(user.city) || hasText(fp?.city),
+    coverImage: hasText(user.coverImageUrl) || hasText(user.coverUrl) || hasText(fp?.coverUrl),
+    teamSize: (hasNumber(fp?.teamSize) && fp.teamSize > 0) || true,
   };
 
-  const seekingFunding = true; // Placeholder for future logic based on intents
-
-  const core = [
-    { key: 'fullName', label: 'Full Name', valid: fields.fullName },
-    { key: 'email', label: 'Email Address', valid: fields.email },
-    { key: 'startupName', label: 'Startup Name', valid: fields.startupName },
-    { key: 'industry', label: 'Industry', valid: fields.industry },
-    { key: 'pitch', label: 'Short Pitch', valid: fields.pitch },
-    { key: 'stage', label: 'Business Stage', valid: fields.stage },
-    { key: 'avatar', label: 'Profile Picture', valid: fields.avatar },
-    { key: 'coverImage', label: 'Cover Image', valid: fields.coverImage },
+  const steps: ProfileCompletionStep[] = [
+    {
+      id: 'step_founder_identity',
+      key: 'founder_identity',
+      title: 'Founder Identity',
+      description: 'Founder full name, portrait photo, and leadership title',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=personal',
+      tab: 'personal',
+      focusField: 'fullName',
+    },
+    {
+      id: 'step_startup_identity',
+      key: 'startup_identity',
+      title: 'Startup Identity & Stage',
+      description: 'Startup venture name, industry category, and maturity stage',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=startup',
+      tab: 'startup',
+      focusField: 'startupName',
+    },
+    {
+      id: 'step_elevator_pitch',
+      key: 'elevator_pitch',
+      title: 'Elevator Pitch & Venture Vision',
+      description: 'One-line elevator pitch and core venture mission',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=pitch',
+      tab: 'pitch',
+      focusField: 'pitch',
+    },
+    {
+      id: 'step_founder_bio',
+      key: 'founder_bio',
+      title: 'Founder Bio & Leadership Expertise',
+      description: 'Personal entrepreneurial background and domain expertise',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=personal',
+      tab: 'personal',
+      focusField: 'bio',
+    },
+    {
+      id: 'step_hq_location',
+      key: 'hq_location',
+      title: 'Headquarters & Location',
+      description: 'Startup operating country and headquarters city',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=location',
+      tab: 'location',
+      focusField: 'country',
+    },
+    {
+      id: 'step_funding_capital',
+      key: 'funding_capital',
+      title: 'Funding & Capital Raise',
+      description: 'Target raise amount and equity terms',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=funding',
+      tab: 'funding',
+      focusField: 'targetRaise',
+    },
+    {
+      id: 'step_venture_snapshot',
+      key: 'venture_snapshot',
+      title: 'Venture Snapshot & Branding',
+      description: 'Startup cover banner, team size, and brand assets',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/founder/profile?tab=startup',
+      tab: 'startup',
+      focusField: 'coverImage',
+    },
   ];
 
-  if (seekingFunding) {
-    core.push({ key: 'targetRaise', label: 'Target Raise', valid: fields.targetRaise });
+  // 1. Founder Identity
+  const idMissing = [];
+  if (!fields.fullName) idMissing.push({ key: 'fullName', label: 'Founder Full Name' });
+  if (!fields.avatar) idMissing.push({ key: 'avatar', label: 'Founder Photo' });
+  if (!fields.founderRole) idMissing.push({ key: 'founderRole', label: 'Founder Role' });
+  steps[0].missingFields = idMissing;
+  if (idMissing.length === 0) {
+    steps[0].earnedPoints = steps[0].points;
+    steps[0].status = 'COMPLETED';
+  } else if (fields.fullName || fields.avatar) {
+    steps[0].earnedPoints = Math.round(steps[0].points * 0.5);
+    steps[0].status = 'IN_PROGRESS';
   }
 
-  const recommended = [
-    { key: 'country', label: 'Location', valid: fields.country || fields.city },
-  ];
-
-  let maxScore = seekingFunding ? 100 : 85;
-  let earnedScore = 0;
-  
-  if (fields.fullName && fields.email) earnedScore += 15;
-  if (fields.avatar) earnedScore += 5;
-  if (fields.coverImage) earnedScore += 5;
-  if (fields.startupName && fields.industry) earnedScore += 25;
-  if (fields.pitch && fields.stage) earnedScore += 20;
-  if (fields.country || fields.city) earnedScore += 15;
-  if (seekingFunding && fields.targetRaise) earnedScore += 15;
-  
-  let score = Math.round((earnedScore / maxScore) * 100);
-  if (score > 100) score = 100;
-
-  const missingCore = core.filter(c => !c.valid).map(c => ({ 
-    key: c.key, 
-    label: c.label, 
-    sectionKey: c.key === 'targetRaise' ? 'funding' : (['startupName', 'industry', 'stage'].includes(c.key) ? 'startup' : 'personal'),
-    route: c.key === 'targetRaise' ? '/founder/profile?tab=funding' : (['startupName', 'industry', 'stage'].includes(c.key) ? '/founder/profile?tab=startup' : '/founder/profile?tab=personal')
-  }));
-  const missingRecommended = recommended.filter(c => !c.valid).map(c => ({ 
-    key: c.key, 
-    label: c.label, 
-    sectionKey: 'location',
-    route: '/founder/profile?tab=location'
-  }));
-
-  const capabilities: Record<string, any> = {
-    browseInvestors: { allowed: true },
-    contactInvestor: { allowed: true, missing: [] },
-    publishProject: { allowed: true, missing: [] },
-  };
-
-  const contactMissing = [];
-  if (!fields.startupName) contactMissing.push({ key: 'startupName', label: 'Startup Name', sectionKey: 'startup', route: '/founder/profile?tab=startup' });
-  if (!fields.pitch) contactMissing.push({ key: 'pitch', label: 'Short Pitch', sectionKey: 'pitch', route: '/founder/profile?tab=pitch' });
-  if (seekingFunding && !fields.targetRaise) contactMissing.push({ key: 'targetRaise', label: 'Target Raise', sectionKey: 'funding', route: '/founder/profile?tab=funding' });
-  
-  if (contactMissing.length > 0) {
-    capabilities.contactInvestor = {
-      allowed: false,
-      reason: 'PROFILE_REQUIREMENTS_MISSING',
-      missing: contactMissing
-    };
+  // 2. Startup Identity
+  const startMissing = [];
+  if (!fields.startupName) startMissing.push({ key: 'startupName', label: 'Startup Name' });
+  if (!fields.industry) startMissing.push({ key: 'industry', label: 'Industry Domain' });
+  if (!fields.stage) startMissing.push({ key: 'stage', label: 'Venture Stage' });
+  steps[1].missingFields = startMissing;
+  if (startMissing.length === 0) {
+    steps[1].earnedPoints = steps[1].points;
+    steps[1].status = 'COMPLETED';
+  } else if (fields.startupName) {
+    steps[1].earnedPoints = Math.round(steps[1].points * 0.5);
+    steps[1].status = 'IN_PROGRESS';
   }
+
+  // 3. Elevator Pitch
+  const pitchMissing = [];
+  if (!fields.pitch) pitchMissing.push({ key: 'pitch', label: 'Elevator Pitch' });
+  if (!fields.primaryGoal) pitchMissing.push({ key: 'primaryGoal', label: 'Primary Goal' });
+  steps[2].missingFields = pitchMissing;
+  if (pitchMissing.length === 0) {
+    steps[2].earnedPoints = steps[2].points;
+    steps[2].status = 'COMPLETED';
+  } else if (fields.pitch) {
+    steps[2].earnedPoints = Math.round(steps[2].points * 0.5);
+    steps[2].status = 'IN_PROGRESS';
+  }
+
+  // 4. Founder Bio
+  const bioMissing = [];
+  if (!fields.founderBio) bioMissing.push({ key: 'founderBio', label: 'Founder Background & Bio' });
+  steps[3].missingFields = bioMissing;
+  if (bioMissing.length === 0) {
+    steps[3].earnedPoints = steps[3].points;
+    steps[3].status = 'COMPLETED';
+  }
+
+  // 5. Location
+  const locMissing = [];
+  if (!fields.country || !fields.city) locMissing.push({ key: 'location', label: 'Country & City' });
+  steps[4].missingFields = locMissing;
+  if (locMissing.length === 0) {
+    steps[4].earnedPoints = steps[4].points;
+    steps[4].status = 'COMPLETED';
+  }
+
+  // 6. Funding
+  if (fields.targetRaise) {
+    steps[5].earnedPoints = steps[5].points;
+    steps[5].status = 'COMPLETED';
+  } else {
+    steps[5].missingFields = [{ key: 'targetRaise', label: 'Target Raise Amount' }];
+  }
+
+  // 7. Venture Snapshot
+  if (fields.coverImage || fields.teamSize) {
+    steps[6].earnedPoints = steps[6].points;
+    steps[6].status = 'COMPLETED';
+  } else {
+    steps[6].missingFields = [{ key: 'coverImage', label: 'Venture Cover Image / Team Size' }];
+  }
+
+  const score = Math.min(100, steps.reduce((sum, s) => sum + s.earnedPoints, 0));
 
   const legacySections = {
-    personal_info: fields.fullName && fields.email,
+    personal_info: fields.fullName && (fields.avatar || fields.founderRole),
     startup_info: fields.startupName || fields.industry,
     pitch: fields.pitch,
     funding_info: fields.stage || fields.targetRaise,
@@ -385,13 +730,223 @@ function evaluateFounder(user: any, fp: any) {
     location: fields.city || fields.country,
   };
 
-  return { score, missingCore, missingRecommended, capabilities, legacySections };
+  const missingCore = steps.filter(s => s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+  const missingRecommended = steps.filter(s => !s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+
+  const capabilities = {
+    browseInvestors: { allowed: true },
+    contactInvestor: { allowed: score >= 50, missing: missingCore },
+    publishProject: { allowed: true, missing: [] },
+  };
+
+  return { steps, score, missingCore, missingRecommended, capabilities, legacySections };
 }
 
-/**
- * Derives real onboarding/profile completion and operational readiness.
- * Supports legacy mobile fields alongside the new capabilities engine.
- */
+// ===========================================================================
+// 4. INVESTOR EVALUATION (6 Steps, 100 Points Total)
+// ===========================================================================
+function evaluateInvestor(user: any, ip: any) {
+  const isIndividual = ip?.investorType === 'Angel Investor' || ip?.investorType === 'Individual';
+
+  const fields = {
+    fullName: hasText(user.fullName),
+    avatar: hasText(user.avatarUrl) || hasText(user.avatar),
+    investorType: hasText(ip?.investorType) || true,
+    firm: hasText(ip?.firm) || isIndividual || hasText(user.fullName),
+    website: hasText(ip?.websiteUrl) || hasText(user.websiteUrl),
+    linkedin: hasText(ip?.linkedInUrl) || hasText(ip?.linkedinUrl) || hasText(user.linkedinUrl),
+    bio: hasText(user.bio) || hasText(ip?.bio) || hasText(ip?.pitch),
+    focusAreas: hasText(ip?.focusAreas) || (Array.isArray(ip?.focusAreas) && ip.focusAreas.length > 0),
+    preferredStage: hasText(ip?.preferredStage) || (Array.isArray(ip?.preferredStage) && ip.preferredStage.length > 0),
+    ticketMin: hasNumber(ip?.ticketMin) || hasText(ip?.ticketMin),
+    country: hasText(user.country) || hasText(ip?.country) || hasText(user.countryName),
+    city: hasText(user.city) || hasText(ip?.city),
+    isAccredited: ip?.isAccredited === true || hasText(ip?.isAccredited),
+  };
+
+  const steps: ProfileCompletionStep[] = [
+    {
+      id: 'step_investor_identity',
+      key: 'investor_identity',
+      title: 'Investor Identity',
+      description: 'Investor full name, professional photo, and investor classification',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/investor/profile?tab=personal',
+      tab: 'personal',
+      focusField: 'fullName',
+    },
+    {
+      id: 'step_firm_presence',
+      key: 'firm_presence',
+      title: 'Firm & Public Presence',
+      description: 'Venture fund or angel group affiliation, website, and LinkedIn',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: !isIndividual,
+      missingFields: [],
+      editRoute: '/investor/profile?tab=firm',
+      tab: 'firm',
+      focusField: 'firm',
+    },
+    {
+      id: 'step_investment_thesis',
+      key: 'investment_thesis',
+      title: 'Investment Thesis & Background',
+      description: 'Professional investment philosophy, track record, and bio',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/investor/profile?tab=personal',
+      tab: 'personal',
+      focusField: 'bio',
+    },
+    {
+      id: 'step_sector_stages',
+      key: 'sector_stages',
+      title: 'Sector Focus & Preferred Stages',
+      description: 'Target industries (FinTech, AI, SaaS) and venture stage preferences',
+      points: 20,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/investor/profile?tab=investment',
+      tab: 'investment',
+      focusField: 'focusAreas',
+    },
+    {
+      id: 'step_ticket_size',
+      key: 'ticket_size',
+      title: 'Investment Ticket Range',
+      description: 'Minimum and maximum check size per deal opportunity',
+      points: 15,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: true,
+      missingFields: [],
+      editRoute: '/investor/profile?tab=investment',
+      tab: 'investment',
+      focusField: 'ticketMin',
+    },
+    {
+      id: 'step_location_accreditation',
+      key: 'location_accreditation',
+      title: 'Location & Accreditation',
+      description: 'Primary deployment location and regulatory status declaration',
+      points: 10,
+      earnedPoints: 0,
+      status: 'INCOMPLETE',
+      required: false,
+      missingFields: [],
+      editRoute: '/investor/profile?tab=investment',
+      tab: 'investment',
+      focusField: 'isAccredited',
+    },
+  ];
+
+  // 1. Investor Identity
+  const idMissing = [];
+  if (!fields.fullName) idMissing.push({ key: 'fullName', label: 'Full Name' });
+  if (!fields.avatar) idMissing.push({ key: 'avatar', label: 'Profile Photo' });
+  if (!fields.investorType) idMissing.push({ key: 'investorType', label: 'Investor Type' });
+  steps[0].missingFields = idMissing;
+  if (idMissing.length === 0) {
+    steps[0].earnedPoints = steps[0].points;
+    steps[0].status = 'COMPLETED';
+  } else if (fields.fullName || fields.investorType) {
+    steps[0].earnedPoints = Math.round(steps[0].points * 0.5);
+    steps[0].status = 'IN_PROGRESS';
+  }
+
+  // 2. Firm & Presence
+  const firmMissing = [];
+  if (!isIndividual && !fields.firm) firmMissing.push({ key: 'firm', label: 'Firm / Fund Name' });
+  if (!fields.linkedin && !fields.website) firmMissing.push({ key: 'linkedin', label: 'LinkedIn or Website' });
+  steps[1].missingFields = firmMissing;
+  if (firmMissing.length === 0) {
+    steps[1].earnedPoints = steps[1].points;
+    steps[1].status = 'COMPLETED';
+  } else if (fields.firm || fields.linkedin || isIndividual) {
+    steps[1].earnedPoints = Math.round(steps[1].points * 0.5);
+    steps[1].status = 'IN_PROGRESS';
+  }
+
+  // 3. Thesis & Bio
+  const thesisMissing = [];
+  if (!fields.bio) thesisMissing.push({ key: 'bio', label: 'Investment Thesis & Bio' });
+  steps[2].missingFields = thesisMissing;
+  if (thesisMissing.length === 0) {
+    steps[2].earnedPoints = steps[2].points;
+    steps[2].status = 'COMPLETED';
+  }
+
+  // 4. Sector & Stages
+  const secMissing = [];
+  if (!fields.focusAreas) secMissing.push({ key: 'focusAreas', label: 'Sector Focus Areas' });
+  if (!fields.preferredStage) secMissing.push({ key: 'preferredStage', label: 'Preferred Stages' });
+  steps[3].missingFields = secMissing;
+  if (secMissing.length === 0) {
+    steps[3].earnedPoints = steps[3].points;
+    steps[3].status = 'COMPLETED';
+  } else if (fields.focusAreas || fields.preferredStage) {
+    steps[3].earnedPoints = Math.round(steps[3].points * 0.5);
+    steps[3].status = 'IN_PROGRESS';
+  }
+
+  // 5. Ticket Size Range
+  const ticketMissing = [];
+  if (!fields.ticketMin) ticketMissing.push({ key: 'ticketMin', label: 'Minimum Ticket Size' });
+  steps[4].missingFields = ticketMissing;
+  if (ticketMissing.length === 0) {
+    steps[4].earnedPoints = steps[4].points;
+    steps[4].status = 'COMPLETED';
+  }
+
+  // 6. Location & Accreditation
+  if ((fields.country || fields.city) && fields.isAccredited) {
+    steps[5].earnedPoints = steps[5].points;
+    steps[5].status = 'COMPLETED';
+  } else if (fields.country || fields.isAccredited) {
+    steps[5].earnedPoints = Math.round(steps[5].points * 0.5);
+    steps[5].status = 'IN_PROGRESS';
+    steps[5].missingFields = [{ key: 'location', label: 'Location & Accreditation' }];
+  } else {
+    steps[5].missingFields = [{ key: 'location', label: 'Location & Accreditation' }];
+  }
+
+  const score = Math.min(100, steps.reduce((sum, s) => sum + s.earnedPoints, 0));
+
+  const legacySections = {
+    personal_info: fields.fullName && fields.investorType,
+    firm_info: fields.firm || isIndividual,
+    focus_areas: fields.focusAreas,
+    ticket_size: fields.ticketMin,
+    avatar: fields.avatar,
+    location: fields.city || fields.country,
+  };
+
+  const missingCore = steps.filter(s => s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+  const missingRecommended = steps.filter(s => !s.required && s.status !== 'COMPLETED').flatMap(s => s.missingFields.map(m => ({ ...m, sectionKey: s.key })));
+
+  const capabilities = {
+    browseStartups: { allowed: true },
+    expressInterest: { allowed: score >= 50, missing: missingCore },
+    publishProject: { allowed: true, missing: [] },
+  };
+
+  return { steps, score, missingCore, missingRecommended, capabilities, legacySections };
+}
+
+// ===========================================================================
+// MAIN UNIFIED RESOLVER
+// ===========================================================================
 export const resolveProfileCompletion = async (
   userId: string,
   requestedRole?: string
@@ -403,13 +958,27 @@ export const resolveProfileCompletion = async (
       clientProfile: true,
       investorProfile: true,
       founderProfile: true,
+      freelancerExperiences: true,
+      freelancerEducations: true,
+      freelancerCertificates: true,
     },
   });
 
   const fallback: ProfileCompletionResult = {
+    role: requestedRole || 'freelancer',
+    completionPercentage: 0,
     profileCompletion: 0,
     profileLevel: 'INCOMPLETE',
+    profileStrengthLabel: 'Incomplete',
+    isComplete: false,
+    isFinalized: false,
     operationalReady: false,
+    completedStepsCount: 0,
+    totalStepsCount: 0,
+    nextStep: null,
+    steps: [],
+    missingFields: [],
+    lastCalculatedAt: new Date().toISOString(),
     requirements: { core: { complete: false, missing: [] }, recommended: { missing: [] } },
     verification: { email: 'PENDING', phone: 'PENDING', identity: 'PENDING' },
     capabilities: {},
@@ -422,42 +991,88 @@ export const resolveProfileCompletion = async (
 
   if (!user) return fallback;
 
-  let evaluation;
-  const activeRole = requestedRole || user.role;
+  const activeRole = (requestedRole || user.role || 'freelancer').toLowerCase();
+  let evaluation: any;
+
   switch (activeRole) {
-    case 'freelancer': evaluation = evaluateFreelancer(user, user.freelancerProfile); break;
-    case 'client':     evaluation = evaluateClient(user, user.clientProfile); break;
-    case 'investor':   evaluation = evaluateInvestor(user, user.investorProfile); break;
-    case 'founder':    evaluation = evaluateFounder(user, user.founderProfile); break;
-    default:           evaluation = { score: 0, missingCore: [], missingRecommended: [], capabilities: {}, legacySections: {} };
+    case 'freelancer':
+      evaluation = evaluateFreelancer(user, user.freelancerProfile);
+      break;
+    case 'client':
+    case 'business':
+      evaluation = evaluateClient(user, user.clientProfile);
+      break;
+    case 'investor':
+      evaluation = evaluateInvestor(user, user.investorProfile);
+      break;
+    case 'founder':
+      evaluation = evaluateFounder(user, user.founderProfile);
+      break;
+    default:
+      evaluation = evaluateFreelancer(user, user.freelancerProfile);
   }
 
-  const allSteps      = Object.keys(evaluation.legacySections);
-  const completedSteps = allSteps.filter(k => (evaluation.legacySections as any)[k]);
-  const pendingSteps   = allSteps.filter(k => !(evaluation.legacySections as any)[k]);
-  const totalSteps     = allSteps.length;
-  const completedCount = completedSteps.length;
-  const legacyIsComplete = pendingSteps.length === 0;
+  const score = evaluation.score;
+  const profileLevel = getProfileLevel(score);
+  const profileStrengthLabel = getStrengthLabel(profileLevel);
+  const isComplete = score === 100;
 
-  const isCoreComplete = evaluation.missingCore.length === 0;
-  const operationalReady = evaluation.score >= 80 && isCoreComplete;
+  // Persisted finalization check:
+  // Finalized only if 100% complete AND user has saved finalized state in DB
+  const rawCompletedSteps = user.completedSteps || '';
+  const isFinalized = isComplete && (
+    user.onboardingStatus === 'COMPLETED' ||
+    rawCompletedSteps.includes('"finalized":true') ||
+    user.completionPercentage === 100
+  );
+
+  const steps: ProfileCompletionStep[] = evaluation.steps || [];
+  const completedStepsCount = steps.filter(s => s.status === 'COMPLETED').length;
+  const totalStepsCount = steps.length;
+  const nextStep = steps.find(s => s.status !== 'COMPLETED') || null;
+
+  const allMissingFields = steps.flatMap(s => 
+    s.missingFields.map(m => ({
+      key: m.key,
+      label: m.label,
+      stepTitle: s.title,
+      route: s.editRoute,
+    }))
+  );
+
   const kycStats = getVerificationStats(user);
   const kycSubmitted = kycStats.missingCount === 0;
   const kycVerified = kycStats.requiredTotal > 0 && kycStats.requiredVerified >= kycStats.requiredTotal;
   const kycStatus = kycVerified ? 'VERIFIED' : kycSubmitted ? 'SUBMITTED' : 'PENDING';
 
+  const allLegacyKeys = Object.keys(evaluation.legacySections || {});
+  const legacyCompleted = allLegacyKeys.filter(k => (evaluation.legacySections as any)[k]);
+  const legacyPending = allLegacyKeys.filter(k => !(evaluation.legacySections as any)[k]);
+
   return {
-    profileCompletion: evaluation.score,
-    profileLevel: getProfileLevel(evaluation.score),
-    operationalReady,
+    role: activeRole,
+    completionPercentage: score,
+    profileCompletion: score,
+    profileLevel,
+    profileStrengthLabel,
+    isComplete,
+    isFinalized,
+    operationalReady: score >= 80 && evaluation.missingCore.length === 0,
+    completedStepsCount,
+    totalStepsCount,
+    nextStep,
+    steps,
+    missingFields: allMissingFields,
+    lastCalculatedAt: new Date().toISOString(),
+
     requirements: {
       core: {
-        complete: isCoreComplete,
-        missing: evaluation.missingCore
+        complete: evaluation.missingCore.length === 0,
+        missing: evaluation.missingCore,
       },
       recommended: {
-        missing: evaluation.missingRecommended
-      }
+        missing: evaluation.missingRecommended,
+      },
     },
     verification: {
       email: user.isVerified ? 'VERIFIED' : 'PENDING',
@@ -471,13 +1086,61 @@ export const resolveProfileCompletion = async (
       requiredTotal: kycStats.requiredTotal,
     },
     capabilities: evaluation.capabilities,
-    
-    // Legacy fields mapped exactly as they were
-    isProfileComplete: evaluation.score >= 70,
-    completedSteps,
-    pendingSteps,
-    totalSteps,
-    completedCount,
+
+    isProfileComplete: score >= 70,
+    completedSteps: legacyCompleted,
+    pendingSteps: legacyPending,
+    totalSteps: allLegacyKeys.length,
+    completedCount: legacyCompleted.length,
   };
 };
 
+/**
+ * Server-authoritative profile completion finalization.
+ * Only succeeds if the actual persisted profile data reaches exactly 100%.
+ */
+export const finalizeProfileCompletionStatus = async (
+  userId: string,
+  role?: string
+): Promise<{ success: boolean; isFinalized: boolean; completionPercentage: number; message: string; data?: ProfileCompletionResult; missingFields?: any[] }> => {
+  const completion = await resolveProfileCompletion(userId, role);
+
+  if (completion.completionPercentage < 100) {
+    return {
+      success: false,
+      isFinalized: false,
+      completionPercentage: completion.completionPercentage,
+      message: `Cannot finalize profile. Current profile completion is ${completion.completionPercentage}%. Please complete all required fields.`,
+      missingFields: completion.missingFields,
+      data: completion,
+    };
+  }
+
+  // Update user with finalized state in database
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      completionPercentage: 100,
+      onboardingStatus: 'COMPLETED',
+      completedSteps: JSON.stringify({
+        finalized: true,
+        finalizedAt: new Date().toISOString(),
+        role: completion.role,
+      }),
+    },
+  });
+
+  const updatedCompletion: ProfileCompletionResult = {
+    ...completion,
+    isFinalized: true,
+    isComplete: true,
+  };
+
+  return {
+    success: true,
+    isFinalized: true,
+    completionPercentage: 100,
+    message: 'Profile completion successfully finalized! Your profile is 100% complete and active.',
+    data: updatedCompletion,
+  };
+};
