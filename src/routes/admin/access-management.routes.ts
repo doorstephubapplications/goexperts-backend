@@ -1067,7 +1067,7 @@ accessManagementRouter.get("/staff", async (req: AuthenticatedRequest, res: Resp
       employmentStatus: s.employmentStatus,
       joiningDate: s.joiningDate || s.createdAt,
       lastLoginAt: s.lastLoginAt,
-      lastLoginLocation: s.lastLoginLocation || "New Delhi, India",
+      lastLoginLocation: s.lastLoginLocation || null,
       activeDevices: s._count.staffSessions,
     }));
 
@@ -1319,6 +1319,58 @@ accessManagementRouter.post("/staff/:id/sessions/revoke", async (req: Authentica
     }
 
     res.json({ success: true, message: "All sessions revoked for employee" });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Delete Employee Permanently & Invalidate All Future Access
+accessManagementRouter.delete("/staff/:id", async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await prisma.adminUser.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "Employee not found" });
+    }
+
+    // 1. Protect Super Admin: primary admin account cannot be deleted
+    if (existing.email === "superadmin@goexperts.com" || (existing.role?.name === "Super Admin" && existing.email === "superadmin@goexperts.com")) {
+      return res.status(403).json({ success: false, message: "The primary Super Admin account cannot be deleted" });
+    }
+
+    // 2. Prevent Self-Deletion
+    if (req.user?.id === id) {
+      return res.status(403).json({ success: false, message: "You cannot delete your own logged-in admin account." });
+    }
+
+    // 3. Delete dependent sessions, tokens, audits, and employee record
+    await prisma.$transaction([
+      prisma.adminSession.deleteMany({ where: { adminUserId: id } }),
+      prisma.adminLoginEvent.deleteMany({ where: { adminUserId: id } }),
+      prisma.staffActivityAudit.deleteMany({ where: { adminUserId: id } }),
+      prisma.session.deleteMany({ where: { adminUserId: id } }),
+      prisma.refreshToken.deleteMany({ where: { adminUserId: id } }),
+      prisma.adminUser.delete({ where: { id } }),
+    ]);
+
+    if (req.user?.id) {
+      await auditAction(
+        req.user.id,
+        "Employees",
+        "delete",
+        `Permanently deleted employee account "${existing.fullName}" (${existing.email})`,
+        req
+      );
+    }
+
+    res.json({
+      success: true,
+      message: `Employee "${existing.fullName}" has been permanently deleted and all access revoked.`,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

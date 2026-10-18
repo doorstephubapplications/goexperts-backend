@@ -104,11 +104,19 @@ async function verifyPassword(password: string, storedHash: string) {
 }
 
 function clientMeta(req: Request) {
-  const ipAddress =
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+  let ipAddress =
+    (req.body?.clientIp as string)
+    || (req.headers["cf-connecting-ip"] as string)
+    || (req.headers["x-real-ip"] as string)
+    || (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
     || req.socket?.remoteAddress
     || req.ip
     || null;
+
+  if (ipAddress && ipAddress.startsWith("::ffff:")) {
+    ipAddress = ipAddress.replace("::ffff:", "");
+  }
+
   const userAgent = req.headers["user-agent"] || null;
   return { ipAddress, userAgent };
 }
@@ -279,7 +287,24 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     if (admin) {
       const uaParsed = parseUserAgent(userAgent);
-      const approxLocation = (req.headers["x-client-city"] as string) || "New Delhi, India";
+
+      // Real-time dynamic location resolution (no hardcoded fallback)
+      let dynamicLocation = (req.body?.location as string)?.trim() || (req.headers["x-client-city"] as string)?.trim() || "";
+      if (!dynamicLocation && ipAddress && ipAddress !== "127.0.0.1" && ipAddress !== "::1") {
+        try {
+          const geoRes = await fetch(`http://ip-api.com/json/${ipAddress}?fields=status,city,regionName,country,district`);
+          if (geoRes.ok) {
+            const geoData: any = await geoRes.json();
+            if (geoData?.status === "success") {
+              const parts = [geoData.district, geoData.city, geoData.regionName, geoData.country].filter(Boolean);
+              dynamicLocation = parts.join(", ");
+            }
+          }
+        } catch {}
+      }
+      if (!dynamicLocation) {
+        dynamicLocation = "Location Pending Authorization";
+      }
 
       if (!admin.password) {
         prisma.loginAttempt
@@ -293,7 +318,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
               device: uaParsed.name,
               browser: uaParsed.browser,
               ipAddress: ipAddress || "127.0.0.1",
-              location: approxLocation,
+              location: dynamicLocation,
               status: "failed",
               failureReason: "No password set (OAuth)",
               risk: "high",
@@ -316,7 +341,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
               device: uaParsed.name,
               browser: uaParsed.browser,
               ipAddress: ipAddress || "127.0.0.1",
-              location: approxLocation,
+              location: dynamicLocation,
               status: "failed",
               failureReason: "Wrong password",
               risk: "medium",
@@ -338,7 +363,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
               device: uaParsed.name,
               browser: uaParsed.browser,
               ipAddress: ipAddress || "127.0.0.1",
-              location: approxLocation,
+              location: dynamicLocation,
               status: "failed",
               failureReason: "Account suspended or inactive",
               risk: "high",
@@ -428,7 +453,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           operatingSystem: uaParsed.os,
           deviceCategory: uaParsed.device,
           ipAddress: ipAddress || "127.0.0.1",
-          location: approxLocation,
+          location: dynamicLocation,
           expiresAt: new Date(Date.now() + sessionTimeoutMs),
         },
       }).catch(() => {});
@@ -441,7 +466,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           device: uaParsed.name,
           browser: uaParsed.browser,
           ipAddress: ipAddress || "127.0.0.1",
-          location: approxLocation,
+          location: dynamicLocation,
           status: "success",
           risk: "low",
         },
@@ -453,7 +478,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         data: {
           lastLoginAt: new Date(),
           lastLoginIp: ipAddress || "127.0.0.1",
-          lastLoginLocation: approxLocation,
+          lastLoginLocation: dynamicLocation,
         },
       }).catch(() => {});
 
