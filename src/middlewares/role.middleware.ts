@@ -1,18 +1,129 @@
-import { Response, NextFunction } from "express";
-import { AuthenticatedRequest } from "./auth.middleware.js";
+import { prisma } from "../config/database.js";
+
+function resolvePermissionForRoute(routePath: string, method: string): string | null {
+  const p = routePath.toLowerCase();
+
+  // Finance & Wallets
+  if (p.includes("/admin/wallets") || p.includes("/admin/crud/wallets")) {
+    return method === "GET" ? "finance.wallets.view" : "finance.wallets.adjust";
+  }
+  if (p.includes("/admin/withdrawals")) {
+    return method === "GET" ? "finance.withdrawals.view" : "finance.withdrawals.approve";
+  }
+  if (p.includes("/admin/invoices") || p.includes("/admin/transactions")) {
+    return "finance.transactions.view";
+  }
+  if (p.includes("/admin/plans") || p.includes("/admin/subscriptions")) {
+    return method === "GET" ? "finance.subscriptions.view" : "finance.plans.edit";
+  }
+
+  // Users
+  if (p.includes("/admin/freelancers")) return method === "GET" ? "users.freelancers.view" : "users.freelancers.edit";
+  if (p.includes("/admin/clients")) return method === "GET" ? "users.clients.view" : "users.clients.edit";
+  if (p.includes("/admin/investors")) return method === "GET" ? "users.investors.view" : "users.investors.edit";
+  if (p.includes("/admin/founders")) return method === "GET" ? "users.founders.view" : "users.founders.edit";
+  if (p.includes("/admin/user-connections") || p.includes("/admin/users/connections")) return "users.connections.view";
+  if (p.includes("/admin/delete-requests")) return "users.delete_requests.view";
+  if (p.includes("/admin/messaging") || p.includes("/admin/conversations")) return "users.messaging.view";
+
+  // CRM & Business
+  if (p.includes("/admin/projects") || p.includes("/admin/crud/projects")) return "crm.projects.view";
+  if (p.includes("/admin/tasks") || p.includes("/admin/crud/tasks")) return "crm.tasks.view";
+  if (p.includes("/admin/startup-ideas") || p.includes("/admin/crud/startupideas")) return "crm.startup_ideas.view";
+  if (p.includes("/admin/investments") || p.includes("/admin/crud/investments")) return "crm.investments.view";
+  if (p.includes("/admin/meetings") || p.includes("/admin/crud/meetings")) return "crm.meetings.view";
+  if (p.includes("/admin/support") || p.includes("/admin/contact-enquiries")) return "crm.support_tickets.view";
+
+  // Content
+  if (p.includes("/admin/blogs")) return "content.blogs.view";
+  if (p.includes("/admin/faqs")) return "content.faqs.view";
+  if (p.includes("/admin/push-campaigns") || p.includes("/admin/custom-push-notifications") || p.includes("/admin/coupons")) {
+    return "content.advertisement.manage";
+  }
+
+  // System & Access
+  if (p.includes("/admin/settings")) return "system.settings.view";
+  if (p.includes("/admin/masters")) return "system.masters.view";
+
+  return null;
+}
 
 export const roleMiddleware = (allowedRoles: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const roleStr = String(req.user.role || "").toLowerCase().replace(/\s+/g, "_");
-    if (allowedRoles.includes(req.user.role) || allowedRoles.includes(roleStr) || (roleStr === "super_admin" && allowedRoles.includes("admin"))) {
+
+    // Admin staff authorization branch
+    if (req.user.type === "admin" && allowedRoles.includes("admin")) {
+      // 1. Check if session has been revoked
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const token = authHeader.split(" ")[1];
+        const revoked = await prisma.adminSession.findFirst({
+          where: { sessionToken: token, isRevoked: true },
+        }).catch(() => null);
+
+        if (revoked) {
+          return res.status(401).json({
+            success: false,
+            message: `Session has been revoked: ${revoked.revocationReason || "Access terminated by administrator"}`,
+          });
+        }
+      }
+
+      // 2. Super Admin bypasses all checks
+      if (roleStr === "super_admin" || req.user.role === "Super Admin") {
+        return next();
+      }
+
+      // 3. Departmental staff: verify permission for this specific admin module
+      const targetPath = (req.baseUrl || req.originalUrl || req.path || "").toLowerCase();
+      const requiredPerm = resolvePermissionForRoute(targetPath, req.method);
+
+      if (requiredPerm) {
+        const staff = await prisma.adminUser.findUnique({
+          where: { id: req.user.id },
+          include: {
+            role: {
+              include: {
+                rolePermissions: {
+                  include: { permission: true },
+                },
+              },
+            },
+          },
+        }).catch(() => null);
+
+        if (!staff || staff.status !== "active") {
+          return res.status(403).json({ success: false, message: "Administrative account is suspended or inactive." });
+        }
+
+        const hasPerm = staff.role?.rolePermissions?.some(
+          (rp) => rp.permission?.key === requiredPerm || rp.permission?.key === "all"
+        );
+
+        if (!hasPerm) {
+          return res.status(403).json({
+            success: false,
+            message: `Forbidden: Missing required permission '${requiredPerm}' to access ${targetPath}.`,
+          });
+        }
+      }
+
       return next();
     }
 
-    console.error(`[RoleMiddleware] 403 Forbidden. User ID: ${req.user.id}, Role: "${req.user.role}", Normalized Role: "${roleStr}". Expected one of: [${allowedRoles.join(", ")}]`);
+    if (
+      allowedRoles.includes(req.user.role) ||
+      allowedRoles.includes(roleStr) ||
+      (roleStr === "super_admin" && allowedRoles.includes("admin"))
+    ) {
+      return next();
+    }
+
     return res.status(403).json({
       success: false,
       message: `Forbidden: requires one of the following roles: [${allowedRoles.join(", ")}]`,

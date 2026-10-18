@@ -9,35 +9,74 @@ datasource db {
 }
 
 model AdminUser {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  password      String
-  fullName      String         @map("full_name")
-  avatarUrl     String?        @map("avatar_url")
-  status        String         @default("active")
-  roleId        String         @map("role_id")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  activityLogs  ActivityLog[]
-  role          Role           @relation(fields: [roleId], references: [id])
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
-  sessions      Session[]
+  id                 String               @id @default(uuid())
+  email              String               @unique
+  password           String
+  fullName           String               @map("full_name")
+  avatarUrl          String?              @map("avatar_url")
+  status             String               @default("active")
+  roleId             String               @map("role_id")
+  employeeCode       String?              @unique @map("employee_code")
+  phone              String?
+  officeLocation     String?              @map("office_location")
+  departmentId       String?              @map("department_id")
+  designationId      String?              @map("designation_id")
+  reportingManagerId String?              @map("reporting_manager_id")
+  employmentType     String               @default("full_time") @map("employment_type")
+  employmentStatus   String               @default("active") @map("employment_status")
+  accessLevel        String               @default("custom") @map("access_level")
+  joiningDate        DateTime?            @map("joining_date")
+  accessStartDate    DateTime?            @map("access_start_date")
+  accessExpiryDate   DateTime?            @map("access_expiry_date")
+  mfaEnabled         Boolean              @default(false) @map("mfa_enabled")
+  mfaSecret          String?              @map("mfa_secret")
+  lastLoginAt        DateTime?            @map("last_login_at")
+  lastLoginIp        String?              @map("last_login_ip")
+  lastLoginLocation  String?              @map("last_login_location")
+  createdBy          String?              @map("created_by")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  activityLogs       ActivityLog[]
+  role               Role                 @relation(fields: [roleId], references: [id])
+  department         Department?          @relation(fields: [departmentId], references: [id])
+  designation        Designation?         @relation(fields: [designationId], references: [id])
+  reportingManager   AdminUser?           @relation("ManagerSubordinates", fields: [reportingManagerId], references: [id])
+  directReports      AdminUser[]          @relation("ManagerSubordinates")
+  auditLogs          AuditLog[]
+  refreshTokens      RefreshToken[]
+  sessions           Session[]
+  staffSessions      AdminSession[]
+  loginEvents        AdminLoginEvent[]
+  staffAuditLogs     StaffActivityAudit[]
+  grantedAccesses    AdminAccessGrant[]   @relation("GrantedByAdmin")
+  receivedAccesses   AdminAccessGrant[]   @relation("ReceivedByStaff")
 
   @@index([roleId], map: "admin_users_role_id_fkey")
+  @@index([departmentId], map: "admin_users_department_id_fkey")
+  @@index([designationId], map: "admin_users_designation_id_fkey")
+  @@index([reportingManagerId], map: "admin_users_reporting_manager_id_fkey")
   @@map("admin_users")
 }
 
 model Role {
-  id              String           @id @default(uuid())
-  name            String           @unique
-  description     String?
-  status          String           @default("active")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  id              String             @id @default(uuid())
+  name            String             @unique
+  code            String?            @unique
+  description     String?            @db.Text
+  category        String             @default("custom")
+  departmentId    String?            @map("department_id")
+  department      Department?        @relation(fields: [departmentId], references: [id])
+  systemProtected Boolean            @default(false) @map("system_protected")
+  status          String             @default("active")
+  createdBy       String?            @map("created_by")
+  updatedBy       String?            @map("updated_by")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
   adminUsers      AdminUser[]
   rolePermissions RolePermission[]
+  accessGrants    AdminAccessGrant[]
 
+  @@index([departmentId], map: "roles_department_id_fkey")
   @@map("roles")
 }
 
@@ -45,7 +84,12 @@ model Permission {
   id              String           @id @default(uuid())
   action          String
   module          String
-  description     String?
+  key             String?          @unique
+  name            String?
+  category        String?
+  parentKey       String?          @map("parent_key")
+  order           Int              @default(0)
+  description     String?          @db.Text
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
   rolePermissions RolePermission[]
@@ -58,6 +102,9 @@ model RolePermission {
   id           String     @id @default(uuid())
   roleId       String     @map("role_id")
   permissionId String     @map("permission_id")
+  scope        String     @default("all")
+  actions      Json?
+  fieldMasking Json?      @map("field_masking")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -2636,14 +2683,145 @@ model Connection {
 // -----------------------------------------------------------------------------
 
 model Department {
-  id        String       @id @default(uuid())
-  name      String       @unique
-  slug      String       @unique
-  jobs      JobOpening[]
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @updatedAt @map("updated_at")
+  id           String        @id @default(uuid())
+  name         String        @unique
+  slug         String        @unique
+  code         String?       @unique
+  description  String?       @db.Text
+  parentId     String?       @map("parent_id")
+  parent       Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children     Department[]  @relation("DepartmentHierarchy")
+  headId       String?       @map("head_id")
+  location     String?
+  status       String        @default("active")
+  createdBy    String?       @map("created_by")
+  jobs         JobOpening[]
+  designations Designation[]
+  adminUsers   AdminUser[]
+  roles        Role[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
 
+  @@index([parentId], map: "departments_parent_id_fkey")
   @@map("departments")
+}
+
+model Designation {
+  id           String        @id @default(uuid())
+  name         String
+  code         String        @unique
+  description  String?       @db.Text
+  departmentId String        @map("department_id")
+  department   Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  jobGrade     String?       @map("job_grade")
+  reportsToId  String?       @map("reports_to_id")
+  reportsTo    Designation?  @relation("DesignationHierarchy", fields: [reportsToId], references: [id])
+  subordinates Designation[] @relation("DesignationHierarchy")
+  seniority    Int           @default(1)
+  status       String        @default("active")
+  adminUsers   AdminUser[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([departmentId], map: "designations_department_id_fkey")
+  @@index([reportsToId], map: "designations_reports_to_id_fkey")
+  @@map("designations")
+}
+
+model AdminSession {
+  id               String    @id @default(uuid())
+  adminUserId      String    @map("admin_user_id")
+  adminUser        AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  sessionToken     String    @unique @map("session_token") @db.VarChar(768)
+  deviceCategory   String    @default("desktop") @map("device_category")
+  deviceName       String?   @map("device_name")
+  browser          String?
+  browserVersion   String?   @map("browser_version")
+  operatingSystem  String?   @map("operating_system")
+  ipAddress        String?   @map("ip_address")
+  location         String?
+  country          String?
+  city             String?
+  lastActivityAt   DateTime  @default(now()) @map("last_activity_at")
+  expiresAt        DateTime  @map("expires_at")
+  isRevoked        Boolean   @default(false) @map("is_revoked")
+  revokedAt        DateTime? @map("revoked_at")
+  revocationReason String?   @map("revocation_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([adminUserId], map: "admin_sessions_admin_user_id_fkey")
+  @@map("admin_sessions")
+}
+
+model AdminLoginEvent {
+  id            String     @id @default(uuid())
+  adminUserId   String?    @map("admin_user_id")
+  adminUser     AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  email         String
+  device        String?
+  browser       String?
+  ipAddress     String?    @map("ip_address")
+  location      String?
+  status        String     @default("success")
+  failureReason String?    @map("failure_reason")
+  risk          String     @default("low")
+  loginTime     DateTime   @default(now()) @map("login_time")
+  logoutTime    DateTime?  @map("logout_time")
+
+  @@index([adminUserId], map: "admin_login_events_admin_user_id_fkey")
+  @@map("admin_login_events")
+}
+
+model StaffActivityAudit {
+  id           String    @id @default(uuid())
+  adminUserId  String    @map("admin_user_id")
+  adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  action       String
+  module       String
+  resourceType String?   @map("resource_type")
+  resourceId   String?   @map("resource_id")
+  details      String?   @db.Text
+  ipAddress    String?   @map("ip_address")
+  location     String?
+  status       String    @default("success")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([adminUserId], map: "staff_activity_audits_admin_user_id_fkey")
+  @@map("staff_activity_audits")
+}
+
+model AdminAccessGrant {
+  id         String    @id @default(uuid())
+  grantorId  String    @map("grantor_id")
+  grantor    AdminUser @relation("GrantedByAdmin", fields: [grantorId], references: [id])
+  staffId    String    @map("staff_id")
+  staff      AdminUser @relation("ReceivedByStaff", fields: [staffId], references: [id])
+  roleId     String?   @map("role_id")
+  role       Role?     @relation(fields: [roleId], references: [id])
+  scope      String    @default("all")
+  reason     String?   @db.Text
+  status     String    @default("active")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([grantorId], map: "admin_access_grants_grantor_id_fkey")
+  @@index([staffId], map: "admin_access_grants_staff_id_fkey")
+  @@index([roleId], map: "admin_access_grants_role_id_fkey")
+  @@map("admin_access_grants")
+}
+
+model AdminSecurityPolicy {
+  id                    String   @id @default(uuid())
+  sessionTimeoutMinutes Int      @default(60) @map("session_timeout_minutes")
+  maxConcurrentSessions Int      @default(5) @map("max_concurrent_sessions")
+  requireMfa            Boolean  @default(false) @map("require_mfa")
+  ipWhitelist           String?  @map("ip_whitelist") @db.Text
+  countryRestrictions   String?  @map("country_restrictions") @db.Text
+  defaultDataScope      String   @default("assigned") @map("default_data_scope")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_security_policies")
 }
 
 model RecruiterNote {
