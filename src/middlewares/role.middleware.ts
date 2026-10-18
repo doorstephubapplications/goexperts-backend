@@ -76,33 +76,55 @@ export const roleMiddleware = (allowedRoles: string[]) => {
         }
       }
 
-      // 2. Super Admin bypasses all checks
-      if (roleStr === "super_admin" || req.user.role === "Super Admin") {
-        return next();
-      }
-
-      // 3. Departmental staff: verify permission for this specific admin module
-      const targetPath = (req.baseUrl || req.originalUrl || req.path || "").toLowerCase();
-      const requiredPerm = resolvePermissionForRoute(targetPath, req.method);
-
-      if (requiredPerm) {
-        const staff = await prisma.adminUser.findUnique({
-          where: { id: req.user.id },
-          include: {
-            role: {
-              include: {
-                rolePermissions: {
-                  include: { permission: true },
-                },
+      // Fetch the staff user from database to check status, role, and accessLevel
+      const staff = await prisma.adminUser.findUnique({
+        where: { id: req.user.id },
+        include: {
+          role: {
+            include: {
+              rolePermissions: {
+                include: { permission: true },
               },
             },
           },
-        }).catch(() => null);
+        },
+      }).catch(() => null);
 
-        if (!staff || staff.status !== "active") {
-          return res.status(403).json({ success: false, message: "Administrative account is suspended or inactive." });
-        }
+      if (!staff || staff.status !== "active") {
+        return res.status(403).json({ success: false, message: "Administrative account is suspended or inactive." });
+      }
 
+      // STRICT ACCESS LEVEL ENFORCEMENT
+      const method = req.method.toUpperCase();
+      const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+      const targetPath = (req.baseUrl || req.originalUrl || req.path || "").toLowerCase();
+      const isSafeSystemAction = targetPath.includes("/sync-location") || targetPath.includes("/logout") || targetPath.includes("/mark-viewed");
+
+      // 1. If accessLevel is "view_only", ALL modifications are strictly forbidden!
+      if (staff.accessLevel === "view_only" && isMutation && !isSafeSystemAction) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: Your account has View Only permission. You are not allowed to edit, create, or delete records.",
+        });
+      }
+
+      // 2. If accessLevel is "view_edit" and method is DELETE, deletion is strictly forbidden!
+      if (staff.accessLevel === "view_edit" && method === "DELETE") {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: Your account has View & Edit permission. Deletion of records is restricted.",
+        });
+      }
+
+      // 3. Super Admin with full_access bypasses other checks
+      if ((roleStr === "super_admin" || req.user.role === "Super Admin") && (staff.accessLevel === "full_access" || !staff.accessLevel)) {
+        return next();
+      }
+
+      // 4. Departmental staff: verify permission for this specific admin module
+      const requiredPerm = resolvePermissionForRoute(targetPath, req.method);
+
+      if (requiredPerm) {
         const hasPerm = staff.role?.rolePermissions?.some(
           (rp) => rp.permission?.key === requiredPerm || rp.permission?.key === "all"
         );
