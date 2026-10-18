@@ -1622,7 +1622,7 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
 
     const admin = await prisma.adminUser.findUnique({
       where: { id: req.user.id },
-      include: { role: true },
+      include: { role: true, department: true, designation: true },
     });
 
     if (!admin) {
@@ -1797,8 +1797,14 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
         id: admin.id,
         email: admin.email,
         fullName: admin.fullName,
+        full_name: admin.fullName,
         avatarUrl: admin.avatarUrl,
-        role: admin.role.name,
+        avatar_url: admin.avatarUrl,
+        role: admin.role?.name || "Admin",
+        department: admin.department?.name || null,
+        designation: admin.designation?.name || null,
+        employeeCode: admin.employeeCode || null,
+        accessLevel: admin.accessLevel || "custom",
       },
     });
   } catch (err) {

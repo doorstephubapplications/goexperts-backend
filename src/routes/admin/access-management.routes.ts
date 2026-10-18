@@ -12,15 +12,35 @@ accessManagementRouter.use(authMiddleware as any);
 // Middleware to audit actions
 async function auditAction(adminUserId: string, module: string, action: string, details: string, req: Request) {
   try {
-    const ipAddress = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+    const rawIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+    const ipAddress = (req.headers["x-client-ip"] as string) || rawIp.split(",")[0]?.trim();
+    
+    // Resolve location dynamically from headers, session, or staff record
+    let location = (req.headers["x-client-location"] as string) || (req.headers["x-client-city"] as string) || "";
+    if (!location && adminUserId) {
+      const staffUser = await prisma.adminUser.findUnique({
+        where: { id: adminUserId },
+        select: { lastLoginLocation: true, officeLocation: true },
+      }).catch(() => null);
+      if (staffUser?.lastLoginLocation) {
+        location = staffUser.lastLoginLocation;
+      } else if (staffUser?.officeLocation) {
+        location = staffUser.officeLocation;
+      }
+    }
+
+    if (!location) {
+      location = "Dynamic Locality";
+    }
+
     await prisma.staffActivityAudit.create({
       data: {
         adminUserId,
         module,
         action,
         details,
-        ipAddress: ipAddress.split(",")[0]?.trim(),
-        location: (req.headers["x-client-city"] as string) || "Office Network",
+        ipAddress: ipAddress === "::1" ? "127.0.0.1" : ipAddress,
+        location,
         status: "success",
       },
     });
