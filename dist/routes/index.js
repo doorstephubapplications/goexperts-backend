@@ -59,6 +59,7 @@ import subscriptionRoutes from "./subscription/subscription.routes.js";
 import { getVerificationStats, getApprovedTrustCredentials } from "../common/helpers/verification.js";
 import adminDashboardRouter from "./admin/dashboard.routes.js";
 import tasksRoutes from "./tasks.routes.js";
+import { accessManagementRouter } from "./admin/access-management.routes.js";
 import mobileRoutes from "../modules/mobile/index.js";
 import unifiedNotificationRoutes from "../modules/mobile/notifications/notifications.routes.js";
 import { saveInvestor, unsaveInvestor, saveClient, unsaveClient, getSavedClients } from "../modules/mobile/public/public.controller.js";
@@ -352,6 +353,8 @@ router.use("/admin/financials", authMiddleware, roleMiddleware(["admin"]), finan
 router.use("/payments", paymentsRoutes);
 router.use("/admin/roles", authMiddleware, roleMiddleware(["admin"]), rolesRoutes);
 router.use("/admin/permissions", authMiddleware, roleMiddleware(["admin"]), permissionsRouter);
+router.use("/admin/access-management", accessManagementRouter);
+router.use("/v1/admin/access-management", accessManagementRouter);
 router.use("/admin/jobs", authMiddleware, roleMiddleware(["admin"]), jobsRouter);
 router.use("/admin/automation-rules", authMiddleware, roleMiddleware(["admin"]), automationRulesRouter);
 router.use("/admin/system-ops", authMiddleware, roleMiddleware(["admin"]), systemOpsRouter);

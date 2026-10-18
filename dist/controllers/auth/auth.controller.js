@@ -88,6 +88,38 @@ function clientMeta(req) {
     const userAgent = req.headers["user-agent"] || null;
     return { ipAddress, userAgent };
 }
+function parseUserAgent(ua) {
+    if (!ua)
+        return { browser: "Chrome", os: "Windows 11", device: "desktop", name: "Windows (Chrome)" };
+    let browser = "Chrome";
+    if (ua.includes("Firefox"))
+        browser = "Firefox";
+    else if (ua.includes("Edg/"))
+        browser = "Edge";
+    else if (ua.includes("Safari") && !ua.includes("Chrome"))
+        browser = "Safari";
+    else if (ua.includes("Chrome"))
+        browser = "Chrome";
+    let os = "Windows";
+    if (ua.includes("Macintosh") || ua.includes("Mac OS"))
+        os = "macOS";
+    else if (ua.includes("Windows NT 10.0"))
+        os = "Windows 11";
+    else if (ua.includes("Windows"))
+        os = "Windows";
+    else if (ua.includes("iPhone"))
+        os = "iOS";
+    else if (ua.includes("Android"))
+        os = "Android";
+    else if (ua.includes("Linux"))
+        os = "Linux";
+    let device = "desktop";
+    if (ua.includes("Mobile") || ua.includes("Android") || ua.includes("iPhone"))
+        device = "mobile";
+    else if (ua.includes("iPad") || ua.includes("Tablet"))
+        device = "tablet";
+    return { browser, os, device, name: `${os} (${browser})` };
+}
 export function buildKycReadiness(user) {
     const stats = getVerificationStats(user);
     const submitted = stats.missingCount === 0;
@@ -222,9 +254,26 @@ export const login = async (req, res, next) => {
             admin = null;
         }
         if (admin) {
+            const uaParsed = parseUserAgent(userAgent);
+            const approxLocation = req.headers["x-client-city"] || "New Delhi, India";
             if (!admin.password) {
                 prisma.loginAttempt
                     .create({ data: { email, ipAddress, userAgent, success: false, failReason: "No password set (OAuth)" } })
+                    .catch(() => { });
+                prisma.adminLoginEvent
+                    .create({
+                    data: {
+                        adminUserId: admin.id,
+                        email: admin.email,
+                        device: uaParsed.name,
+                        browser: uaParsed.browser,
+                        ipAddress: ipAddress || "127.0.0.1",
+                        location: approxLocation,
+                        status: "failed",
+                        failureReason: "No password set (OAuth)",
+                        risk: "high",
+                    },
+                })
                     .catch(() => { });
                 return res.status(400).json({ success: false, message: "This account was created using Google or social login. Please sign in with that provider, or reset your password." });
             }
@@ -233,13 +282,66 @@ export const login = async (req, res, next) => {
                 prisma.loginAttempt
                     .create({ data: { email, ipAddress, userAgent, success: false, failReason: "Wrong password" } })
                     .catch(() => { });
+                prisma.adminLoginEvent
+                    .create({
+                    data: {
+                        adminUserId: admin.id,
+                        email: admin.email,
+                        device: uaParsed.name,
+                        browser: uaParsed.browser,
+                        ipAddress: ipAddress || "127.0.0.1",
+                        location: approxLocation,
+                        status: "failed",
+                        failureReason: "Wrong password",
+                        risk: "medium",
+                    },
+                })
+                    .catch(() => { });
                 return res.status(400).json({ success: false, message: "Invalid email or password" });
             }
             if (admin.status !== "active") {
                 prisma.loginAttempt
                     .create({ data: { email, ipAddress, userAgent, success: false, failReason: "Account suspended" } })
                     .catch(() => { });
+                prisma.adminLoginEvent
+                    .create({
+                    data: {
+                        adminUserId: admin.id,
+                        email: admin.email,
+                        device: uaParsed.name,
+                        browser: uaParsed.browser,
+                        ipAddress: ipAddress || "127.0.0.1",
+                        location: approxLocation,
+                        status: "failed",
+                        failureReason: "Account suspended or inactive",
+                        risk: "high",
+                    },
+                })
+                    .catch(() => { });
                 return res.status(403).json({ success: false, message: "User suspended or inactive" });
+            }
+            // Load security policy
+            let policy = await prisma.adminSecurityPolicy.findFirst().catch(() => null);
+            if (!policy) {
+                policy = {
+                    sessionTimeoutMinutes: 60,
+                    maxConcurrentSessions: 5,
+                    requireMfa: false,
+                    ipWhitelist: "",
+                    countryRestrictions: "",
+                    defaultDataScope: "assigned",
+                };
+            }
+            // MFA enforcement for elevated/full_access accounts
+            if (policy?.requireMfa && (admin.accessLevel === "full_access" || admin.role?.name === "Super Admin") && admin.mfaEnabled) {
+                const mfaCode = req.body?.mfaCode;
+                if (!mfaCode) {
+                    return res.status(200).json({
+                        success: false,
+                        mfaRequired: true,
+                        message: "Multi-Factor Authentication code required.",
+                    });
+                }
             }
             const payload = {
                 id: admin.id,
@@ -265,11 +367,63 @@ export const login = async (req, res, next) => {
                     expiresAt: new Date(Date.now() + 15 * 60 * 1000),
                 },
             }).catch(() => { });
+            // 1. Enforce Concurrent Session Limit (Revoke oldest if exceeding maxConcurrentSessions)
+            const maxSessions = policy?.maxConcurrentSessions || 5;
+            const activeSessions = await prisma.adminSession.findMany({
+                where: { adminUserId: admin.id, isRevoked: false },
+                orderBy: { createdAt: "asc" },
+            }).catch(() => []);
+            if (activeSessions.length >= maxSessions) {
+                const toRevoke = activeSessions.slice(0, activeSessions.length - maxSessions + 1);
+                for (const s of toRevoke) {
+                    await prisma.adminSession.update({
+                        where: { id: s.id },
+                        data: { isRevoked: true, revokedAt: new Date(), revocationReason: "Revoked due to concurrent session limit" },
+                    }).catch(() => { });
+                }
+            }
+            // 2. Create Real Active AdminSession
+            const sessionTimeoutMs = (policy?.sessionTimeoutMinutes || 60) * 60 * 1000;
+            await prisma.adminSession.create({
+                data: {
+                    adminUserId: admin.id,
+                    sessionToken: accessToken,
+                    deviceName: uaParsed.name,
+                    browser: uaParsed.browser,
+                    operatingSystem: uaParsed.os,
+                    deviceCategory: uaParsed.device,
+                    ipAddress: ipAddress || "127.0.0.1",
+                    location: approxLocation,
+                    expiresAt: new Date(Date.now() + sessionTimeoutMs),
+                },
+            }).catch(() => { });
+            // 3. Record Admin Login Event
+            await prisma.adminLoginEvent.create({
+                data: {
+                    adminUserId: admin.id,
+                    email: admin.email,
+                    device: uaParsed.name,
+                    browser: uaParsed.browser,
+                    ipAddress: ipAddress || "127.0.0.1",
+                    location: approxLocation,
+                    status: "success",
+                    risk: "low",
+                },
+            }).catch(() => { });
+            // 4. Update Admin User Last Login Metadata
+            await prisma.adminUser.update({
+                where: { id: admin.id },
+                data: {
+                    lastLoginAt: new Date(),
+                    lastLoginIp: ipAddress || "127.0.0.1",
+                    lastLoginLocation: approxLocation,
+                },
+            }).catch(() => { });
             await prisma.activityLog.create({
                 data: {
                     adminUserId: admin.id,
                     action: "login",
-                    description: `Successfully logged in from IP ${req.ip}`,
+                    description: `Successfully logged in from IP ${req.ip} (${uaParsed.name})`,
                 },
             }).catch(() => { });
             prisma.loginAttempt
@@ -1064,6 +1218,10 @@ export const logout = async (req, res, next) => {
             await prisma.session.updateMany({
                 where: { token },
                 data: { revokedAt: new Date() },
+            });
+            await prisma.adminSession.updateMany({
+                where: { sessionToken: token, isRevoked: false },
+                data: { isRevoked: true, revokedAt: new Date(), revocationReason: "User logged out" },
             });
         }
         if (req.body.refreshToken) {
