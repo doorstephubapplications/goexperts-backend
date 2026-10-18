@@ -42,7 +42,7 @@ export function requireStaffPermission(permissionKey: string) {
         const token = authHeader.split(" ")[1];
         const session = await prisma.adminSession.findFirst({
           where: { sessionToken: token },
-        });
+        }).catch(() => null);
         if (session && session.isRevoked) {
           return res.status(401).json({
             success: false,
