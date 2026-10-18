@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { sendEmail } from '../../services/mobile/email.service.js';
 import { renderEmailTemplate } from '../../services/settings/settings.service.js';
 import { Router, Request, Response, NextFunction } from "express";
@@ -845,7 +845,7 @@ adminUsersRouter.get("/:id/insights", async (req: Request, res: Response, next: 
 // ==========================================
 const updateUserHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { account, verification, profile, reason, updatedAt, fullName, phone, country, city, status, isVerified } = req.body;
+    const { account, verification, profile, reason, updatedAt, fullName, phone, country, city, status, isVerified, bio } = req.body;
 
     const currentUser = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!currentUser) return res.status(404).json({ success: false, message: "User not found" });
@@ -860,25 +860,36 @@ const updateUserHandler = async (req: Request, res: Response, next: NextFunction
     if (account) {
       if (account.status) userUpdateData.status = account.status;
       if (account.fullName) userUpdateData.fullName = account.fullName;
-      if (account.phone) userUpdateData.phone = account.phone;
-      if (account.country) userUpdateData.country = account.country;
-      if (account.city) userUpdateData.city = account.city;
-      if (typeof account.isVerified === "boolean") userUpdateData.isVerified = account.isVerified;
+      if (account.phone !== undefined) userUpdateData.phone = account.phone;
+      if (account.country !== undefined) userUpdateData.country = account.country;
+      if (account.city !== undefined) userUpdateData.city = account.city;
+      if (typeof account.isVerified === "boolean") {
+        userUpdateData.isVerified = account.isVerified;
+        userUpdateData.verified = account.isVerified;
+      }
+      if (account.password && typeof account.password === "string" && account.password.trim()) {
+        userUpdateData.password = await bcrypt.hash(account.password.trim(), 10);
+      }
+      if (account.bio !== undefined) userUpdateData.bio = account.bio;
     } else {
       if (status) userUpdateData.status = status;
       if (fullName) userUpdateData.fullName = fullName;
       if (phone !== undefined) userUpdateData.phone = phone;
       if (country !== undefined) userUpdateData.country = country;
       if (city !== undefined) userUpdateData.city = city;
-      if (typeof isVerified === "boolean") userUpdateData.isVerified = isVerified;
+      if (typeof isVerified === "boolean") {
+        userUpdateData.isVerified = isVerified;
+        userUpdateData.verified = isVerified;
+      }
     }
 
-    // Process Profile & Verification Center Updates
-    let profileUpdateData: any = { ...(profile || {}) };
-    if (verification) {
-      profileUpdateData.verificationJson = typeof verification === "string" ? verification : JSON.stringify(verification);
+    // Bio belongs to User model in Prisma schema
+    if (profile?.bio !== undefined) {
+      userUpdateData.bio = profile.bio;
+    } else if (bio !== undefined) {
+      userUpdateData.bio = bio;
     }
-    
+
     // Determine which profile to update based on the user's role
     const role = currentUser.role.toLowerCase();
     const updatePromises: any[] = [];
@@ -887,31 +898,126 @@ const updateUserHandler = async (req: Request, res: Response, next: NextFunction
       updatePromises.push(prisma.user.update({ where: { id: req.params.id }, data: userUpdateData }));
     }
 
-    if (Object.keys(profileUpdateData).length > 0) {
+    if (profile || verification) {
+      const verificationJson = verification
+        ? (typeof verification === "string" ? verification : JSON.stringify(verification))
+        : undefined;
+
       if (role === "freelancer") {
-        updatePromises.push(prisma.freelancerProfile.upsert({
-          where: { userId: req.params.id },
-          update: profileUpdateData,
-          create: { userId: req.params.id, ...profileUpdateData }
-        }));
+        const freelancerData: any = {};
+        if (verificationJson !== undefined) freelancerData.verificationJson = verificationJson;
+
+        if (profile) {
+          if (profile.title !== undefined) freelancerData.titleHeadline = profile.title;
+          if (profile.titleHeadline !== undefined) freelancerData.titleHeadline = profile.titleHeadline;
+          if (profile.skills !== undefined) {
+            freelancerData.skills = Array.isArray(profile.skills) ? JSON.stringify(profile.skills) : String(profile.skills);
+          }
+          if (profile.hourlyRate !== undefined) freelancerData.hourlyRate = Number(profile.hourlyRate) || 0;
+          if (profile.experience !== undefined) freelancerData.experience = String(profile.experience);
+          if (profile.education !== undefined) freelancerData.education = String(profile.education);
+          if (profile.yearsOfExperience !== undefined) freelancerData.yearsOfExperience = String(profile.yearsOfExperience);
+          if (profile.portfolioUrl !== undefined) freelancerData.portfolioUrl = profile.portfolioUrl;
+          if (profile.resumeUrl !== undefined) freelancerData.resumeUrl = profile.resumeUrl;
+          if (profile.linkedInUrl !== undefined) freelancerData.linkedInUrl = profile.linkedInUrl;
+          if (profile.websiteUrl !== undefined) freelancerData.websiteUrl = profile.websiteUrl;
+          if (profile.githubUrl !== undefined) freelancerData.githubUrl = profile.githubUrl;
+          if (profile.dribbbleUrl !== undefined) freelancerData.dribbbleUrl = profile.dribbbleUrl;
+          if (profile.bannerUrl !== undefined) freelancerData.bannerUrl = profile.bannerUrl;
+          if (profile.logoUrl !== undefined) freelancerData.logoUrl = profile.logoUrl;
+          if (profile.industry !== undefined) freelancerData.industry = profile.industry;
+          if (profile.workMode !== undefined) freelancerData.workMode = profile.workMode;
+          if (profile.availability !== undefined) freelancerData.availability = profile.availability;
+          if (profile.currency !== undefined) freelancerData.currency = profile.currency;
+          if (profile.monthlyRetainer !== undefined) freelancerData.monthlyRetainer = Number(profile.monthlyRetainer) || 0;
+          if (profile.openToTravel !== undefined) freelancerData.openToTravel = Boolean(profile.openToTravel);
+          if (profile.remoteAvailability !== undefined) freelancerData.remoteAvailability = Boolean(profile.remoteAvailability);
+          if (profile.responseTime !== undefined) freelancerData.responseTime = profile.responseTime;
+          if (profile.workingHours !== undefined) freelancerData.workingHours = profile.workingHours;
+          if (profile.industryId !== undefined) freelancerData.industryId = profile.industryId;
+        }
+
+        if (Object.keys(freelancerData).length > 0) {
+          updatePromises.push(prisma.freelancerProfile.upsert({
+            where: { userId: req.params.id },
+            update: freelancerData,
+            create: { userId: req.params.id, ...freelancerData },
+          }));
+        }
       } else if (role === "client") {
-        updatePromises.push(prisma.clientProfile.upsert({
-          where: { userId: req.params.id },
-          update: profileUpdateData,
-          create: { userId: req.params.id, ...profileUpdateData }
-        }));
+        const clientData: any = {};
+        if (verificationJson !== undefined) clientData.verificationJson = verificationJson;
+
+        if (profile) {
+          if (profile.company !== undefined) clientData.company = profile.company;
+          if (profile.industry !== undefined) clientData.industry = profile.industry;
+          if (profile.companySize !== undefined) clientData.companySize = profile.companySize;
+          if (profile.currentTeam !== undefined) clientData.currentTeam = profile.currentTeam;
+          if (profile.projectHireBudget !== undefined) clientData.projectHireBudget = profile.projectHireBudget;
+          if (profile.websiteUrl !== undefined) clientData.websiteUrl = profile.websiteUrl;
+          if (profile.jobTitle !== undefined) clientData.jobTitle = profile.jobTitle;
+          if (profile.title !== undefined) clientData.jobTitle = profile.title;
+          if (profile.hiringGoal !== undefined) clientData.hiringGoal = profile.hiringGoal;
+          if (profile.totalSpend !== undefined) clientData.totalSpend = Number(profile.totalSpend) || 0;
+          if (profile.projectsPosted !== undefined) clientData.projectsPosted = Number(profile.projectsPosted) || 0;
+        }
+
+        if (Object.keys(clientData).length > 0) {
+          updatePromises.push(prisma.clientProfile.upsert({
+            where: { userId: req.params.id },
+            update: clientData,
+            create: { userId: req.params.id, ...clientData },
+          }));
+        }
       } else if (role === "founder") {
-        updatePromises.push(prisma.founderProfile.upsert({
-          where: { userId: req.params.id },
-          update: profileUpdateData,
-          create: { userId: req.params.id, ...profileUpdateData }
-        }));
+        const founderData: any = {};
+        if (verificationJson !== undefined) founderData.verificationJson = verificationJson;
+
+        if (profile) {
+          if (profile.startupName !== undefined) founderData.startupName = profile.startupName;
+          if (profile.industry !== undefined) founderData.industry = profile.industry;
+          if (profile.stage !== undefined) founderData.stage = profile.stage;
+          if (profile.pitch !== undefined) founderData.pitch = profile.pitch;
+          if (profile.founderRole !== undefined) founderData.founderRole = profile.founderRole;
+          if (profile.founderBio !== undefined) founderData.founderBio = profile.founderBio;
+          if (profile.bio !== undefined && !founderData.founderBio) founderData.founderBio = profile.bio;
+          if (profile.raised !== undefined) founderData.raised = Number(profile.raised) || 0;
+          if (profile.targetRaise !== undefined) founderData.targetRaise = Number(profile.targetRaise) || 0;
+          if (profile.teamSize !== undefined) founderData.teamSize = Number(profile.teamSize) || 0;
+          if (profile.primaryGoal !== undefined) founderData.primaryGoal = profile.primaryGoal;
+        }
+
+        if (Object.keys(founderData).length > 0) {
+          updatePromises.push(prisma.founderProfile.upsert({
+            where: { userId: req.params.id },
+            update: founderData,
+            create: { userId: req.params.id, ...founderData },
+          }));
+        }
       } else if (role === "investor") {
-        updatePromises.push(prisma.investorProfile.upsert({
-          where: { userId: req.params.id },
-          update: profileUpdateData,
-          create: { userId: req.params.id, ...profileUpdateData }
-        }));
+        const investorData: any = {};
+        if (verificationJson !== undefined) investorData.verificationJson = verificationJson;
+
+        if (profile) {
+          if (profile.investorType !== undefined) investorData.investorType = profile.investorType;
+          if (profile.firm !== undefined) investorData.firm = profile.firm;
+          if (profile.isAccredited !== undefined) investorData.isAccredited = profile.isAccredited;
+          if (profile.ticketMin !== undefined) investorData.ticketMin = Number(profile.ticketMin) || 0;
+          if (profile.ticketMax !== undefined) investorData.ticketMax = Number(profile.ticketMax) || 0;
+          if (profile.focusAreas !== undefined) {
+            investorData.focusAreas = Array.isArray(profile.focusAreas) ? JSON.stringify(profile.focusAreas) : String(profile.focusAreas);
+          }
+          if (profile.preferredStage !== undefined) investorData.preferredStage = profile.preferredStage;
+          if (profile.deals !== undefined) investorData.deals = Number(profile.deals) || 0;
+        }
+
+        if (Object.keys(investorData).length > 0) {
+          updatePromises.push(prisma.investorProfile.upsert({
+            where: { userId: req.params.id },
+            update: investorData,
+            create: { userId: req.params.id, ...investorData },
+          }));
+        }
       }
     }
 
