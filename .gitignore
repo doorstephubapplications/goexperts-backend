@@ -30,6 +30,7 @@ seed-*.js
 seed-*.ts
 seed_*.cjs
 seed_*.ts
+!prisma/seed-*.ts
 
 # Scratch directories
 scratch/
