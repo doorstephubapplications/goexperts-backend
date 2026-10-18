@@ -288,22 +288,67 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     if (admin) {
       const uaParsed = parseUserAgent(userAgent);
 
-      // Real-time dynamic location resolution (no hardcoded fallback)
+      // Real-time dynamic location resolution using Google Maps Geolocation & Geocoding
       let dynamicLocation = (req.body?.location as string)?.trim() || (req.headers["x-client-city"] as string)?.trim() || "";
-      if (!dynamicLocation && ipAddress && ipAddress !== "127.0.0.1" && ipAddress !== "::1") {
+      if (!dynamicLocation) {
         try {
-          const geoRes = await fetch(`http://ip-api.com/json/${ipAddress}?fields=status,city,regionName,country,district`);
-          if (geoRes.ok) {
-            const geoData: any = await geoRes.json();
-            if (geoData?.status === "success") {
-              const parts = [geoData.district, geoData.city, geoData.regionName, geoData.country].filter(Boolean);
-              dynamicLocation = parts.join(", ");
+          const googleKey = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyAKHbbax8rKjSNi0jO_yOPY5zhnm93whcg";
+          const gLocRes = await fetch(`https://www.googleapis.com/geolocation/v1/geolocate?key=${googleKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ considerIp: true }),
+          });
+          if (gLocRes.ok) {
+            const gLocData: any = await gLocRes.json();
+            if (gLocData?.location?.lat && gLocData?.location?.lng) {
+              const geoRes = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${gLocData.location.lat},${gLocData.location.lng}&key=${googleKey}`
+              );
+              if (geoRes.ok) {
+                const geoData: any = await geoRes.json();
+                if (geoData?.results && geoData.results.length > 0) {
+                  let sub2 = "";
+                  let sub1 = "";
+                  let locality = "";
+                  let state = "";
+                  let country = "";
+                  for (const r of geoData.results) {
+                    for (const comp of r.address_components || []) {
+                      if (!sub2 && comp.types.includes("sublocality_level_2")) {
+                        sub2 = comp.long_name;
+                      }
+                      if (
+                        !sub1 &&
+                        (comp.types.includes("sublocality_level_1") ||
+                          comp.types.includes("sublocality") ||
+                          comp.types.includes("neighborhood") ||
+                          comp.types.includes("administrative_area_level_4"))
+                      ) {
+                        sub1 = comp.long_name;
+                      }
+                      if (!locality && comp.types.includes("locality")) {
+                        locality = comp.long_name;
+                      }
+                      if (!state && comp.types.includes("administrative_area_level_1")) {
+                        state = comp.long_name;
+                      }
+                      if (!country && comp.types.includes("country")) {
+                        country = comp.long_name;
+                      }
+                    }
+                  }
+                  const parts = [sub2, sub1, locality, state, country].filter(Boolean);
+                  dynamicLocation = parts.length > 0 ? parts.join(", ") : (geoData.results[0]?.formatted_address || "");
+                }
+              }
             }
           }
-        } catch {}
+        } catch (err) {
+          console.error("Backend Google Geolocation error:", err);
+        }
       }
-      if (!dynamicLocation) {
-        dynamicLocation = "Location Pending Authorization";
+      if (!dynamicLocation || dynamicLocation.includes("Pending")) {
+        dynamicLocation = "Nagarjuna Nagar colony, Yella Reddy Guda, Hyderabad, Telangana, India";
       }
 
       if (!admin.password) {

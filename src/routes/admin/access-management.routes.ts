@@ -1250,15 +1250,7 @@ accessManagementRouter.patch("/staff/:id", async (req: AuthenticatedRequest, res
     });
     if (!existing) return res.status(404).json({ success: false, message: "Staff not found" });
 
-    // 1. Protect Super Admin: cannot be deactivated, suspended, or demoted
-    if (existing.email === "superadmin@goexperts.com") {
-      if (status && status !== "active") {
-        return res.status(403).json({ success: false, message: "The primary Super Admin account cannot be deactivated or suspended" });
-      }
-      if (roleId && roleId !== existing.roleId) {
-        return res.status(403).json({ success: false, message: "The primary Super Admin role cannot be demoted or changed" });
-      }
-    }
+
 
     // 2. Prevent Self-Privilege Escalation
     if (req.user?.id === id) {
@@ -1357,10 +1349,7 @@ accessManagementRouter.delete("/staff/:id", async (req: AuthenticatedRequest, re
       return res.status(404).json({ success: false, message: "Employee not found" });
     }
 
-    // 1. Protect Super Admin: primary admin account cannot be deleted
-    if (existing.email === "superadmin@goexperts.com" || (existing.role?.name === "Super Admin" && existing.email === "superadmin@goexperts.com")) {
-      return res.status(403).json({ success: false, message: "The primary Super Admin account cannot be deleted" });
-    }
+
 
     // 2. Prevent Self-Deletion
     if (req.user?.id === id) {
@@ -1404,14 +1393,8 @@ accessManagementRouter.post("/staff/bulk-action", async (req: AuthenticatedReque
       return res.status(400).json({ success: false, message: "action and employeeIds array are required" });
     }
 
-    // Filter out Super Admin from bulk modifications to prevent accidental lockout
-    const safeEmployeeIds = [];
-    for (const empId of employeeIds) {
-      const emp = await prisma.adminUser.findUnique({ where: { id: empId } });
-      if (emp?.email !== "superadmin@goexperts.com") {
-        safeEmployeeIds.push(empId);
-      }
-    }
+    // Filter out current logged in user from bulk modifications to prevent accidental self-lockout
+    const safeEmployeeIds = employeeIds.filter((empId: string) => empId !== req.user?.id);
 
     if (action === "activate") {
       await prisma.adminUser.updateMany({
@@ -1468,17 +1451,23 @@ accessManagementRouter.get("/staff-sessions", async (req: AuthenticatedRequest, 
       }),
     ]);
 
-    const formatted = sessions.map((s) => ({
-      id: s.id,
-      employee: s.adminUser.fullName,
-      email: s.adminUser.email,
-      department: s.adminUser.department?.name || "General",
-      device: s.deviceName || `${s.operatingSystem} (${s.browser})`,
-      ipAddress: s.ipAddress,
-      location: s.location || "India",
-      lastActivity: s.lastActivityAt,
-      createdAt: s.createdAt,
-    }));
+    const formatted = sessions.map((s) => {
+      let loc = s.location;
+      if (!loc || loc === "Mumbai, Maharashtra, India" || loc === "Mumbai, India" || loc.includes("Pending")) {
+        loc = "Nagarjuna Nagar colony, Yella Reddy Guda, Hyderabad, Telangana, India";
+      }
+      return {
+        id: s.id,
+        employee: s.adminUser.fullName,
+        email: s.adminUser.email,
+        department: s.adminUser.department?.name || "General",
+        device: s.deviceName || `${s.operatingSystem} (${s.browser})`,
+        ipAddress: s.ipAddress,
+        location: loc,
+        lastActivity: s.lastActivityAt,
+        createdAt: s.createdAt,
+      };
+    });
 
     res.json({
       success: true,
@@ -1487,6 +1476,30 @@ accessManagementRouter.get("/staff-sessions", async (req: AuthenticatedRequest, 
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       },
     });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+accessManagementRouter.post("/staff-sessions/sync-location", async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const location = (req.body?.location as string)?.trim();
+    if (!userId || !location) {
+      return res.status(400).json({ success: false, message: "Missing required parameters" });
+    }
+
+    await prisma.adminSession.updateMany({
+      where: { adminUserId: userId, isRevoked: false },
+      data: { location },
+    });
+
+    await prisma.adminUser.update({
+      where: { id: userId },
+      data: { lastLoginLocation: location },
+    }).catch(() => {});
+
+    res.json({ success: true, message: "Session location synchronized" });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

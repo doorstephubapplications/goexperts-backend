@@ -962,5 +962,114 @@ export const MASTER_EMAIL_TEMPLATES = [
   <p style="font-size: 13px; color: #718096; margin-top: 30px;">The Go Experts Team</p>
 </div>`,
         isDefault: true,
+    },
+    {
+        id: "tpl_employee_welcome_credentials",
+        name: "Employee Account Created & Credentials",
+        module: "Employees",
+        fromName: "Go Experts Access Management",
+        subject: "Welcome to Go Experts Portal - Your Staff Account & Access Credentials 🔐",
+        variables: [
+            "{full_name}",
+            "{email}",
+            "{temporary_password}",
+            "{employee_code}",
+            "{department}",
+            "{designation}",
+            "{role}",
+            "{access_level}",
+            "{portal_url}",
+            "{permissions_summary}"
+        ],
+        body: "Hello {{full_name}},\n\nWelcome to Go Experts! An administrative account has been provisioned for you.\n\nHere are your login credentials:\n- Employee ID: {{employee_code}}\n- Portal URL: {{portal_url}}\n- Login Email: {{email}}\n- Temporary Password: {{temporary_password}}\n\nYour Organizational Scope:\n- Department: {{department}}\n- Designation: {{designation}}\n- Assigned Role: {{role}}\n- Data Access Level: {{access_level}}\n\nAssigned Permissions Summary:\n{{permissions_summary}}\n\nSECURITY NOTICE: You are required to change your temporary password upon your first sign in.\n\nBest regards,\nGo Experts Administration Team",
+        html: `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 620px; margin: 0 auto; color: #1e293b; background: #ffffff; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
+  <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 32px 24px; text-align: center; border-bottom: 3px solid #9810FA;">
+    <h1 style="color: #ffffff; font-size: 24px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.5px;">Go Experts Admin Portal</h1>
+    <p style="color: #cbd5e1; font-size: 14px; margin: 0;">Employee Access Credentials & Role Entitlement</p>
+  </div>
+  
+  <div style="padding: 28px 24px;">
+    <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-top: 0;">Hello <strong>{{full_name}}</strong>,</p>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+      An employee administrative account has been provisioned for you on the <strong>Go Experts Centralized Admin Portal</strong>. Please use the credentials below to sign in and begin your administrative duties.
+    </p>
+
+    <!-- Credentials Card -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="color: #0f172a; margin: 0 0 12px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+        🔐 Login Credentials
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; width: 140px;">Employee ID:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-weight: 700;">{{employee_code}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Login Email:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-weight: 600;">{{email}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Temporary Password:</td>
+          <td style="padding: 6px 0; color: #9810FA; font-family: monospace; font-size: 14px; font-weight: 700; background: #f3e8ff; display: inline-block; padding: 2px 8px; border-radius: 6px;">{{temporary_password}}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Login CTA Button -->
+    <div style="text-align: center; margin: 26px 0;">
+      <a href="{{portal_url}}" target="_blank" style="background: #9810FA; color: #ffffff; padding: 12px 32px; border-radius: 8px; font-weight: 700; font-size: 14px; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(152, 16, 250, 0.25);">
+        Log in to Go Experts Portal &rarr;
+      </a>
+    </div>
+
+    <!-- Organizational & Role Entitlements -->
+    <div style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="color: #6b21a8; margin: 0 0 12px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e9d5ff; padding-bottom: 8px;">
+        🏢 Organizational Assignment & Scope
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; width: 140px;">Department:</td>
+          <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">{{department}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Designation:</td>
+          <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">{{designation}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Assigned Role:</td>
+          <td style="padding: 6px 0; color: #9810FA; font-weight: 700;">{{role}}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Data Access Level:</td>
+          <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">{{access_level}}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Role Permissions Summary -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="color: #0f172a; margin: 0 0 10px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+        📋 Assigned Permissions & Module Capabilities
+      </h3>
+      <div style="font-size: 12px; color: #475569; line-height: 1.8;">
+        {{permissions_summary}}
+      </div>
+    </div>
+
+    <!-- Security Warning Notice -->
+    <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px 8px 8px 4px; padding: 12px 16px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 12px; color: #92400e; line-height: 1.5;">
+        <strong>⚠️ Security Policy Notice:</strong> This email contains confidential temporary credentials. You must change your password immediately upon your first sign in. All administrative actions and session events are continuously monitored and logged under compliance audit protocols.
+      </p>
+    </div>
+  </div>
+
+  <div style="background-color: #f1f5f9; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;">
+    <p style="margin: 0 0 4px 0; font-weight: 600; color: #334155;">Go Experts Enterprise Administration Portal</p>
+    <p style="margin: 0;">If you did not expect this invitation or have questions, contact the System Administrator at <a href="mailto:admin@goexperts.in" style="color: #9810FA; text-decoration: none;">admin@goexperts.in</a></p>
+  </div>
+</div>`,
+        isDefault: true,
     }
 ];

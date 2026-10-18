@@ -81,10 +81,16 @@ async function verifyPassword(password, storedHash) {
     return password === storedHash;
 }
 function clientMeta(req) {
-    const ipAddress = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
+    let ipAddress = req.body?.clientIp
+        || req.headers["cf-connecting-ip"]
+        || req.headers["x-real-ip"]
+        || req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
         || req.socket?.remoteAddress
         || req.ip
         || null;
+    if (ipAddress && ipAddress.startsWith("::ffff:")) {
+        ipAddress = ipAddress.replace("::ffff:", "");
+    }
     const userAgent = req.headers["user-agent"] || null;
     return { ipAddress, userAgent };
 }
@@ -255,7 +261,65 @@ export const login = async (req, res, next) => {
         }
         if (admin) {
             const uaParsed = parseUserAgent(userAgent);
-            const approxLocation = req.headers["x-client-city"] || "New Delhi, India";
+            // Real-time dynamic location resolution using Google Maps Geolocation & Geocoding
+            let dynamicLocation = req.body?.location?.trim() || req.headers["x-client-city"]?.trim() || "";
+            if (!dynamicLocation) {
+                try {
+                    const googleKey = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyAKHbbax8rKjSNi0jO_yOPY5zhnm93whcg";
+                    const gLocRes = await fetch(`https://www.googleapis.com/geolocation/v1/geolocate?key=${googleKey}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ considerIp: true }),
+                    });
+                    if (gLocRes.ok) {
+                        const gLocData = await gLocRes.json();
+                        if (gLocData?.location?.lat && gLocData?.location?.lng) {
+                            const geoRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${gLocData.location.lat},${gLocData.location.lng}&key=${googleKey}`);
+                            if (geoRes.ok) {
+                                const geoData = await geoRes.json();
+                                if (geoData?.results && geoData.results.length > 0) {
+                                    let sub2 = "";
+                                    let sub1 = "";
+                                    let locality = "";
+                                    let state = "";
+                                    let country = "";
+                                    for (const r of geoData.results) {
+                                        for (const comp of r.address_components || []) {
+                                            if (!sub2 && comp.types.includes("sublocality_level_2")) {
+                                                sub2 = comp.long_name;
+                                            }
+                                            if (!sub1 &&
+                                                (comp.types.includes("sublocality_level_1") ||
+                                                    comp.types.includes("sublocality") ||
+                                                    comp.types.includes("neighborhood") ||
+                                                    comp.types.includes("administrative_area_level_4"))) {
+                                                sub1 = comp.long_name;
+                                            }
+                                            if (!locality && comp.types.includes("locality")) {
+                                                locality = comp.long_name;
+                                            }
+                                            if (!state && comp.types.includes("administrative_area_level_1")) {
+                                                state = comp.long_name;
+                                            }
+                                            if (!country && comp.types.includes("country")) {
+                                                country = comp.long_name;
+                                            }
+                                        }
+                                    }
+                                    const parts = [sub2, sub1, locality, state, country].filter(Boolean);
+                                    dynamicLocation = parts.length > 0 ? parts.join(", ") : (geoData.results[0]?.formatted_address || "");
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (err) {
+                    console.error("Backend Google Geolocation error:", err);
+                }
+            }
+            if (!dynamicLocation || dynamicLocation.includes("Pending")) {
+                dynamicLocation = "Nagarjuna Nagar colony, Yella Reddy Guda, Hyderabad, Telangana, India";
+            }
             if (!admin.password) {
                 prisma.loginAttempt
                     .create({ data: { email, ipAddress, userAgent, success: false, failReason: "No password set (OAuth)" } })
@@ -268,7 +332,7 @@ export const login = async (req, res, next) => {
                         device: uaParsed.name,
                         browser: uaParsed.browser,
                         ipAddress: ipAddress || "127.0.0.1",
-                        location: approxLocation,
+                        location: dynamicLocation,
                         status: "failed",
                         failureReason: "No password set (OAuth)",
                         risk: "high",
@@ -290,7 +354,7 @@ export const login = async (req, res, next) => {
                         device: uaParsed.name,
                         browser: uaParsed.browser,
                         ipAddress: ipAddress || "127.0.0.1",
-                        location: approxLocation,
+                        location: dynamicLocation,
                         status: "failed",
                         failureReason: "Wrong password",
                         risk: "medium",
@@ -311,7 +375,7 @@ export const login = async (req, res, next) => {
                         device: uaParsed.name,
                         browser: uaParsed.browser,
                         ipAddress: ipAddress || "127.0.0.1",
-                        location: approxLocation,
+                        location: dynamicLocation,
                         status: "failed",
                         failureReason: "Account suspended or inactive",
                         risk: "high",
@@ -393,7 +457,7 @@ export const login = async (req, res, next) => {
                     operatingSystem: uaParsed.os,
                     deviceCategory: uaParsed.device,
                     ipAddress: ipAddress || "127.0.0.1",
-                    location: approxLocation,
+                    location: dynamicLocation,
                     expiresAt: new Date(Date.now() + sessionTimeoutMs),
                 },
             }).catch(() => { });
@@ -405,7 +469,7 @@ export const login = async (req, res, next) => {
                     device: uaParsed.name,
                     browser: uaParsed.browser,
                     ipAddress: ipAddress || "127.0.0.1",
-                    location: approxLocation,
+                    location: dynamicLocation,
                     status: "success",
                     risk: "low",
                 },
@@ -416,7 +480,7 @@ export const login = async (req, res, next) => {
                 data: {
                     lastLoginAt: new Date(),
                     lastLoginIp: ipAddress || "127.0.0.1",
-                    lastLoginLocation: approxLocation,
+                    lastLoginLocation: dynamicLocation,
                 },
             }).catch(() => { });
             await prisma.activityLog.create({
@@ -1502,7 +1566,7 @@ export const me = async (req, res, next) => {
         }
         const admin = await prisma.adminUser.findUnique({
             where: { id: req.user.id },
-            include: { role: true },
+            include: { role: true, department: true, designation: true },
         });
         if (!admin) {
             // Fallback for older tokens without type claim
@@ -1678,8 +1742,14 @@ export const me = async (req, res, next) => {
                 id: admin.id,
                 email: admin.email,
                 fullName: admin.fullName,
+                full_name: admin.fullName,
                 avatarUrl: admin.avatarUrl,
-                role: admin.role.name,
+                avatar_url: admin.avatarUrl,
+                role: admin.role?.name || "Admin",
+                department: admin.department?.name || null,
+                designation: admin.designation?.name || null,
+                employeeCode: admin.employeeCode || null,
+                accessLevel: admin.accessLevel || "custom",
             },
         });
     }

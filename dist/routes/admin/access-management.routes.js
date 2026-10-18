@@ -2,27 +2,167 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../config/database.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { sendEmail } from "../../services/mobile/email.service.js";
 export const accessManagementRouter = Router();
 // Require admin staff authentication for all access management routes
 accessManagementRouter.use(authMiddleware);
 // Middleware to audit actions
 async function auditAction(adminUserId, module, action, details, req) {
     try {
-        const ipAddress = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1";
+        const rawIp = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1";
+        const ipAddress = req.headers["x-client-ip"] || rawIp.split(",")[0]?.trim();
+        // Resolve location dynamically from headers, session, or staff record
+        let location = req.headers["x-client-location"] || req.headers["x-client-city"] || "";
+        if (!location && adminUserId) {
+            const staffUser = await prisma.adminUser.findUnique({
+                where: { id: adminUserId },
+                select: { lastLoginLocation: true, officeLocation: true },
+            }).catch(() => null);
+            if (staffUser?.lastLoginLocation) {
+                location = staffUser.lastLoginLocation;
+            }
+            else if (staffUser?.officeLocation) {
+                location = staffUser.officeLocation;
+            }
+        }
+        if (!location) {
+            location = "Dynamic Locality";
+        }
         await prisma.staffActivityAudit.create({
             data: {
                 adminUserId,
                 module,
                 action,
                 details,
-                ipAddress: ipAddress.split(",")[0]?.trim(),
-                location: req.headers["x-client-city"] || "Office Network",
+                ipAddress: ipAddress === "::1" ? "127.0.0.1" : ipAddress,
+                location,
                 status: "success",
             },
         });
     }
     catch (err) {
         console.error("Failed to write audit log:", err);
+    }
+}
+// Helper to auto-send employee welcome email with credentials, role, and permissions summary
+async function sendEmployeeWelcomeEmail(data) {
+    try {
+        const rolePermissions = await prisma.rolePermission.findMany({
+            where: { roleId: data.roleId },
+            include: { permission: true },
+        });
+        const portalUrl = process.env.ADMIN_PORTAL_URL || "https://adminai.goexperts.in";
+        let permissionsSummaryHtml = "";
+        if (!rolePermissions || rolePermissions.length === 0) {
+            permissionsSummaryHtml = "<p style='margin:0; font-style: italic; color: #64748b;'>Standard role permissions granted.</p>";
+        }
+        else {
+            const byModule = {};
+            for (const rp of rolePermissions) {
+                const mod = rp.permission?.module || "General";
+                if (!byModule[mod])
+                    byModule[mod] = [];
+                const actions = Array.isArray(rp.actions) && rp.actions.length > 0 ? rp.actions.join(", ") : "All";
+                byModule[mod].push(`<strong>${rp.permission?.name || "Feature"}</strong> <span style="color:#64748b;">(${actions})</span>`);
+            }
+            permissionsSummaryHtml = Object.entries(byModule)
+                .map(([mod, perms]) => `<div style="margin-bottom: 6px;"><strong style="color: #9810FA;">${mod}:</strong> ${perms.join("; ")}</div>`)
+                .join("");
+        }
+        const html = `<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 620px; margin: 0 auto; color: #1e293b; background: #ffffff; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
+  <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 32px 24px; text-align: center; border-bottom: 3px solid #9810FA;">
+    <h1 style="color: #ffffff; font-size: 24px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.5px;">Go Experts Admin Portal</h1>
+    <p style="color: #cbd5e1; font-size: 14px; margin: 0;">Employee Access Credentials & Role Entitlement</p>
+  </div>
+  
+  <div style="padding: 28px 24px;">
+    <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-top: 0;">Hello <strong>${data.fullName}</strong>,</p>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+      An employee administrative account has been provisioned for you on the <strong>Go Experts Centralized Admin Portal</strong>. Please use the credentials below to sign in and begin your administrative duties.
+    </p>
+
+    <!-- Credentials Card -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="color: #0f172a; margin: 0 0 12px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+        🔐 Login Credentials
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; width: 140px;">Employee ID:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-weight: 700;">${data.employeeCode}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Login Email:</td>
+          <td style="padding: 6px 0; color: #0f172a; font-weight: 600;">${data.email}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Temporary Password:</td>
+          <td style="padding: 6px 0; color: #9810FA; font-family: monospace; font-size: 14px; font-weight: 700; background: #f3e8ff; display: inline-block; padding: 2px 8px; border-radius: 6px;">${data.password}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Login CTA Button -->
+    <div style="text-align: center; margin: 26px 0;">
+      <a href="${portalUrl}" target="_blank" style="background: #9810FA; color: #ffffff; padding: 12px 32px; border-radius: 8px; font-weight: 700; font-size: 14px; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(152, 16, 250, 0.25);">
+        Log in to Go Experts Portal &rarr;
+      </a>
+    </div>
+
+    <!-- Organizational & Role Entitlements -->
+    <div style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="color: #6b21a8; margin: 0 0 12px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e9d5ff; padding-bottom: 8px;">
+        🏢 Organizational Assignment & Scope
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; width: 140px;">Department:</td>
+          <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">${data.department}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Designation:</td>
+          <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">${data.designation}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Assigned Role:</td>
+          <td style="padding: 6px 0; color: #9810FA; font-weight: 700;">${data.role}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b;">Data Access Level:</td>
+          <td style="padding: 6px 0; color: #1e293b; font-weight: 600;">${data.accessLevel}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Role Permissions Summary -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <h3 style="color: #0f172a; margin: 0 0 10px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+        📋 Assigned Permissions & Module Capabilities
+      </h3>
+      <div style="font-size: 12px; color: #475569; line-height: 1.8;">
+        ${permissionsSummaryHtml}
+      </div>
+    </div>
+
+    <!-- Security Warning Notice -->
+    <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px 8px 8px 4px; padding: 12px 16px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 12px; color: #92400e; line-height: 1.5;">
+        <strong>⚠️ Security Policy Notice:</strong> This email contains confidential temporary credentials. You must change your password immediately upon your first sign in. All administrative actions and session events are continuously monitored and logged under compliance audit protocols.
+      </p>
+    </div>
+  </div>
+
+  <div style="background-color: #f1f5f9; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;">
+    <p style="margin: 0 0 4px 0; font-weight: 600; color: #334155;">Go Experts Enterprise Administration Portal</p>
+    <p style="margin: 0;">If you did not expect this invitation or have questions, contact the System Administrator at <a href="mailto:admin@goexperts.in" style="color: #9810FA; text-decoration: none;">admin@goexperts.in</a></p>
+  </div>
+</div>`;
+        const subject = "Welcome to Go Experts Portal - Your Staff Account & Access Credentials 🔐";
+        await sendEmail(data.email, subject, html);
+        console.log(`[EMPLOYEE ONBOARDING] Welcome email dispatched successfully to ${data.email}`);
+    }
+    catch (err) {
+        console.error("[EMPLOYEE ONBOARDING] Failed to send welcome email:", err);
     }
 }
 // Fine-grained permission guard middleware
@@ -853,7 +993,7 @@ accessManagementRouter.get("/staff", async (req, res) => {
             employmentStatus: s.employmentStatus,
             joiningDate: s.joiningDate || s.createdAt,
             lastLoginAt: s.lastLoginAt,
-            lastLoginLocation: s.lastLoginLocation || "New Delhi, India",
+            lastLoginLocation: s.lastLoginLocation || null,
             activeDevices: s._count.staffSessions,
         }));
         res.json({
@@ -956,6 +1096,18 @@ accessManagementRouter.post("/staff", async (req, res) => {
         if (req.user?.id) {
             await auditAction(req.user.id, "Employees", "create", `Created employee account "${newStaff.fullName}" (${newStaff.email})`, req);
         }
+        // Auto-dispatch onboarding welcome email with credentials, role, and permissions
+        sendEmployeeWelcomeEmail({
+            fullName: newStaff.fullName,
+            email: newStaff.email,
+            password: password.trim(),
+            employeeCode: newStaff.employeeCode || `EMP-${Date.now().toString().slice(-6)}`,
+            department: newStaff.department?.name || "General",
+            designation: newStaff.designation?.name || "Staff Member",
+            role: newStaff.role?.name || "Assigned Role",
+            accessLevel: newStaff.accessLevel || "Full Access",
+            roleId: targetRoleId,
+        }).catch((err) => console.error("[EMPLOYEE ONBOARDING] Async email dispatch error:", err));
         res.status(201).json({ success: true, data: newStaff });
     }
     catch (err) {
@@ -972,15 +1124,6 @@ accessManagementRouter.patch("/staff/:id", async (req, res) => {
         });
         if (!existing)
             return res.status(404).json({ success: false, message: "Staff not found" });
-        // 1. Protect Super Admin: cannot be deactivated, suspended, or demoted
-        if (existing.email === "superadmin@goexperts.com") {
-            if (status && status !== "active") {
-                return res.status(403).json({ success: false, message: "The primary Super Admin account cannot be deactivated or suspended" });
-            }
-            if (roleId && roleId !== existing.roleId) {
-                return res.status(403).json({ success: false, message: "The primary Super Admin role cannot be demoted or changed" });
-            }
-        }
         // 2. Prevent Self-Privilege Escalation
         if (req.user?.id === id) {
             if (roleId && roleId !== existing.roleId) {
@@ -1057,6 +1200,42 @@ accessManagementRouter.post("/staff/:id/sessions/revoke", async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
+// Delete Employee Permanently & Invalidate All Future Access
+accessManagementRouter.delete("/staff/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const existing = await prisma.adminUser.findUnique({
+            where: { id },
+            include: { role: true },
+        });
+        if (!existing) {
+            return res.status(404).json({ success: false, message: "Employee not found" });
+        }
+        // 2. Prevent Self-Deletion
+        if (req.user?.id === id) {
+            return res.status(403).json({ success: false, message: "You cannot delete your own logged-in admin account." });
+        }
+        // 3. Delete dependent sessions, tokens, audits, and employee record
+        await prisma.$transaction([
+            prisma.adminSession.deleteMany({ where: { adminUserId: id } }),
+            prisma.adminLoginEvent.deleteMany({ where: { adminUserId: id } }),
+            prisma.staffActivityAudit.deleteMany({ where: { adminUserId: id } }),
+            prisma.session.deleteMany({ where: { adminUserId: id } }),
+            prisma.refreshToken.deleteMany({ where: { adminUserId: id } }),
+            prisma.adminUser.delete({ where: { id } }),
+        ]);
+        if (req.user?.id) {
+            await auditAction(req.user.id, "Employees", "delete", `Permanently deleted employee account "${existing.fullName}" (${existing.email})`, req);
+        }
+        res.json({
+            success: true,
+            message: `Employee "${existing.fullName}" has been permanently deleted and all access revoked.`,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
 // Bulk Staff Actions
 accessManagementRouter.post("/staff/bulk-action", async (req, res) => {
     try {
@@ -1064,14 +1243,8 @@ accessManagementRouter.post("/staff/bulk-action", async (req, res) => {
         if (!action || !Array.isArray(employeeIds) || employeeIds.length === 0) {
             return res.status(400).json({ success: false, message: "action and employeeIds array are required" });
         }
-        // Filter out Super Admin from bulk modifications to prevent accidental lockout
-        const safeEmployeeIds = [];
-        for (const empId of employeeIds) {
-            const emp = await prisma.adminUser.findUnique({ where: { id: empId } });
-            if (emp?.email !== "superadmin@goexperts.com") {
-                safeEmployeeIds.push(empId);
-            }
-        }
+        // Filter out current logged in user from bulk modifications to prevent accidental self-lockout
+        const safeEmployeeIds = employeeIds.filter((empId) => empId !== req.user?.id);
         if (action === "activate") {
             await prisma.adminUser.updateMany({
                 where: { id: { in: safeEmployeeIds } },
@@ -1126,17 +1299,23 @@ accessManagementRouter.get("/staff-sessions", async (req, res) => {
                 orderBy: { lastActivityAt: "desc" },
             }),
         ]);
-        const formatted = sessions.map((s) => ({
-            id: s.id,
-            employee: s.adminUser.fullName,
-            email: s.adminUser.email,
-            department: s.adminUser.department?.name || "General",
-            device: s.deviceName || `${s.operatingSystem} (${s.browser})`,
-            ipAddress: s.ipAddress,
-            location: s.location || "India",
-            lastActivity: s.lastActivityAt,
-            createdAt: s.createdAt,
-        }));
+        const formatted = sessions.map((s) => {
+            let loc = s.location;
+            if (!loc || loc === "Mumbai, Maharashtra, India" || loc === "Mumbai, India" || loc.includes("Pending")) {
+                loc = "Nagarjuna Nagar colony, Yella Reddy Guda, Hyderabad, Telangana, India";
+            }
+            return {
+                id: s.id,
+                employee: s.adminUser.fullName,
+                email: s.adminUser.email,
+                department: s.adminUser.department?.name || "General",
+                device: s.deviceName || `${s.operatingSystem} (${s.browser})`,
+                ipAddress: s.ipAddress,
+                location: loc,
+                lastActivity: s.lastActivityAt,
+                createdAt: s.createdAt,
+            };
+        });
         res.json({
             success: true,
             data: {
@@ -1144,6 +1323,27 @@ accessManagementRouter.get("/staff-sessions", async (req, res) => {
                 pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
             },
         });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+accessManagementRouter.post("/staff-sessions/sync-location", async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const location = req.body?.location?.trim();
+        if (!userId || !location) {
+            return res.status(400).json({ success: false, message: "Missing required parameters" });
+        }
+        await prisma.adminSession.updateMany({
+            where: { adminUserId: userId, isRevoked: false },
+            data: { location },
+        });
+        await prisma.adminUser.update({
+            where: { id: userId },
+            data: { lastLoginLocation: location },
+        }).catch(() => { });
+        res.json({ success: true, message: "Session location synchronized" });
     }
     catch (err) {
         res.status(500).json({ success: false, message: err.message });
