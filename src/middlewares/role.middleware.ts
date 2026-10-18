@@ -1,4 +1,6 @@
+import { Response, NextFunction } from "express";
 import { prisma } from "../config/database.js";
+import { AuthenticatedRequest } from "./auth.middleware.js";
 
 function resolvePermissionForRoute(routePath: string, method: string): string | null {
   const p = routePath.toLowerCase();
