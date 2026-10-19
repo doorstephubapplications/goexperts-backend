@@ -42,12 +42,16 @@ router.get("/plans", async (req: Request, res: Response, next: NextFunction) => 
       where.visibility = "public";
     }
 
-    // Role filtering: strictly match role, or "all" (e.g. Freedom plan)
+    // Role filtering: strictly match role, shared role group, or "all"
     if (roleQuery && roleQuery !== "all") {
-      where.OR = [
-        { role: roleQuery },
-        { role: "all" },
-      ];
+      const relatedRoles = [roleQuery, "all"];
+      if (roleQuery === "investor" || roleQuery === "client") {
+        relatedRoles.push("client", "investor");
+      }
+      if (roleQuery === "founder" || roleQuery === "freelancer") {
+        relatedRoles.push("freelancer", "founder");
+      }
+      where.role = { in: relatedRoles };
     }
 
     let plans = await prisma.subscriptionPlan.findMany({

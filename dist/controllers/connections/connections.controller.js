@@ -304,6 +304,25 @@ export const sendInvitation = async (req, res, next) => {
         if (existingInvite) {
             return res.status(400).json({ success: false, message: 'An active invitation between these accounts already exists' });
         }
+        // Assert and consume sendInvitation quota from authoritative entitlement service
+        const authSenderRole = (req.user?.role || 'freelancer').toLowerCase();
+        let quotaEntitlement = null;
+        try {
+            const { assertAndConsumeActionQuota } = await import('../../services/subscription/entitlement.service.js');
+            const result = await assertAndConsumeActionQuota(userId, authSenderRole, 'sendInvitation');
+            quotaEntitlement = result.entitlement;
+        }
+        catch (gateErr) {
+            if (gateErr.name === 'ActionGateError') {
+                return res.status(403).json({
+                    success: false,
+                    code: gateErr.code || 'QUOTA_EXHAUSTED',
+                    message: gateErr.message || 'Connection invitation quota exceeded. Upgrade your plan to send more invitations.',
+                    details: gateErr.details,
+                });
+            }
+            throw gateErr;
+        }
         // Create invitation atomically within transaction with canonical pair locking held across COMMIT
         let newInvite;
         try {
@@ -359,6 +378,13 @@ export const sendInvitation = async (req, res, next) => {
             });
         }
         catch (err) {
+            if (quotaEntitlement?.subscriptionId) {
+                try {
+                    const { rollbackActionUsage } = await import('../../services/subscription/entitlement.service.js');
+                    await rollbackActionUsage(quotaEntitlement.subscriptionId, 'sendInvitation');
+                }
+                catch { }
+            }
             return res.status(400).json({ success: false, message: err.message || 'Unable to send invitation' });
         }
         const senderName = req.user?.fullName || newInvite.sender.fullName || 'A professional';

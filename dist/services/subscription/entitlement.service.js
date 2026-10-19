@@ -43,7 +43,17 @@ export function resolveFeatureKeyForAction(action) {
         case "saveProject":
             return "freelancer_projects_saved";
         case "sendInvitation":
-            return "client_direct_invitations_sent";
+            return "connection_invitations_sent";
+        case "connectFreelancer":
+            return "freelancer_connections";
+        case "connectProfessional":
+            return "professional_connections";
+        case "createTask":
+            return "task_creations";
+        case "inviteTeamMember":
+            return "team_members_invited";
+        case "saveItem":
+            return "saved_items";
         case "expressInterest":
             return "investor_interests_expressed"; // Full form: Expressions of Interest
         case "saveStartup":
@@ -407,8 +417,29 @@ export async function resolveRoleEntitlement(userId, targetRole, action) {
     // 2. Check 6-Month Free Trial (Start-inclusive, end-exclusive boundary: now < trialEndsAt)
     if (user.trialEndsAt && now.getTime() < user.trialEndsAt.getTime()) {
         const trialSub = user.subscriptions.find((s) => s.plan?.planType === "trial" || s.plan?.duration === "180_days" || s.plan?.duration === "6_months" || s.plan?.amount === 0);
+        let quotaLimit = 36; // 36 proposals or 36 project posts default for legacy 6-month trial
         let quotaUsed = 0;
-        const quotaLimit = 36; // 36 proposals or 36 project posts
+        if (trialSub) {
+            const trialHydrated = hydratePlanFromDb(trialSub.plan);
+            if (action === "sendInvitation") {
+                quotaLimit = trialHydrated.quotas.connectionInvitations ?? 25;
+            }
+            else if (action === "connectFreelancer" || action === "connectProfessional") {
+                quotaLimit = trialHydrated.quotas.freelancerConnections ?? 5;
+            }
+            else if (action === "publishProject" || action === "postProject") {
+                quotaLimit = trialHydrated.quotas.projectPosts ?? 5;
+            }
+            else if (action === "createTask") {
+                quotaLimit = Number(trialHydrated.quotas.totalTasks ?? 10);
+            }
+            else if (action === "inviteTeamMember") {
+                quotaLimit = trialHydrated.quotas.teamSeats ?? 0;
+            }
+            else if (action === "saveFreelancer" || action === "saveProject" || action === "saveStartup" || action === "saveItem") {
+                quotaLimit = trialHydrated.quotas.watchlistCapacity ?? 10;
+            }
+        }
         if (trialSub && action) {
             const featureKey = resolveFeatureKeyForAction(action);
             const usage = await prisma.subscriptionUsage.findUnique({
@@ -422,7 +453,7 @@ export async function resolveRoleEntitlement(userId, targetRole, action) {
             quotaUsed = usage?.used || 0;
         }
         const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
-        if (quotaLimit > 0 && quotaUsed >= quotaLimit) {
+        if (quotaLimit === 0 || (quotaLimit > 0 && quotaUsed >= quotaLimit)) {
             return {
                 isEntitled: false,
                 role: normalizedRole,
@@ -551,7 +582,28 @@ export async function resolveRoleEntitlement(userId, targetRole, action) {
             }
             : baseHydrated;
         let quotaLimit = -1;
-        if (normalizedRole === "freelancer") {
+        if (action === "sendInvitation") {
+            quotaLimit = hydrated.quotas.connectionInvitations ?? 25;
+        }
+        else if (action === "connectFreelancer") {
+            quotaLimit = hydrated.quotas.freelancerConnections ?? hydrated.quotas.professionalConnections ?? 5;
+        }
+        else if (action === "connectProfessional") {
+            quotaLimit = hydrated.quotas.professionalConnections ?? hydrated.quotas.freelancerConnections ?? 5;
+        }
+        else if (action === "publishProject" || action === "postProject") {
+            quotaLimit = hydrated.quotas.projectPosts ?? (normalizedRole === "client" ? 3 : 5);
+        }
+        else if (action === "createTask") {
+            quotaLimit = Number(hydrated.quotas.totalTasks ?? 10);
+        }
+        else if (action === "inviteTeamMember") {
+            quotaLimit = hydrated.quotas.teamSeats ?? 0;
+        }
+        else if (action === "saveFreelancer" || action === "saveProject" || action === "saveStartup" || action === "saveItem") {
+            quotaLimit = hydrated.quotas.watchlistCapacity ?? hydrated.quotas.savedStartups ?? 10;
+        }
+        else if (normalizedRole === "freelancer") {
             quotaLimit = hydrated.quotas.proposals ?? (snapshot?.proposalsLimit || roleSub.plan?.proposalsLimit || 3);
         }
         else if (normalizedRole === "client") {
@@ -585,7 +637,7 @@ export async function resolveRoleEntitlement(userId, targetRole, action) {
             quotaUsed = usage?.used || 0;
         }
         const quotaRemaining = quotaLimit === -1 ? 999999 : Math.max(0, quotaLimit - quotaUsed);
-        if (quotaLimit > 0 && quotaUsed >= quotaLimit) {
+        if (quotaLimit === 0 || (quotaLimit > 0 && quotaUsed >= quotaLimit)) {
             return {
                 isEntitled: false,
                 role: normalizedRole,

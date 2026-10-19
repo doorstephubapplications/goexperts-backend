@@ -82,19 +82,22 @@ export const getReferralDetails = async (req, res, next) => {
             },
         });
         let oneTimeEarned = 0;
-        let recurringEarned = 0;
+        let recurringCredited = 0;
         for (const rw of rewards) {
             const amt = Number(rw.amount || 0);
             if (rw.rewardCategory === "RECURRING_CASHBACK") {
-                recurringEarned += amt;
+                recurringCredited += amt;
             }
             else {
                 oneTimeEarned += amt;
             }
         }
-        // 3. Fetch recurring schedules
-        let pendingCashback = 0;
+        // 3. Fetch recurring schedules and calculate continuous accruals
         let recurringSchedules = [];
+        const scheduleByReferralId = new Map();
+        let totalAccruedAcrossSchedules = 0;
+        let totalCreditedAcrossSchedules = 0;
+        let totalPendingAcrossSchedules = 0;
         try {
             recurringSchedules = await prisma.recurringRewardSchedule.findMany({
                 where: { referrerUserId: userId },
@@ -106,10 +109,37 @@ export const getReferralDetails = async (req, res, next) => {
                 orderBy: { createdAt: "desc" },
             });
             for (const s of recurringSchedules) {
-                if (s.status === "ACCRUING") {
-                    const uncredited = Math.max(0, Number(s.totalAllocatedAmount || 0) - Number(s.totalCreditedAmount || 0));
-                    pendingCashback += uncredited;
-                }
+                const startMs = new Date(s.eligibleStartAt).getTime();
+                const endMs = new Date(s.eligibleEndAt).getTime();
+                const totalDurationMs = Math.max(1, endMs - startMs);
+                const elapsedMs = Math.max(0, Math.min(now.getTime(), endMs) - startMs);
+                const elapsedRatio = Math.min(1, Math.max(0, elapsedMs / totalDurationMs));
+                const totalAllocated = Number(s.totalAllocatedAmount || 0);
+                const credited = Number(s.totalCreditedAmount || 0);
+                const accrued = Number((totalAllocated * elapsedRatio).toFixed(2));
+                const pending = Number(Math.max(0, accrued - credited).toFixed(2));
+                const remainingFuture = Number(Math.max(0, totalAllocated - accrued).toFixed(2));
+                totalAccruedAcrossSchedules += accrued;
+                totalCreditedAcrossSchedules += credited;
+                totalPendingAcrossSchedules += pending;
+                scheduleByReferralId.set(s.referralId, {
+                    id: s.id,
+                    subscriptionId: s.subscriptionId,
+                    eligibleStartAt: s.eligibleStartAt,
+                    eligibleEndAt: s.eligibleEndAt,
+                    baseSubscriptionAmount: Number(s.baseSubscriptionAmount || 0),
+                    rewardBasisAmount: Number(s.rewardBasisAmount || 0),
+                    totalAllocatedAmount: totalAllocated,
+                    totalCreditedAmount: credited,
+                    status: s.status,
+                    nextSettlementAt: s.nextSettlementAt,
+                    accrued,
+                    credited,
+                    pending,
+                    remainingFuture,
+                    elapsedDays: Number((elapsedMs / (1000 * 86400)).toFixed(1)),
+                    totalDurationDays: Number((totalDurationMs / (1000 * 86400)).toFixed(1)),
+                });
             }
         }
         catch { }
@@ -129,15 +159,30 @@ export const getReferralDetails = async (req, res, next) => {
         const recurringRewardBasis = isPaidPlan ? Number((baseSubscriptionAmount * policy.recurringRate).toFixed(2)) : 0;
         const remainingDurationMs = activeSub ? Math.max(0, activeSub.endDate.getTime() - now.getTime()) : 0;
         const remainingDays = Math.ceil(remainingDurationMs / (1000 * 86400));
-        // 5. User wallet balance
+        // 5. User wallet balance & referral wallet transactions
         const wallet = await prisma.wallet.findUnique({ where: { userId } });
         const walletBalance = Number(wallet?.balance || 0);
-        // Format referral history records
+        const walletTransactions = wallet
+            ? await prisma.walletTransaction.findMany({
+                where: {
+                    walletId: wallet.id,
+                    type: { in: ["referral_cashback", "referral_one_time"] },
+                },
+                orderBy: { createdAt: "desc" },
+                take: 50,
+            })
+            : [];
+        const effectiveRecurringCredited = totalCreditedAcrossSchedules > 0 ? totalCreditedAcrossSchedules : recurringCredited;
+        const effectiveRecurringAccrued = Number(totalAccruedAcrossSchedules.toFixed(2));
+        const effectivePendingSettlement = Number(totalPendingAcrossSchedules.toFixed(2));
+        const totalReferralWalletCredits = Number((oneTimeEarned + effectiveRecurringCredited).toFixed(2));
+        // Format referral history records with full accrual breakdown
         const history = referrals.map(r => {
             const rRewards = r.rewards || [];
-            const totalAwarded = rRewards.reduce((s, rw) => s + Number(rw.amount || 0), 0);
             const isQualified = String(r.status || "").toUpperCase() === "QUALIFIED";
-            const hasOneTime = rRewards.some(rw => rw.rewardCategory === "ONE_TIME_CASHBACK" || rw.amount === policy.oneTimeRewardAmount);
+            const oneTimeReward = rRewards.find(rw => rw.rewardCategory === "ONE_TIME_CASHBACK" || rw.amount === policy.oneTimeRewardAmount);
+            const hasOneTime = Boolean(oneTimeReward);
+            const schedule = scheduleByReferralId.get(r.id);
             return {
                 id: r.id,
                 refereeId: r.refereeId,
@@ -146,30 +191,75 @@ export const getReferralDetails = async (req, res, next) => {
                 refereeRole: r.referee?.role,
                 registeredAt: r.createdAt,
                 status: isQualified ? "QUALIFIED" : (r.status || "PENDING").toUpperCase(),
-                profileCompletionPercentage: r.referee?.completionPercentage || 0,
-                profileCompletedAt: r.profileCompletedAt,
+                profileCompletionPercentage: r.referee?.completionPercentage || (isQualified ? 100 : 0),
+                profileCompletedAt: r.profileCompletedAt || (isQualified ? r.qualifiedAt : null),
                 qualifiedAt: r.qualifiedAt,
+                oneTimeRewardStatus: hasOneTime ? "CREDITED" : isQualified ? "PENDING" : "LOCKED",
                 oneTimeRewardCredited: hasOneTime,
+                oneTimeCreditedDate: oneTimeReward?.creditedAt || null,
                 oneTimeRewardAmount: hasOneTime ? policy.oneTimeRewardAmount : 0,
-                totalEarned: Number(totalAwarded.toFixed(2)),
+                recurringEligible: Boolean(schedule),
+                rewardAllocation: schedule ? schedule.totalAllocatedAmount : 0,
+                amountAccrued: schedule ? schedule.accrued : 0,
+                amountCredited: schedule ? schedule.credited : 0,
+                pendingSettlement: schedule ? schedule.pending : 0,
+                nextSettlementDate: schedule ? schedule.nextSettlementAt : null,
+                subscriptionPeriod: schedule ? `${new Date(schedule.eligibleStartAt).toLocaleDateString("en-IN")} – ${new Date(schedule.eligibleEndAt).toLocaleDateString("en-IN")}` : "—",
+                accrualBreakdown: schedule ? {
+                    subscriptionPriceInclGst: planPrice,
+                    basePriceExcludingGst: schedule.baseSubscriptionAmount,
+                    cashbackPercent: Math.round(policy.recurringRate * 100),
+                    fullPeriodRewardBasis: schedule.rewardBasisAmount,
+                    totalDurationDays: schedule.totalDurationDays,
+                    eligibleAccrualStart: schedule.eligibleStartAt,
+                    eligibleAccrualEnd: schedule.eligibleEndAt,
+                    elapsedDays: schedule.elapsedDays,
+                    accruedToDate: schedule.accrued,
+                    settledCashback: schedule.credited,
+                    remainingAllocated: schedule.remainingFuture,
+                    nextSettlementDate: schedule.nextSettlementAt,
+                } : null,
             };
         });
+        const formattedWalletCredits = walletTransactions.map(tx => ({
+            id: tx.id,
+            type: tx.type === "referral_one_time" ? "ONE_TIME_REWARD" : "RECURRING_CASHBACK",
+            typeLabel: tx.type === "referral_one_time" ? "₹25 One-Time Referral Credit" : "5% Recurring Cashback Credit",
+            amount: Number(tx.amount),
+            creditDate: tx.createdAt,
+            reference: tx.id,
+            status: (tx.status || "completed").toUpperCase(),
+            description: tx.description,
+            balanceAfter: Number(tx.balanceAfter || 0),
+        }));
         res.json({
             success: true,
             data: {
                 referralCode: user.referralCode,
                 referralLink,
+                summary: {
+                    totalDirectReferrals: totalReferrals,
+                    qualifiedReferrals,
+                    pendingProfileCompletion: pendingReferrals,
+                    oneTimeEarned: Number(oneTimeEarned.toFixed(2)),
+                    recurringAccrued: effectiveRecurringAccrued,
+                    recurringCredited: effectiveRecurringCredited,
+                    pendingSettlement: effectivePendingSettlement,
+                    totalWalletCredits: totalReferralWalletCredits,
+                },
+                // Backward compatibility properties
                 totalReferrals,
                 qualifiedReferrals,
                 pendingReferrals,
                 oneTimeEarned: Number(oneTimeEarned.toFixed(2)),
-                recurringEarned: Number(recurringEarned.toFixed(2)),
-                totalEarned: Number((oneTimeEarned + recurringEarned).toFixed(2)),
-                pendingCashback: Number(pendingCashback.toFixed(2)),
+                recurringEarned: effectiveRecurringCredited,
+                recurringAccrued: effectiveRecurringAccrued,
+                totalEarned: totalReferralWalletCredits,
+                pendingCashback: effectivePendingSettlement,
                 walletBalance: Number(walletBalance.toFixed(2)),
                 currentSubscription: {
                     hasSubscription: Boolean(activeSub),
-                    planName: activeSub?.plan?.name || "Freedom Free",
+                    planName: activeSub?.plan?.name || "Freedom (Free)",
                     isPaidPlan: Boolean(isPaidPlan),
                     status: activeSub?.status || "free",
                     startDate: activeSub?.startDate || null,
@@ -180,22 +270,15 @@ export const getReferralDetails = async (req, res, next) => {
                     recurringRewardBasis,
                     recurringRatePercent: Number((policy.recurringRate * 100).toFixed(0)),
                     oneTimeRewardAmount: policy.oneTimeRewardAmount,
+                    totalAccrued: effectiveRecurringAccrued,
+                    totalCredited: effectiveRecurringCredited,
+                    nextSettlementDate: activeSub?.endDate || null,
+                    message: isPaidPlan
+                        ? "Earn ₹25 once for each successful direct referral, plus recurring cashback calculated at 5% of your own eligible paid subscription price excluding GST, prorated for your eligible subscription period."
+                        : "Earn ₹25 for every successful direct referral. Upgrade to an eligible paid plan to unlock recurring 5% cashback.",
                 },
                 history,
-                recurringSchedules: recurringSchedules.map(s => ({
-                    id: s.id,
-                    refereeName: s.referral?.referee?.fullName || "Direct Referral",
-                    subscriptionId: s.subscriptionId,
-                    eligibleStartAt: s.eligibleStartAt,
-                    eligibleEndAt: s.eligibleEndAt,
-                    remainingDays: s.remainingDurationDays,
-                    baseSubscriptionAmount: s.baseSubscriptionAmount,
-                    rewardBasisAmount: s.rewardBasisAmount,
-                    totalAllocatedAmount: s.totalAllocatedAmount,
-                    totalCreditedAmount: s.totalCreditedAmount,
-                    status: s.status,
-                    nextSettlementAt: s.nextSettlementAt,
-                })),
+                walletCredits: formattedWalletCredits,
                 policy: {
                     oneTimeRewardAmount: policy.oneTimeRewardAmount,
                     recurringRatePercent: Number((policy.recurringRate * 100).toFixed(0)),

@@ -24,13 +24,16 @@ router.get("/plans", async (req, res, next) => {
             where.status = { in: ["active", "published"] };
             where.visibility = "public";
         }
-        // Role filtering: strictly match role, or "all"
+        // Role filtering: strictly match role, shared role group, or "all"
         if (roleQuery && roleQuery !== "all") {
-            where.OR = [
-                { role: roleQuery },
-                // Only include role="all" if add-ons or all-access or trial are allowed
-                ...(includeAddOns || includeAllAccess ? [{ role: "all" }] : [{ planType: "trial" }]),
-            ];
+            const relatedRoles = [roleQuery, "all"];
+            if (roleQuery === "investor" || roleQuery === "client") {
+                relatedRoles.push("client", "investor");
+            }
+            if (roleQuery === "founder" || roleQuery === "freelancer") {
+                relatedRoles.push("freelancer", "founder");
+            }
+            where.role = { in: relatedRoles };
         }
         let plans = await prisma.subscriptionPlan.findMany({
             where,
@@ -52,13 +55,11 @@ router.get("/plans", async (req, res, next) => {
             if (!includeAllAccess && (p.planCategory === "all_access" || p.name.toLowerCase().includes("all access"))) {
                 return false;
             }
-            // Exclude trial from standard paid plan lists if role-specific query
-            if (roleQuery && roleQuery !== "all" && p.planCategory === "trial" && req.query.includeTrial !== "true") {
-                return false;
-            }
-            // Strict role match
-            if (roleQuery && roleQuery !== "all" && p.role !== roleQuery && p.role !== "all") {
-                return false;
+            // Strict role match (checks role or eligibleRoles)
+            if (roleQuery && roleQuery !== "all") {
+                const isEligible = p.role === "all" || p.role === roleQuery || (Array.isArray(p.eligibleRoles) && p.eligibleRoles.includes(roleQuery));
+                if (!isEligible)
+                    return false;
             }
             return true;
         });
