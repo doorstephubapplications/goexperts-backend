@@ -4,7 +4,15 @@ import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
 import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { uploadFile } from "../../controllers/media/media.controller.js";
-import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
+import { 
+  getMyVerification, 
+  updateMyVerification, 
+  deleteMyVerification,
+  getKycCatalog,
+  getKycPolicy,
+  submitMyVerification,
+  saveMyVerificationDraft
+} from "../../controllers/verification/verification.controller.js";
 import {
   getFounderDashboard,
   getFounderProfile,
@@ -65,8 +73,12 @@ router.post("/media/upload", upload.single("file"), uploadFile as any);
 
 // Verification routes must be accessible before onboarding completion so users can upload KYC documents
 router.get("/verification", getMyVerification as any);
+router.get("/verification/catalog", getKycCatalog as any);
+router.get("/verification/policy", getKycPolicy as any);
 router.patch("/verification", updateMyVerification as any);
 router.delete("/verification", deleteMyVerification as any);
+router.post("/verification/submit", submitMyVerification as any);
+router.post("/verification/draft", saveMyVerificationDraft as any);
 
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["founder", "investor", "client", "freelancer", "admin", "super_admin"]) as any);

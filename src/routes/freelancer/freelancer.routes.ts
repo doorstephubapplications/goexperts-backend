@@ -25,7 +25,15 @@ import {
   deleteFreelancerTeamMember,
   listFreelancerTeam,
 } from "../../controllers/freelancer/freelancer.controller.js";
-import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
+import { 
+  getMyVerification, 
+  updateMyVerification, 
+  deleteMyVerification,
+  getKycCatalog,
+  getKycPolicy,
+  submitMyVerification,
+  saveMyVerificationDraft
+} from "../../controllers/verification/verification.controller.js";
 import {
   listFreelancerProposals,
   createFreelancerProposal,
@@ -99,8 +107,12 @@ router.patch("/notifications/:id/read", markFreelancerNotificationRead as any);
 
 // Verification routes must be accessible before onboarding completion so users can upload KYC documents
 router.get("/verification", getMyVerification as any);
+router.get("/verification/catalog", getKycCatalog as any);
+router.get("/verification/policy", getKycPolicy as any);
 router.patch("/verification", updateMyVerification as any);
 router.delete("/verification", deleteMyVerification as any);
+router.post("/verification/submit", submitMyVerification as any);
+router.post("/verification/draft", saveMyVerificationDraft as any);
 
 router.use(requireOnboarding as any);
 router.use(portalRoleMiddleware(["freelancer", "client", "investor", "founder", "admin", "super_admin"]) as any);
