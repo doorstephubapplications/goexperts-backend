@@ -42,12 +42,11 @@ router.get("/plans", async (req: Request, res: Response, next: NextFunction) => 
       where.visibility = "public";
     }
 
-    // Role filtering: strictly match role, or "all"
+    // Role filtering: strictly match role, or "all" (e.g. Freedom plan)
     if (roleQuery && roleQuery !== "all") {
       where.OR = [
         { role: roleQuery },
-        // Only include role="all" if add-ons or all-access or trial are allowed
-        ...(includeAddOns || includeAllAccess ? [{ role: "all" }] : [{ planType: "trial" }]),
+        { role: "all" },
       ];
     }
 
@@ -73,13 +72,10 @@ router.get("/plans", async (req: Request, res: Response, next: NextFunction) => 
         if (!includeAllAccess && (p.planCategory === "all_access" || p.name.toLowerCase().includes("all access"))) {
           return false;
         }
-        // Exclude trial from standard paid plan lists if role-specific query
-        if (roleQuery && roleQuery !== "all" && p.planCategory === "trial" && req.query.includeTrial !== "true") {
-          return false;
-        }
-        // Strict role match
-        if (roleQuery && roleQuery !== "all" && p.role !== roleQuery && p.role !== "all") {
-          return false;
+        // Strict role match (checks role or eligibleRoles)
+        if (roleQuery && roleQuery !== "all") {
+          const isEligible = p.role === "all" || p.role === roleQuery || (Array.isArray(p.eligibleRoles) && p.eligibleRoles.includes(roleQuery as any));
+          if (!isEligible) return false;
         }
         return true;
       });

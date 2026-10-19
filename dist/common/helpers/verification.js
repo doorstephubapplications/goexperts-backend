@@ -8,6 +8,8 @@ export const VERIFICATION_KEY_MAP = {
     pan: "PAN Card",
     aadhaar: "Aadhaar Card",
     driving: "Driving Licence",
+    passport: "Passport",
+    voter: "Voter ID",
     // Business document keys (shown in UI)
     gst: "GST Certificate",
     udyam: "MSME Regd.",
@@ -19,6 +21,7 @@ export const VERIFICATION_KEY_MAP = {
     mca_registered: "MCA Registered",
     business_pan: "Business PAN",
     company: "Company Registration",
+    company_incorporation: "Company Incorporation",
     driving_licence: "Driving Licence"
 };
 const VALID_STATUSES = ["verified", "pending", "missing", "rejected"];
@@ -28,6 +31,8 @@ export const VERIFICATION_KEYS = [
     { key: "pan", label: "PAN Card", required: false },
     { key: "aadhaar", label: "Aadhaar Card", required: false },
     { key: "driving", label: "Driving Licence", required: false },
+    { key: "passport", label: "Passport", required: false },
+    { key: "voter", label: "Voter ID", required: false },
     { key: "gst", label: "GST Certificate", required: false },
     { key: "udyam", label: "MSME Regd.", required: false },
     { key: "msme", label: "MSME Regd.", required: false },
@@ -38,12 +43,15 @@ export const VERIFICATION_KEYS = [
     { key: "mca_registered", label: "MCA Registered", required: false },
     { key: "business_pan", label: "Business PAN", required: false },
     { key: "company", label: "Company Registration", required: false },
+    { key: "company_incorporation", label: "Company Incorporation", required: false },
     { key: "driving_licence", label: "Driving Licence", required: false }
 ];
 const VALIDATORS = {
     pan: { regex: /^[a-zA-Z0-9]{10}$/, message: "Invalid PAN format (10 alphanumeric characters)" },
     business_pan: { regex: /^[a-zA-Z0-9]{10}$/, message: "Invalid PAN format (10 alphanumeric characters)" },
     aadhaar: { regex: /^[0-9]{4}\s?[0-9]{4}\s?[0-9]{4}$/, message: "Invalid Aadhaar format (12 digits)" },
+    passport: { regex: /^[A-Z0-9]{6,12}$/i, message: "Invalid Passport format (e.g. A1234567)" },
+    voter: { regex: /^[A-Z0-9-/\s]{8,18}$/i, message: "Invalid Voter ID format (e.g. ABC1234567)" },
     gst: { regex: /^[a-zA-Z0-9]{15}$/, message: "Invalid GST format (15 alphanumeric characters)" },
     udyam: { regex: /^[a-zA-Z0-9-]{10,25}$/, message: "Invalid Udyam format (10-25 characters)" },
     driving: { regex: /^[A-Z0-9-/\s]{10,20}$/i, message: "Invalid Driving Licence format" },
@@ -55,6 +63,7 @@ const VALIDATORS = {
     iso_27001: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid ISO 27001 certificate format" },
     soc2_type2: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid SOC 2 Type II certificate/report format" },
     company: { regex: /^[A-Z0-9-\s]{5,25}$/i, message: "Invalid Company Registration format" },
+    company_incorporation: { regex: /^[A-Z0-9-\s]{4,30}$/i, message: "Invalid Company Incorporation format" },
 };
 const getVerificationRequirement = (role) => {
     const normalizedRole = role.toLowerCase().trim();
@@ -129,8 +138,8 @@ export function getVerificationStats(user) {
     const pendingCount = items.filter((i) => i.status === "pending").length;
     const requirement = getVerificationRequirement(String(user.role || ""));
     // Group keys
-    const personalKeys = ["pan", "aadhaar", "driving", "driving_licence"];
-    const businessKeys = ["gst", "udyam", "msme", "startup_india", "iso_27001", "soc2_type2", "incorporation", "mca_registered", "business_pan", "company"];
+    const personalKeys = ["pan", "aadhaar", "driving", "driving_licence", "passport", "voter"];
+    const businessKeys = ["udyam", "msme", "startup_india", "iso_27001", "soc2_type2", "incorporation", "mca_registered", "gst", "business_pan", "company", "company_incorporation"];
     // Calculate submitted items (verified or pending)
     const personalSubmitted = items.filter(i => personalKeys.includes(i.key) && (i.status === "verified" || i.status === "pending")).length;
     const businessSubmitted = items.filter(i => businessKeys.includes(i.key) && (i.status === "verified" || i.status === "pending")).length;
@@ -147,13 +156,36 @@ export function getVerificationStats(user) {
     const businessVerified = items.filter(i => businessKeys.includes(i.key) && i.status === "verified").length;
     const requiredPersonalVerified = Math.min(requirement.personalRequired, personalVerified);
     const requiredBusinessVerified = Math.min(requirement.businessRequired, businessVerified);
-    const kycApproved = personalVerified >= requirement.personalRequired && businessVerified >= requirement.businessRequired;
+    const kycApproved = personalVerified >= requirement.personalRequired && (requirement.businessRequired === 0 || businessVerified >= requirement.businessRequired);
     const profileApproved = Boolean(user.isVerified || user.verified);
     const requiredTotal = 1 + requirement.personalRequired + requirement.businessRequired;
     const requiredVerified = (isEmailVerified ? 1 : 0)
         + requiredPersonalVerified
         + requiredBusinessVerified;
     const trustScore = Math.min(100, Math.round((requiredVerified / requiredTotal) * 100));
+    // Progress stepper & percentage calculation: 100% dynamic based on submitted required documents
+    const totalRequiredDocs = requirement.personalRequired + requirement.businessRequired;
+    const submittedRequiredDocs = Math.min(personalSubmitted, requirement.personalRequired)
+        + Math.min(businessSubmitted, requirement.businessRequired);
+    const completedProgressSlots = submittedRequiredDocs;
+    const totalProgressSlots = totalRequiredDocs;
+    const completionPercentage = totalRequiredDocs > 0
+        ? (kycApproved ? 100 : Math.round((submittedRequiredDocs / totalRequiredDocs) * 100))
+        : (kycApproved ? 100 : 0);
+    // Current Stepper state (1: Basic Info / Document Selection, 2: Documents In Progress, 3: Verification Review, 4: Completed)
+    let currentStep = 1;
+    if (kycApproved) {
+        currentStep = 4;
+    }
+    else if (submittedRequiredDocs >= totalRequiredDocs && totalRequiredDocs > 0) {
+        currentStep = 3;
+    }
+    else if (submittedRequiredDocs > 0) {
+        currentStep = 2;
+    }
+    else {
+        currentStep = 1;
+    }
     return {
         items: items.filter((i) => i.status !== "missing"),
         trustScore,
@@ -164,12 +196,18 @@ export function getVerificationStats(user) {
         requiredTotal,
         personalRequired: requirement.personalRequired,
         businessRequired: requirement.businessRequired,
+        personalSubmitted,
+        businessSubmitted,
         personalVerified,
         businessVerified,
         requiredPersonalVerified,
         requiredBusinessVerified,
         profileApproved,
         kycApproved,
+        currentStep,
+        completionPercentage,
+        completedProgressSlots,
+        totalProgressSlots,
         kycStatus: kycApproved
             ? "APPROVED"
             : pendingCount > 0
@@ -180,6 +218,7 @@ export function getVerificationStats(user) {
         accountVerified: profileApproved || kycApproved,
         fullName: user.fullName,
         email: user.email,
+        role: user.role,
     };
 }
 // Generic updater function that can be used globally

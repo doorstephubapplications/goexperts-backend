@@ -1,7 +1,6 @@
 import { prisma } from '../../config/database.js';
-import { sendFreePlanActivatedEmail, sendReferralCashbackEmail } from './email.service.js';
+import { sendFreePlanActivatedEmail } from './email.service.js';
 import { generateInvoicePdf } from '../invoice/invoice.service.js';
-import { NotificationEngine } from './notification.engine.js';
 import { getVerificationStats } from '../../common/helpers/verification.js';
 import { GST_RATE_FOR_INCLUDED_PLAN_PRICE, calculateInclusiveGst, getPlanBaseAmountExcludingGst, } from '../../utils/financial.util.js';
 export { GST_RATE_FOR_INCLUDED_PLAN_PRICE, calculateInclusiveGst, getPlanBaseAmountExcludingGst };
@@ -359,75 +358,11 @@ export const activateUserSubscription = async (userId, planIdOrName, billingCycl
         }
     }
     await reactivateAccountAfterPlanUpgrade(userId);
-    // --- Dynamic Referral Cashback Logic ---
-    if (plan.amount > 0) {
-        try {
-            const referral = await prisma.referral.findUnique({
-                where: { refereeId: userId },
-                include: { referrer: true, referee: true },
-            });
-            if (referral && referral.referrer) {
-                // Fetch app_settings from DB for cashback config
-                const settingsRecord = await prisma.setting.findUnique({ where: { key: "app_settings" } });
-                let appSettings = {};
-                if (settingsRecord) {
-                    try {
-                        appSettings = JSON.parse(settingsRecord.value);
-                    }
-                    catch (e) { }
-                }
-                const cashbackPercent = Number(appSettings.cashback_percent ?? 5);
-                const cashbackMultiplier = cashbackPercent / 100;
-                const planBaseAmount = getPlanBaseAmountExcludingGst(plan.amount);
-                const cashbackAmount = parseFloat((planBaseAmount * cashbackMultiplier).toFixed(2));
-                if (cashbackAmount > 0) {
-                    const referrerId = referral.referrer.id;
-                    let referrerWallet = await prisma.wallet.findUnique({ where: { userId: referrerId } });
-                    if (!referrerWallet) {
-                        referrerWallet = await prisma.wallet.create({
-                            data: { userId: referrerId, balance: 0 },
-                        });
-                    }
-                    const newBalance = referrerWallet.balance + cashbackAmount;
-                    const updatedWallet = await prisma.wallet.update({
-                        where: { id: referrerWallet.id },
-                        data: { balance: newBalance },
-                    });
-                    await prisma.walletTransaction.create({
-                        data: {
-                            walletId: updatedWallet.id,
-                            type: 'referral_cashback',
-                            amount: cashbackAmount,
-                            direction: 'credit',
-                            description: `${cashbackPercent}% Cashback on GST-exclusive subscription base amount for ${referral.referee.fullName}`,
-                            balanceAfter: newBalance,
-                            status: 'completed',
-                        },
-                    });
-                    await prisma.referralReward.create({
-                        data: {
-                            referralId: referral.id,
-                            amount: cashbackAmount,
-                            points: 0,
-                        }
-                    });
-                    // Send Email
-                    await sendReferralCashbackEmail(referral.referrer.email, referral.referrer.fullName, cashbackAmount, referral.referee.fullName, newBalance).catch(console.error);
-                    // Send In-App Notification
-                    await NotificationEngine.queueNotification({
-                        userId: referrerId,
-                        type: 'referral_cashback',
-                        title: 'Cashback Credited Successfully! 🎉',
-                        message: `You received 💰${cashbackAmount} cashback (${cashbackPercent}%) because your friend ${referral.referee.fullName} bought a subscription plan!`,
-                        channel: 'push',
-                        payload: { amount: cashbackAmount, baseAmount: planBaseAmount, grossAmount: plan.amount, friend: referral.referee.fullName },
-                    }).catch(console.error);
-                }
-            }
-        }
-        catch (err) {
-            console.error('Error processing referral cashback:', err);
-        }
+    // --- Enterprise Direct Referral Recurring Cashback Allocation ---
+    if (plan.amount > 0 && subscription) {
+        import('../referral/direct-referral.service.js')
+            .then(({ onReferrerSubscriptionActivatedOrRenewed }) => onReferrerSubscriptionActivatedOrRenewed(userId, subscription.id))
+            .catch((err) => console.error('[Referral Subscription Renewal Error]:', err));
     }
     // -----------------------------------
     return subscription;

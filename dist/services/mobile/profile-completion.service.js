@@ -1097,6 +1097,10 @@ export const finalizeProfileCompletionStatus = async (userId, role) => {
         isFinalized: true,
         isComplete: true,
     };
+    // Trigger Direct Referral Qualification Engine (₹25 One-Time + 5% Recurring)
+    import('../referral/direct-referral.service.js')
+        .then(({ checkAndQualifyReferral }) => checkAndQualifyReferral(userId))
+        .catch((err) => console.error('[Referral Qualification Trigger Error]:', err));
     return {
         success: true,
         isFinalized: true,

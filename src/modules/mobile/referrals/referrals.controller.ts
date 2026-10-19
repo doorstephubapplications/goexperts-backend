@@ -1,7 +1,11 @@
 import { Response, NextFunction } from 'express';
 import { prisma } from '../../../config/database.js';
-import { successResponse, errorResponse } from '../../../core/response.js';
+import { successResponse } from '../../../core/response.js';
 import { AuthRequest } from '../../../middleware/auth.js';
+import {
+  getActiveReferralPolicy,
+  calculateBasePriceExcludingGst,
+} from '../../../services/referral/direct-referral.service.js';
 
 const ensureReferralCode = async (userId: string, existingCode?: string | null) => {
   if (existingCode) return existingCode;
@@ -18,18 +22,14 @@ const ensureReferralCode = async (userId: string, existingCode?: string | null) 
 
 export const getMyReferrals = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const settingsRecord = await prisma.setting.findUnique({ where: { key: "app_settings" } });
-    let appSettings: any = {};
-    if (settingsRecord) {
-      try {
-        appSettings = JSON.parse(settingsRecord.value);
-      } catch(e) {}
-    }
+    const policy = await getActiveReferralPolicy();
+    const now = new Date();
 
     const publicSettings = {
-      welcomeBonusEnabled: Boolean(appSettings.welcome_bonus_enabled ?? true),
-      welcomeBonusAmount: Number(appSettings.welcome_bonus_amount ?? 99),
-      referralRewardAmount: Number(appSettings.referral_reward_amount ?? 25)
+      welcomeBonusEnabled: true,
+      welcomeBonusAmount: 99,
+      referralRewardAmount: policy.oneTimeRewardAmount,
+      commission: Math.round(policy.recurringRate * 100),
     };
 
     if (!req.user?.id) {
@@ -38,53 +38,92 @@ export const getMyReferrals = async (req: AuthRequest, res: Response, next: Next
         referralCode: null,
         referralLink: null,
         qrCode: null,
-        stats: { total: 0, pending: 0, rewarded: 0, totalReward: 0 },
+        stats: { total: 0, qualified: 0, pending: 0, rewarded: 0, totalReward: 0, oneTimeEarned: 0, recurringEarned: 0 },
+        currentSubscription: {
+          isPaidPlan: false,
+          planName: 'Freedom Free',
+          remainingDays: 0,
+          recurringRewardBasis: 0,
+        },
         history: [],
       }));
     }
 
     const userId = req.user.id;
-    const [referralCode, referrals] = await Promise.all([
+    const [referralCode, referrals, rewards, activeSub] = await Promise.all([
       ensureReferralCode(userId, req.user.referralCode),
       prisma.referral.findMany({
         where: { referrerId: userId },
         include: {
-          rewards: {
-            where: { status: { in: ['active', 'ACTIVE', 'pending', 'PENDING', 'rewarded', 'REWARDED'] } },
-            orderBy: { createdAt: 'desc' },
-          },
+          rewards: true,
         },
         orderBy: { createdAt: 'desc' },
+      }),
+      prisma.referralReward.findMany({
+        where: {
+          OR: [
+            { beneficiaryUserId: userId },
+            { referral: { referrerId: userId } },
+          ],
+        },
+      }),
+      prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          endDate: { gt: now },
+        },
+        include: { plan: true },
+        orderBy: { endDate: 'desc' },
       }),
     ]);
 
     const refereeIds = referrals.map(r => r.refereeId).filter(Boolean);
     const referees = await prisma.user.findMany({
       where: { id: { in: refereeIds } },
-      select: { id: true, fullName: true, email: true, avatarUrl: true }
+      select: { id: true, fullName: true, email: true, avatarUrl: true, role: true, completionPercentage: true },
     });
     const refereeMap = new Map(referees.map(r => [r.id, r]));
 
-    const history = referrals.map((referral) => {
-      const status = String(referral.status || 'pending').toLowerCase();
-      const isSuccess = ['rewarded', 'completed', 'successful'].includes(status);
-
-      let rewardSum = referral.rewards?.reduce((sum, reward) => sum + (Number(reward.amount) || 0), 0) || 0;
-      if (rewardSum === 0 && isSuccess) {
-        rewardSum = publicSettings.referralRewardAmount;
+    let oneTimeEarned = 0;
+    let recurringEarned = 0;
+    for (const rw of rewards) {
+      const amt = Number(rw.amount || 0);
+      if (rw.rewardCategory === 'RECURRING_CASHBACK') {
+        recurringEarned += amt;
+      } else {
+        oneTimeEarned += amt;
       }
+    }
+
+    const history = referrals.map((referral) => {
+      const referee = refereeMap.get(referral.refereeId);
+      const isQualified = String(referral.status || '').toUpperCase() === 'QUALIFIED';
+      const status = isQualified ? 'QUALIFIED' : 'PENDING';
+      const rewardSum = (referral.rewards || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
       return {
         id: referral.id,
-        user: refereeMap.get(referral.refereeId) || { id: referral.refereeId, fullName: 'Unknown User', email: '', avatarUrl: null },
-        status,
-        reward: rewardSum,
-        points: referral.rewards?.reduce((sum, reward) => sum + (Number(reward.points) || 0), 0) || 0,
+        user: referee || { id: referral.refereeId, fullName: 'Unknown User', email: '', avatarUrl: null, role: 'user', completionPercentage: 0 },
+        status: isQualified ? 'rewarded' : 'pending',
+        rawStatus: status,
+        reward: Number(rewardSum.toFixed(2)),
+        completionPercentage: referee?.completionPercentage || 0,
         createdAt: referral.createdAt,
+        qualifiedAt: (referral as any).qualifiedAt,
       };
     });
-    const totalReward = history.reduce((sum, referral) => sum + referral.reward, 0);
-    const referralLink = `https://goexperts.com/ref/${referralCode}`;
+
+    const isPaidPlan = Boolean(activeSub && Number(activeSub.plan?.amount || 0) > 0);
+    const planPrice = Number(activeSub?.plan?.amount || 0);
+    const baseSubscriptionAmount = isPaidPlan ? calculateBasePriceExcludingGst(planPrice, policy.gstRate) : 0;
+    const recurringRewardBasis = isPaidPlan ? Number((baseSubscriptionAmount * policy.recurringRate).toFixed(2)) : 0;
+    const remainingDays = activeSub ? Math.max(0, Math.ceil((activeSub.endDate.getTime() - now.getTime()) / (1000 * 86400))) : 0;
+
+    const qualifiedCount = history.filter(r => r.status === 'rewarded').length;
+    const pendingCount = history.filter(r => r.status === 'pending').length;
+    const totalReward = Number((oneTimeEarned + recurringEarned).toFixed(2));
+    const referralLink = `https://goexperts.in/signup?ref=${referralCode}`;
 
     return res.json(successResponse('Referrals retrieved', {
       ...publicSettings,
@@ -93,9 +132,19 @@ export const getMyReferrals = async (req: AuthRequest, res: Response, next: Next
       qrCode: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(referralLink)}`,
       stats: {
         total: history.length,
-        pending: history.filter((referral) => referral.status === 'pending').length,
-        rewarded: history.filter((referral) => ['rewarded', 'completed', 'successful'].includes(referral.status)).length,
+        qualified: qualifiedCount,
+        pending: pendingCount,
+        rewarded: qualifiedCount,
         totalReward,
+        oneTimeEarned: Number(oneTimeEarned.toFixed(2)),
+        recurringEarned: Number(recurringEarned.toFixed(2)),
+      },
+      currentSubscription: {
+        isPaidPlan,
+        planName: activeSub?.plan?.name || 'Freedom Free',
+        remainingDays,
+        baseSubscriptionAmount,
+        recurringRewardBasis,
       },
       history,
     }));
@@ -103,3 +152,4 @@ export const getMyReferrals = async (req: AuthRequest, res: Response, next: Next
     next(error);
   }
 };
+

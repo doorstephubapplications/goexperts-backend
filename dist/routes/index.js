@@ -47,6 +47,7 @@ import adminReferralsRouter from "./admin/referrals.routes.js";
 import rolesRoutes, { permissionsRouter } from "./admin/roles.routes.js";
 import resumeTemplateRouter from "./admin/resume-template.routes.js";
 import kycRouter from "./admin/kyc.routes.js";
+import kycRoutes from "./kyc/kyc.routes.js";
 import adminSupportDeskRouter from "./admin/support-desk.routes.js";
 import adminWithdrawalsRouter from "./admin/withdrawals.routes.js";
 import { adminUsersRouter } from "./admin/admin-users.routes.js";
@@ -121,6 +122,8 @@ router.use("/investor", investorRoutes);
 router.use("/v1/investor", investorRoutes);
 router.use("/founder", founderRoutes);
 router.use("/v1/founder", founderRoutes);
+router.use("/kyc", kycRoutes);
+router.use("/v1/kyc", kycRoutes);
 router.use("/referrals", referralRoutes);
 // User Profile Custom FAQs (all roles)
 import { getMyProfileFaqs, saveMyProfileFaqs, getPublicUserFaqs } from "../controllers/user-faqs.controller.js";

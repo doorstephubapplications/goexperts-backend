@@ -4,7 +4,7 @@ import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
 import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { uploadFile } from "../../controllers/media/media.controller.js";
-import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
+import { getMyVerification, updateMyVerification, deleteMyVerification, getKycCatalog, getKycPolicy, submitMyVerification, saveMyVerificationDraft } from "../../controllers/verification/verification.controller.js";
 import { getInvestorDashboard, getInvestorProfile, updateInvestorProfile, listWatchlist, addToWatchlist, removeFromWatchlist, getInvestorPortfolio, listInvestorInvestments, createInvestorInvestment, listInvestorMeetings, createInvestorMeeting, listInvestorMessages, createInvestorMessage, getInvestorWallet, depositInvestorWallet, withdrawInvestorWallet, listInvestorInvoices, getInvestorAnalytics, getInvestorReports, listInvestorNotifications, markInvestorNotificationRead, markAllInvestorNotificationsRead, listInvestorDocuments, addInvestorDocument, listInvestorSubscriptions, purchaseInvestorSubscription, getInvestorSettings, updateInvestorSettings, listAllFounders, listInvestorReviews, addInvestorTeamMember, deleteInvestorTeamMember, listInvestorTeam, } from "../../controllers/investor/investor.controller.js";
 const router = Router();
 router.use(authMiddleware);
@@ -12,8 +12,12 @@ router.use(authMiddleware);
 router.post("/media/upload", upload.single("file"), uploadFile);
 // Verification routes must be accessible before onboarding completion so users can upload KYC documents
 router.get("/verification", getMyVerification);
+router.get("/verification/catalog", getKycCatalog);
+router.get("/verification/policy", getKycPolicy);
 router.patch("/verification", updateMyVerification);
 router.delete("/verification", deleteMyVerification);
+router.post("/verification/submit", submitMyVerification);
+router.post("/verification/draft", saveMyVerificationDraft);
 router.use(requireOnboarding);
 // ── Shared Portal Routes (accessible to all authenticated portal roles: investor, freelancer, client, founder) ──
 router.get("/watchlist", listWatchlist);

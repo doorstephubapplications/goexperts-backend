@@ -4,7 +4,7 @@ import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
 import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { uploadFile } from "../../controllers/media/media.controller.js";
-import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
+import { getMyVerification, updateMyVerification, deleteMyVerification, getKycCatalog, getKycPolicy, submitMyVerification, saveMyVerificationDraft } from "../../controllers/verification/verification.controller.js";
 import { getFounderDashboard, getFounderProfile, updateFounderProfile, getFounderStartup, updateFounderStartup, getBusinessPlan, putBusinessPlan, getPitchDeck, putPitchDeck, getFounderFunding, listInvestorRequests, respondInvestorRequest, listFounderInvestors, listAllInvestors, listFounderTeam, addFounderTeamMember, deleteFounderTeamMember, listFounderDocuments, addFounderDocument, listFounderMilestones, addFounderMilestone, updateFounderMilestone, deleteFounderMilestone, listFounderMeetings, createFounderMeeting, listFounderMessages, createFounderMessage, getFounderWallet, depositFounderWallet, withdrawFounderWallet, listFounderInvoices, getFounderAnalytics, getFounderReports, listFounderNotifications, markFounderNotificationRead, markAllFounderNotificationsRead, listFounderSubscriptions, purchaseFounderSubscription, getFounderSettings, updateFounderSettings, listFounderRoles, listFounderReviews, } from "../../controllers/founder/founder.controller.js";
 import { listWatchlist, addToWatchlist, removeFromWatchlist, } from "../../controllers/investor/investor.controller.js";
 const router = Router();
@@ -13,8 +13,12 @@ router.use(authMiddleware);
 router.post("/media/upload", upload.single("file"), uploadFile);
 // Verification routes must be accessible before onboarding completion so users can upload KYC documents
 router.get("/verification", getMyVerification);
+router.get("/verification/catalog", getKycCatalog);
+router.get("/verification/policy", getKycPolicy);
 router.patch("/verification", updateMyVerification);
 router.delete("/verification", deleteMyVerification);
+router.post("/verification/submit", submitMyVerification);
+router.post("/verification/draft", saveMyVerificationDraft);
 router.use(requireOnboarding);
 router.use(portalRoleMiddleware(["founder", "investor", "client", "freelancer", "admin", "super_admin"]));
 // Watchlist routes

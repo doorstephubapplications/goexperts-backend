@@ -5,15 +5,19 @@ import { requireOnboarding } from "../../middlewares/onboarding.middleware.js";
 import { portalRoleMiddleware } from "../../middlewares/role.middleware.js";
 import { upload } from "../../middlewares/upload.middleware.js";
 import { uploadFile } from "../../controllers/media/media.controller.js";
-import { getMyVerification, updateMyVerification, deleteMyVerification } from "../../controllers/verification/verification.controller.js";
+import { getMyVerification, updateMyVerification, deleteMyVerification, getKycCatalog, getKycPolicy, submitMyVerification, saveMyVerificationDraft } from "../../controllers/verification/verification.controller.js";
 const router = Router();
 router.use(authMiddleware);
 // Portal media upload is needed DURING onboarding for avatars and documents
 router.post("/media/upload", upload.single("file"), uploadFile);
 // Verification routes must be accessible before onboarding completion so users can upload KYC documents
 router.get("/verification", getMyVerification);
+router.get("/verification/catalog", getKycCatalog);
+router.get("/verification/policy", getKycPolicy);
 router.patch("/verification", updateMyVerification);
 router.delete("/verification", deleteMyVerification);
+router.post("/verification/submit", submitMyVerification);
+router.post("/verification/draft", saveMyVerificationDraft);
 router.use(requireOnboarding);
 // --- Multi-Role Routes (Client, Investor, Founder) ---
 const multiRole = portalRoleMiddleware(["client", "investor", "founder", "freelancer", "business", "user"]);

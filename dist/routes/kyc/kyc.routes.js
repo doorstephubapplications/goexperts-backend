@@ -1,0 +1,17 @@
+import { Router } from "express";
+import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { getMyVerification, updateMyVerification, deleteMyVerification, getKycCatalog, getKycPolicy, submitMyVerification, saveMyVerificationDraft } from "../../controllers/verification/verification.controller.js";
+const router = Router();
+router.use(authMiddleware);
+router.get("/status", getMyVerification);
+router.get("/me", getMyVerification);
+router.get("/", getMyVerification);
+router.get("/catalog", getKycCatalog);
+router.get("/policy", getKycPolicy);
+router.patch("/document", updateMyVerification);
+router.patch("/", updateMyVerification);
+router.delete("/document", deleteMyVerification);
+router.delete("/", deleteMyVerification);
+router.post("/submit", submitMyVerification);
+router.post("/draft", saveMyVerificationDraft);
+export default router;

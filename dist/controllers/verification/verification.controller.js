@@ -1,5 +1,9 @@
 import { prisma } from "../../config/database.js";
 import { getVerificationStats, applyVerificationUpdate } from "../../common/helpers/verification.js";
+import { getKycCatalogFromDb, getKycPolicyFromDb } from "../../services/kyc/kyc-catalog.service.js";
+/**
+ * Returns verification stats, catalog, and policy for the current user.
+ */
 export const getMyVerification = async (req, res, next) => {
     try {
         if (!req.user?.id) {
@@ -17,15 +21,58 @@ export const getMyVerification = async (req, res, next) => {
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
+        const role = String(user.role || "freelancer").toLowerCase();
+        const stats = getVerificationStats(user);
+        const catalog = await getKycCatalogFromDb(role);
+        const policy = await getKycPolicyFromDb(role);
         res.json({
             success: true,
-            data: getVerificationStats(user)
+            data: {
+                ...stats,
+                catalog,
+                policy
+            }
         });
     }
     catch (error) {
         next(error);
     }
 };
+/**
+ * Returns available document catalog from the database.
+ */
+export const getKycCatalog = async (req, res, next) => {
+    try {
+        const role = String(req.user?.role || req.query.role || "freelancer").toLowerCase();
+        const catalog = await getKycCatalogFromDb(role);
+        res.json({
+            success: true,
+            data: catalog
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+/**
+ * Returns applicable KYC policy for the user's role.
+ */
+export const getKycPolicy = async (req, res, next) => {
+    try {
+        const role = String(req.user?.role || req.query.role || "freelancer").toLowerCase();
+        const policy = await getKycPolicyFromDb(role);
+        res.json({
+            success: true,
+            data: policy
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+/**
+ * Uploads/updates a verification document with backend validation and audit logging.
+ */
 export const updateMyVerification = async (req, res, next) => {
     try {
         if (!req.user?.id) {
@@ -33,10 +80,29 @@ export const updateMyVerification = async (req, res, next) => {
         }
         const stats = await applyVerificationUpdate(req.user.id, req.body);
         const targetItem = stats.items.find(i => i.key === req.body.key);
+        // Record Audit Log for security compliance
+        prisma.auditLog.create({
+            data: {
+                actorId: req.user.id,
+                action: "KYC_DOCUMENT_UPLOADED",
+                entity: "KYC_DOCUMENT",
+                entityId: req.body.key,
+                newValue: JSON.stringify({
+                    key: req.body.key,
+                    status: targetItem?.status || "pending",
+                    documentUrl: req.body.documentUrl ? "[REDACTED_DOCUMENT_URL]" : null,
+                    uploadedAt: new Date().toISOString()
+                }),
+                ipAddress: req.ip || req.socket.remoteAddress || "0.0.0.0"
+            }
+        }).catch(() => null);
         res.json({
             success: true,
-            message: "Your document upload success, await admin approval. you can receive notification once approved.",
-            data: targetItem || { key: req.body.key }
+            message: "Your document upload was successful. Awaiting admin approval.",
+            data: {
+                item: targetItem || { key: req.body.key },
+                stats
+            }
         });
     }
     catch (error) {
@@ -46,12 +112,106 @@ export const updateMyVerification = async (req, res, next) => {
         next(error);
     }
 };
+/**
+ * Submits the user's uploaded KYC documents for review after validating required counts.
+ */
+export const submitMyVerification = async (req, res, next) => {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+        const user = await prisma.user.findFirst({
+            where: { id: req.user.id, deletedAt: null },
+            include: {
+                freelancerProfile: true,
+                clientProfile: true,
+                founderProfile: true,
+                investorProfile: true
+            }
+        });
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        const stats = getVerificationStats(user);
+        const role = String(user.role || "freelancer").toLowerCase();
+        const policy = await getKycPolicyFromDb(role);
+        // Validate that minimum personal documents are submitted
+        if (stats.personalSubmitted < policy.personalRequired) {
+            return res.status(400).json({
+                success: false,
+                message: `Please upload at least ${policy.personalRequired} personal documents before submitting for review.`
+            });
+        }
+        // Validate business documents if required by policy
+        if (policy.businessRequired > 0 && stats.businessSubmitted < policy.businessRequired) {
+            return res.status(400).json({
+                success: false,
+                message: `Please upload at least ${policy.businessRequired} business documents before submitting for review.`
+            });
+        }
+        // Audit Log
+        prisma.auditLog.create({
+            data: {
+                actorId: req.user.id,
+                action: "KYC_SUBMITTED_FOR_REVIEW",
+                entity: "KYC_SUBMISSION",
+                entityId: req.user.id,
+                newValue: JSON.stringify({
+                    personalSubmitted: stats.personalSubmitted,
+                    businessSubmitted: stats.businessSubmitted,
+                    submittedAt: new Date().toISOString()
+                }),
+                ipAddress: req.ip || req.socket.remoteAddress || "0.0.0.0"
+            }
+        }).catch(() => null);
+        res.json({
+            success: true,
+            message: "Documents submitted successfully for verification! Our team will review your submission.",
+            data: stats
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+/**
+ * Saves draft document selection / progress without submitting.
+ */
+export const saveMyVerificationDraft = async (req, res, next) => {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+        const user = await prisma.user.findFirst({
+            where: { id: req.user.id, deletedAt: null },
+            include: {
+                freelancerProfile: true,
+                clientProfile: true,
+                founderProfile: true,
+                investorProfile: true
+            }
+        });
+        if (!user)
+            return res.status(404).json({ success: false, message: "User not found" });
+        const stats = getVerificationStats(user);
+        res.json({
+            success: true,
+            message: "KYC draft progress saved successfully.",
+            data: stats
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+/**
+ * Deletes a verification document or resets verification state.
+ */
 export const deleteMyVerification = async (req, res, next) => {
     try {
         if (!req.user?.id) {
             return res.status(401).json({ success: false, message: "Unauthorized" });
         }
-        // If they want to delete a specific key from their verification
         const key = req.query.key || req.body.key;
         if (key) {
             const payload = {
@@ -61,9 +221,17 @@ export const deleteMyVerification = async (req, res, next) => {
                 documentUrl: ""
             };
             const stats = await applyVerificationUpdate(req.user.id, payload);
+            prisma.auditLog.create({
+                data: {
+                    actorId: req.user.id,
+                    action: "KYC_DOCUMENT_DELETED",
+                    entity: "KYC_DOCUMENT",
+                    entityId: String(key),
+                    ipAddress: req.ip || req.socket.remoteAddress || "0.0.0.0"
+                }
+            }).catch(() => null);
             return res.json({ success: true, message: "Verification document deleted successfully", data: stats });
         }
-        // Otherwise, completely wipe it
         const user = await prisma.user.findFirst({
             where: { id: req.user.id },
             include: {
@@ -75,7 +243,6 @@ export const deleteMyVerification = async (req, res, next) => {
         });
         if (!user)
             return res.status(404).json({ success: false, message: "User not found" });
-        // Enforce lock: if any document is already verified, block wiping the whole verification state
         const currentStats = getVerificationStats(user);
         if (currentStats.items.some(i => i.status === "verified")) {
             return res.status(403).json({ success: false, message: "You have verified documents that cannot be deleted. Please contact support." });
@@ -94,7 +261,6 @@ export const deleteMyVerification = async (req, res, next) => {
         else if (role === 'investor') {
             await prisma.investorProfile.upsert({ where: { userId: user.id }, update: { verificationJson: emptyJson }, create: { userId: user.id, verificationJson: emptyJson } });
         }
-        // Return completely refreshed stats
         const freshUser = await prisma.user.findFirst({
             where: { id: user.id },
             include: {

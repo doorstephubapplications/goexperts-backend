@@ -2576,22 +2576,26 @@ model ReferralClick {
 }
 
 model Referral {
-  id         String            @id @default(uuid())
-  campaignId String?
-  referrerId String            @map("referrer_id")
-  refereeId  String            @unique @map("referee_id")
-  link       String?
-  qrCode     String?           @map("qr_code")
-  status     String            @default("pending")
-  createdAt  DateTime          @default(now()) @map("created_at")
-  updatedAt  DateTime          @updatedAt @map("updated_at")
-  clickId    String?
-  events     ReferralEvent[]
-  rewards    ReferralReward[]
-  campaign   ReferralCampaign? @relation(fields: [campaignId], references: [id])
-  click      ReferralClick?    @relation(fields: [clickId], references: [id])
-  referee    User              @relation("Referee", fields: [refereeId], references: [id], onDelete: Cascade)
-  referrer   User              @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  id                 String                    @id @default(uuid())
+  campaignId         String?
+  referrerId         String                    @map("referrer_id")
+  refereeId          String                    @unique @map("referee_id")
+  link               String?
+  qrCode             String?                   @map("qr_code")
+  status             String                    @default("pending")
+  profileCompletedAt DateTime?                 @map("profile_completed_at")
+  qualifiedAt        DateTime?                 @map("qualified_at")
+  policyVersion      String?                   @default("v1.0") @map("policy_version")
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @updatedAt @map("updated_at")
+  clickId            String?
+  events             ReferralEvent[]
+  rewards            ReferralReward[]
+  recurringSchedules RecurringRewardSchedule[]
+  campaign           ReferralCampaign?         @relation(fields: [campaignId], references: [id])
+  click              ReferralClick?            @relation(fields: [clickId], references: [id])
+  referee            User                      @relation("Referee", fields: [refereeId], references: [id], onDelete: Cascade)
+  referrer           User                      @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
 
   @@index([referrerId], map: "referrals_referrer_id_fkey")
   @@index([campaignId], map: "referrals_campaignId_fkey")
@@ -2612,17 +2616,76 @@ model ReferralEvent {
 }
 
 model ReferralReward {
-  id         String   @id @default(uuid())
-  referralId String   @map("referral_id")
-  amount     Float?
-  points     Int      @default(0)
-  rewardType String   @default("CASH") @map("reward_type")
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  referral   Referral @relation(fields: [referralId], references: [id])
+  id                  String    @id @default(uuid())
+  referralId          String    @map("referral_id")
+  beneficiaryUserId   String?   @map("beneficiary_user_id")
+  subscriptionId      String?   @map("subscription_id")
+  amount              Float?
+  points              Int       @default(0)
+  rewardType          String    @default("CASH") @map("reward_type")
+  rewardCategory      String    @default("ONE_TIME_CASHBACK") @map("reward_category")
+  periodStart         DateTime? @map("period_start")
+  periodEnd           DateTime? @map("period_end")
+  policyVersion       String?   @default("v1.0") @map("policy_version")
+  walletTransactionId String?   @map("wallet_transaction_id")
+  idempotencyKey      String?   @unique @map("idempotency_key")
+  status              String    @default("PENDING")
+  creditedAt          DateTime? @map("credited_at")
+  metadata            String?   @db.Text
+  createdAt           DateTime  @default(now())
+  referral            Referral  @relation(fields: [referralId], references: [id])
 
   @@index([referralId], map: "referral_rewards_referral_id_fkey")
+  @@index([beneficiaryUserId], map: "referral_rewards_beneficiary_user_id_fkey")
   @@map("referral_rewards")
+}
+
+model RecurringRewardSchedule {
+  id                            String    @id @default(uuid())
+  referralId                    String    @map("referral_id")
+  referrerUserId                String    @map("referrer_user_id")
+  subscriptionId                String    @map("subscription_id")
+  eligibleStartAt               DateTime  @map("eligible_start_at")
+  eligibleEndAt                 DateTime  @map("eligible_end_at")
+  totalSubscriptionDurationDays Float     @map("total_subscription_duration_days")
+  remainingDurationDays         Float     @map("remaining_duration_days")
+  baseSubscriptionAmount        Float     @map("base_subscription_amount")
+  rewardBasisAmount             Float     @map("reward_basis_amount")
+  totalAllocatedAmount          Float     @map("total_allocated_amount")
+  totalCreditedAmount           Float     @default(0) @map("total_credited_amount")
+  status                        String    @default("ACCRUING") // ACCRUING, CREDITED, EXPIRED, CANCELLED
+  settledAt                     DateTime? @map("settled_at")
+  nextSettlementAt              DateTime? @map("next_settlement_at")
+  policyVersion                 String    @default("v1.0") @map("policy_version")
+  createdAt                     DateTime  @default(now()) @map("created_at")
+  updatedAt                     DateTime  @updatedAt @map("updated_at")
+  referral                      Referral  @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@index([referralId])
+  @@index([referrerUserId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@map("recurring_reward_schedules")
+}
+
+model ReferralPolicy {
+  id                        String    @id @default(uuid())
+  policyName                String    @default("Default Direct Referral Policy") @map("policy_name")
+  policyVersion             String    @unique @default("v1.0") @map("policy_version")
+  oneTimeRewardAmount       Float     @default(25) @map("one_time_reward_amount")
+  recurringRate             Float     @default(0.05) @map("recurring_rate") // 5%
+  gstRate                   Float     @default(0.18) @map("gst_rate") // 18%
+  payoutFrequency           String    @default("ON_EXPIRY_OR_MONTHLY") @map("payout_frequency")
+  freePlanOneTimeEligible   Boolean   @default(true) @map("free_plan_one_time_eligible")
+  freePlanRecurringEligible Boolean   @default(false) @map("free_plan_recurring_eligible")
+  paidPlanRecurringEligible Boolean   @default(true) @map("paid_plan_recurring_eligible")
+  status                    String    @default("ACTIVE")
+  effectiveFrom             DateTime  @default(now()) @map("effective_from")
+  effectiveTo               DateTime? @map("effective_to")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  @@map("referral_policies")
 }
 
 model ClientTeamMember {

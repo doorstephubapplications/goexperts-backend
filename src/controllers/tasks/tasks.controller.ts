@@ -135,6 +135,58 @@ export const createTask = async (req: AuthenticatedRequest, res: Response, next:
       return res.status(409).json(errorResponse('Cannot add tasks to a completed or cancelled project'));
     }
 
+    // Resolve user's active subscription quotas
+    let maxTasksPerProject = 2; // Default for Freedom, Beginner, Starter
+    let maxOverallTasks = 10;
+    const userRole = (req.user?.role || 'freelancer').toLowerCase();
+
+    const activeSub = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: 'active',
+        endDate: { gt: new Date() },
+      },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (activeSub?.plan) {
+      const { hydratePlanFromDb } = await import('../../constants/plan-catalog.constants.js');
+      const hydrated = hydratePlanFromDb(activeSub.plan);
+      maxTasksPerProject = hydrated.quotas?.tasksPerProject ?? 2;
+      if (typeof hydrated.quotas?.totalTasks === 'number') {
+        maxOverallTasks = hydrated.quotas.totalTasks;
+      }
+    }
+
+    // 1. Check per-project task count
+    const currentProjectTasks = await prisma.task.count({
+      where: { projectId, deletedAt: null }
+    });
+
+    if (currentProjectTasks >= maxTasksPerProject) {
+      return res.status(403).json(errorResponse(
+        `Per-project task limit reached (${currentProjectTasks}/${maxTasksPerProject}). Your plan allows up to ${maxTasksPerProject} tasks per project. Upgrade your plan to add more tasks.`
+      ));
+    }
+
+    // 2. Consume overall task creation quota if tracked
+    let taskEntitlement: any = null;
+    if (activeSub?.id && maxOverallTasks > 0) {
+      try {
+        const { assertAndConsumeActionQuota } = await import('../../services/subscription/entitlement.service.js');
+        const quotaRes = await assertAndConsumeActionQuota(userId, userRole, 'createTask');
+        taskEntitlement = quotaRes.entitlement;
+      } catch (gateErr: any) {
+        if (gateErr.name === 'ActionGateError') {
+          return res.status(403).json(errorResponse(
+            gateErr.message || `Total task creation quota exhausted (${maxOverallTasks} tasks). Upgrade your plan to continue creating tasks.`
+          ));
+        }
+        throw gateErr;
+      }
+    }
+
     const task = await prisma.task.create({
       data: {
         projectId,
